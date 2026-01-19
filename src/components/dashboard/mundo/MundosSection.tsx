@@ -1,18 +1,19 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2 } from 'lucide-react';
+import { Plus, Edit2, Trash2, MapPin, Building2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { World } from '@/lib/types';
+import { World, Pueblo } from '@/lib/types';
 import { toast } from '@/hooks/use-toast';
 
-export default function WorldsTab() {
+export default function MundosSection() {
   const [worlds, setWorlds] = useState<World[]>([]);
+  const [pueblos, setPueblos] = useState<Pueblo[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingWorld, setEditingWorld] = useState<World | null>(null);
@@ -23,22 +24,25 @@ export default function WorldsTab() {
   });
 
   useEffect(() => {
-    fetchWorlds();
+    fetchData();
   }, []);
 
-  const fetchWorlds = async () => {
+  const fetchData = async () => {
     try {
       setLoading(true);
-      const response = await fetch('/api/worlds');
-      const result = await response.json();
-      if (result.success) {
-        setWorlds(result.data);
-      }
+      const [worldsRes, pueblosRes] = await Promise.all([
+        fetch('/api/worlds'),
+        fetch('/api/pueblos')
+      ]);
+      const worldsResult = await worldsRes.json();
+      const pueblosResult = await pueblosRes.json();
+      if (worldsResult.success) setWorlds(worldsResult.data);
+      if (pueblosResult.success) setPueblos(pueblosResult.data);
     } catch (error) {
-      console.error('Error fetching worlds:', error);
+      console.error('Error fetching data:', error);
       toast({
         title: 'Error',
-        description: 'No se pudieron cargar los mundos',
+        description: 'No se pudieron cargar los datos',
         variant: 'destructive'
       });
     } finally {
@@ -76,7 +80,7 @@ export default function WorldsTab() {
           title: 'Éxito',
           description: 'Mundo eliminado correctamente'
         });
-        fetchWorlds();
+        fetchData();
       }
     } catch (error) {
       console.error('Error deleting world:', error);
@@ -115,7 +119,7 @@ export default function WorldsTab() {
           description: editingWorld ? 'Mundo actualizado' : 'Mundo creado'
         });
         setDialogOpen(false);
-        fetchWorlds();
+        fetchData();
       }
     } catch (error) {
       console.error('Error saving world:', error);
@@ -139,8 +143,8 @@ export default function WorldsTab() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold">Mundos</h2>
-          <p className="text-muted-foreground">Gestiona los mundos narrativos</p>
+          <h3 className="text-xl font-bold">Mundos</h3>
+          <p className="text-sm text-muted-foreground">Gestiona los mundos narrativos</p>
         </div>
         <Button onClick={handleCreate}>
           <Plus className="h-4 w-4 mr-2" />
@@ -192,6 +196,32 @@ export default function WorldsTab() {
                     </ul>
                   </div>
                 )}
+                {(() => {
+                  const regionesEnMundo = pueblos.filter(p => p.worldId === world.id);
+                  if (regionesEnMundo.length > 0) {
+                    return (
+                      <div>
+                        <p className="text-sm font-medium">Regiones en este mundo:</p>
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {regionesEnMundo.map(pueblo => (
+                            <span
+                              key={pueblo.id}
+                              className={`inline-flex items-center gap-1 px-2 py-1 text-xs rounded-md ${
+                                pueblo.type === 'nacion' 
+                                  ? 'bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300' 
+                                  : 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300'
+                                }`}
+                              >
+                                {pueblo.type === 'nacion' ? <Building2 className="h-3 w-3" /> : <MapPin className="h-3 w-3" />}
+                                {pueblo.name}
+                              </span>
+                            ))}
+                        </div>
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
               </div>
             </CardContent>
           </Card>

@@ -4,16 +4,14 @@ import { useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Globe, MapPin, Building, Users, MessageSquare, Eye, Network } from 'lucide-react';
-import WorldsTab from '@/components/dashboard/WorldsTab';
-import PueblosTab from '@/components/dashboard/PueblosTab';
-import EdificiosTab from '@/components/dashboard/EdificiosTab';
+import MundoTab from '@/components/dashboard/MundoTab';
 import NpcsTab from '@/components/dashboard/NpcsTab';
 import MapTab from '@/components/dashboard/MapTab';
 import SessionsTab from '@/components/dashboard/SessionsTab';
 import RouterTab from '@/components/dashboard/RouterTab';
 
 export default function Dashboard() {
-  const [activeTab, setActiveTab] = useState('worlds');
+  const [activeTab, setActiveTab] = useState('mundo');
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
@@ -41,18 +39,10 @@ export default function Dashboard() {
       {/* Main Content */}
       <main className="flex-1 container mx-auto px-4 py-6">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-4 md:grid-cols-7 lg:w-auto lg:inline-grid">
-            <TabsTrigger value="worlds" className="flex items-center gap-2">
+          <TabsList className="grid w-full grid-cols-4 md:grid-cols-5 lg:w-auto lg:inline-grid">
+            <TabsTrigger value="mundo" className="flex items-center gap-2">
               <Globe className="h-4 w-4" />
-              <span className="hidden sm:inline">Mundos</span>
-            </TabsTrigger>
-            <TabsTrigger value="pueblos" className="flex items-center gap-2">
-              <MapPin className="h-4 w-4" />
-              <span className="hidden sm:inline">Pueblos</span>
-            </TabsTrigger>
-            <TabsTrigger value="edificios" className="flex items-center gap-2">
-              <Building className="h-4 w-4" />
-              <span className="hidden sm:inline">Edificios</span>
+              <span className="hidden sm:inline">Universo</span>
             </TabsTrigger>
             <TabsTrigger value="npcs" className="flex items-center gap-2">
               <Users className="h-4 w-4" />
@@ -72,16 +62,8 @@ export default function Dashboard() {
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="worlds">
-            <WorldsTab />
-          </TabsContent>
-
-          <TabsContent value="pueblos">
-            <PueblosTab />
-          </TabsContent>
-
-          <TabsContent value="edificios">
-            <EdificiosTab />
+          <TabsContent value="mundo">
+            <MundoTab />
           </TabsContent>
 
           <TabsContent value="npcs">

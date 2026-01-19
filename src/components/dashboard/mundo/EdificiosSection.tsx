@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Edificio, World, Pueblo, NPC } from '@/lib/types';
 import { toast } from '@/hooks/use-toast';
 
-export default function EdificiosTab() {
+export default function EdificiosSection() {
   const [edificios, setEdificios] = useState<Edificio[]>([]);
   const [worlds, setWorlds] = useState<World[]>([]);
   const [pueblos, setPueblos] = useState<Pueblo[]>([]);
@@ -37,15 +37,6 @@ export default function EdificiosTab() {
     if (value === '' || value === '-') return 0;
     const parsed = parseInt(value);
     return isNaN(parsed) ? 0 : parsed;
-  };
-
-  // Función para convertir los strings de coordenadas a números al guardar
-  const convertCoordinatesToNumbers = (coords: Record<string, string>): Record<string, number> => {
-    const result: Record<string, number> = {};
-    for (const [key, value] of Object.entries(coords)) {
-      result[key] = parseCoordinateValue(value);
-    }
-    return result;
   };
 
   useEffect(() => {
@@ -213,8 +204,8 @@ export default function EdificiosTab() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold">Edificios</h2>
-          <p className="text-muted-foreground">Gestiona los edificios y estructuras</p>
+          <h3 className="text-xl font-bold">Edificios</h3>
+          <p className="text-sm text-muted-foreground">Gestiona los edificios y estructuras</p>
         </div>
         <Button onClick={handleCreate}>
           <Plus className="h-4 w-4 mr-2" />
@@ -284,7 +275,7 @@ export default function EdificiosTab() {
                     if (npcsInEdificio.length > 0) {
                       return (
                         <div>
-                          <p className="text-sm font-medium">NPCs en este edificio:</p>
+                          <p className="text-sm font-medium">Personajes en el edificio:</p>
                           <div className="flex flex-wrap gap-1 mt-1">
                             {npcsInEdificio.map(npc => (
                               <span

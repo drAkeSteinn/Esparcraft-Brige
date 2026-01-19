@@ -193,7 +193,7 @@ export async function handleNuevoLoreTrigger(payload: NuevoLoreTriggerPayload): 
   const { scope, targetId, loreType, context } = payload;
 
   // Get context based on scope
-  let world, pueblo;
+  let world, pueblo, edificio;
   if (scope === 'mundo') {
     world = worldManager.getById(targetId);
     if (!world) {
@@ -204,14 +204,7 @@ export async function handleNuevoLoreTrigger(payload: NuevoLoreTriggerPayload): 
     if (!pueblo) {
       throw new Error(`Pueblo with id ${targetId} not found`);
     }
-    world = world ? worldManager.getById(pueblo.worldId) : undefined;
-  } else if (scope === 'edificio') {
-    const edificio = edificioManager.getById(targetId);
-    if (!edificio) {
-      throw new Error(`Edificio with id ${targetId} not found`);
-    }
-    pueblo = edificio ? puebloManager.getById(edificio.puebloId) : undefined;
-    world = pueblo ? worldManager.getById(pueblo.worldId) : undefined;
+    world = worldManager.getById(pueblo.worldId);
   }
 
   // Build prompt
@@ -259,20 +252,27 @@ export async function handleNuevoLoreTrigger(payload: NuevoLoreTriggerPayload): 
         }
       });
     }
-  } else if (scope === 'edificio') {
-    if (loreType === 'eventos') {
-      edificioManager.update(edificio.id, {
-        lore: edificio.lore,
-        eventos_recientes: [...edificio.eventos_recientes, lore]
-      });
-    } else if (loreType === 'descripcion') {
-      edificioManager.update(edificio.id, {
-        lore
-      });
-    }
   }
 
   return { lore };
+}
+
+// Main handler function
+export async function handleTrigger(payload: AnyTriggerPayload): Promise<any> {
+  const { mode } = payload;
+
+  switch (mode) {
+    case 'chat':
+      return handleChatTrigger(payload as ChatTriggerPayload);
+    case 'resumen_sesion':
+      return handleResumenSesionTrigger(payload as ResumenSesionTriggerPayload);
+    case 'resumen_npc':
+      return handleResumenNPCTrigger(payload as ResumenNPCTriggerPayload);
+    case 'nuevo_lore':
+      return handleNuevoLoreTrigger(payload as NuevoLoreTriggerPayload);
+    default:
+      throw new Error(`Unknown trigger mode: ${mode}`);
+  }
 }
 
 // Debug function to preview prompts without calling LLM

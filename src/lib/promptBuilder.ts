@@ -246,6 +246,7 @@ EVENTOS_IMPORTANTES: [Lista de eventos importantes]
 RELACIONES: [Relaciones importantes con otros personajes o jugadores]
 PERSPECTIVA_ACTUAL: [Cómo el NPC ve el mundo actualmente]`,
       timestamp: new Date().toISOString()
+    }
   ];
 
   let prompt = `Personaje: ${getCardField(npc.card, 'name', 'Unknown')}\n`;
@@ -288,7 +289,8 @@ INSTRUCCIONES:
 - El lore debe ser útil para futuras interacciones y eventos
 - Usa el tono y estilo apropiado para el setting`,
       timestamp: new Date().toISOString()
-    ];
+    }
+  ];
 
   let prompt = '';
 

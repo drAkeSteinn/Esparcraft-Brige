@@ -9,12 +9,13 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Pueblo, World } from '@/lib/types';
+import { Pueblo, World, Edificio } from '@/lib/types';
 import { toast } from '@/hooks/use-toast';
 
-export default function PueblosTab() {
+export default function PueblosSection() {
   const [pueblos, setPueblos] = useState<Pueblo[]>([]);
   const [worlds, setWorlds] = useState<World[]>([]);
+  const [edificios, setEdificios] = useState<Edificio[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingPueblo, setEditingPueblo] = useState<Pueblo | null>(null);
@@ -34,15 +35,18 @@ export default function PueblosTab() {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [pueblosRes, worldsRes] = await Promise.all([
+      const [pueblosRes, worldsRes, edificiosRes] = await Promise.all([
         fetch('/api/pueblos'),
-        fetch('/api/worlds')
+        fetch('/api/worlds'),
+        fetch('/api/edificios')
       ]);
       const pueblosResult = await pueblosRes.json();
       const worldsResult = await worldsRes.json();
-
+      const edificiosResult = await edificiosRes.json();
+      
       if (pueblosResult.success) setPueblos(pueblosResult.data);
       if (worldsResult.success) setWorlds(worldsResult.data);
+      if (edificiosResult.success) setEdificios(edificiosResult.data);
     } catch (error) {
       console.error('Error fetching data:', error);
       toast({
@@ -164,8 +168,8 @@ export default function PueblosTab() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold">Pueblos/Naciones</h2>
-          <p className="text-muted-foreground">Gestiona las regiones del mundo (pueblos y naciones)</p>
+          <h3 className="text-xl font-bold">Pueblos/Naciones</h3>
+          <p className="text-sm text-muted-foreground">Gestiona las regiones del mundo</p>
         </div>
         <div className="flex gap-2">
           <Button onClick={handleCreatePueblo}>
@@ -245,6 +249,28 @@ export default function PueblosTab() {
                       </ul>
                     </div>
                   )}
+                  {(() => {
+                    const edificiosEnPueblo = edificios.filter(e => e.puebloId === pueblo.id);
+                    if (edificiosEnPueblo.length > 0) {
+                      return (
+                        <div>
+                          <p className="text-sm font-medium">Edificaciones en esta región:</p>
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            {edificiosEnPueblo.map(edif => (
+                              <span
+                                key={edif.id}
+                                className="inline-flex items-center gap-1 px-2 py-1 bg-primary/10 text-primary text-xs rounded-md border border-primary/20"
+                              >
+                                <Building2 className="h-3 w-3" />
+                                {edif.name}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    }
+                    return null;
+                  })()}
                 </div>
               </CardContent>
             </Card>
@@ -289,7 +315,7 @@ export default function PueblosTab() {
               <Label htmlFor="worldId">Mundo</Label>
               <Select
                 value={formData.worldId}
-                onValueChange={(value) => setFormData({ ...formData, worldId: value })}
+                onValueChange={(value) => setFormData({ ...formData, worldId: value, puebloId: '' })}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Selecciona un mundo" />
