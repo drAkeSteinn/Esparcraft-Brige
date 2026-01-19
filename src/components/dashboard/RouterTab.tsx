@@ -527,6 +527,25 @@ export default function RouterTab() {
         return context.edificios?.map((e: any) => `- ${e.name}`).join('\n') || '';
       }
 
+      // Mundo object keys (mundo.name, mundo.lore, etc.)
+      if (key.startsWith('mundo.')) {
+        const mundoKey = key.replace('mundo.', '');
+        if (mundoKey === 'name' || mundoKey === 'nombre') return context.mundo?.name || '';
+        if (mundoKey === 'estado_mundo' || mundoKey === 'estado') return context.mundo?.lore?.estado_mundo || '';
+        if (mundoKey === 'rumores') return context.mundo?.lore?.rumores?.join(', ') || '';
+      }
+
+      // Pueblos keys para mundo (todos los pueblos/naciones en el mundo)
+      if (key === 'pueblos_count') {
+        return context.pueblos?.length?.toString() || '0';
+      }
+      if (key === 'pueblos_names') {
+        return context.pueblos?.map((p: any) => p.name).join(', ') || '';
+      }
+      if (key === 'pueblos_list') {
+        return context.pueblos?.map((p: any) => `- ${p.name}`).join('\n') || '';
+      }
+
       // Si la key no existe, retorna el match original
       return match;
     });
@@ -1062,6 +1081,80 @@ export default function RouterTab() {
     return { text: prompt, sections };
   };
 
+  const buildResumenMundoPreview = (payload: any): { text: string; sections: Array<{ label: string; content: string; bgColor: string }> } => {
+    if (!payload) return { text: '', sections: [] };
+
+    const mundo = worlds.find(w => w.id === payload.mundoid);
+    const pueblosEnMundo = pueblos.filter(p => p.worldId === payload.mundoid);
+
+    // Crear contexto para reemplazo de keys
+    const keyContext = {
+      mundo,
+      pueblos: pueblosEnMundo
+    };
+
+    const sections: Array<{ label: string; content: string; bgColor: string }> = [];
+    let prompt = '';
+
+    // 1. System Prompt (solo de la plantilla del usuario para este tipo de trigger)
+    const userSystemPrompt = resumenMundoForm.systemPrompt || '';
+    if (userSystemPrompt) {
+      const systemPromptText = replaceKeys(userSystemPrompt, keyContext);
+      prompt += systemPromptText + '\n\n';
+      sections.push({
+        label: 'System Prompt',
+        content: systemPromptText,
+        bgColor: 'bg-green-50 dark:bg-green-950'
+      });
+    }
+
+    // 2. Resúmenes de Todos los Pueblos/Naciones del Mundo
+    if (payload.allSummaries) {
+      prompt += `Resúmenes de los pueblos/naciones del mundo:\n${payload.allSummaries}\n\n`;
+      sections.push({
+        label: 'Resúmenes de los Pueblos/Naciones del Mundo',
+        content: `Resúmenes de los pueblos/naciones del mundo:\n${payload.allSummaries}`,
+        bgColor: 'bg-purple-50 dark:bg-purple-950'
+      });
+    }
+
+    // 3. Información del Mundo
+    if (mundo) {
+      let mundoInfoText = `Mundo: ${mundo.name}\n`;
+      if (mundo.lore?.estado_mundo) {
+        mundoInfoText += `Estado del Mundo: ${mundo.lore.estado_mundo}\n`;
+      }
+      if (mundo.lore?.rumores && mundo.lore.rumores.length > 0) {
+        mundoInfoText += `Rumores: ${mundo.lore.rumores.join(', ')}\n`;
+      }
+      prompt += mundoInfoText + '\n';
+      sections.push({
+        label: 'Información del Mundo',
+        content: mundoInfoText,
+        bgColor: 'bg-orange-50 dark:bg-orange-950'
+      });
+    }
+
+    // 4. Pueblos/Naciones en el Mundo
+    if (pueblosEnMundo.length > 0) {
+      let pueblosListText = `Pueblos/Naciones en el mundo (${pueblosEnMundo.length}):\n`;
+      pueblosEnMundo.forEach(pueblo => {
+        const puebloName = pueblo.name || 'Sin nombre';
+        const puebloType = pueblo.type || '';
+        const puebloEstado = pueblo.lore?.estado_pueblo || '';
+        pueblosListText += `- ${puebloName}${puebloType ? ` [${puebloType}]` : ''}${puebloEstado ? `: ${puebloEstado.substring(0, 60)}` : ''}\n`;
+      });
+      prompt += pueblosListText + '\n';
+      sections.push({
+        label: 'Pueblos/Naciones en el Mundo',
+        content: pueblosListText,
+        bgColor: 'bg-amber-50 dark:bg-amber-950'
+      });
+    }
+
+    return { text: prompt, sections };
+  };
+
   const chatPayload = buildChatPayload();
   const chatPromptData = buildChatPreview(chatPayload);
   const chatPrompt = chatPromptData.text;
@@ -1083,6 +1176,9 @@ export default function RouterTab() {
   const resumenPuebloPrompt = resumenPuebloPromptData.text;
   const resumenPuebloSections = resumenPuebloPromptData.sections;
   const resumenMundoPayload = buildResumenMundoPayload();
+  const resumenMundoPromptData = buildResumenMundoPreview(resumenMundoPayload);
+  const resumenMundoPrompt = resumenMundoPromptData.text;
+  const resumenMundoSections = resumenMundoPromptData.sections;
   const nuevoLorePayload = buildNuevoLorePayload();
 
   return (
@@ -2356,83 +2452,207 @@ export default function RouterTab() {
 
         {/* Resumen Mundo Trigger */}
         <TabsContent value="resumen_mundo" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Resumen de Mundo</CardTitle>
-              <CardDescription>Genera un resumen basado en los resúmenes de pueblos/naciones del mundo</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div>
-                <Label>Mundo</Label>
-                <Select
-                  value={resumenMundoForm.mundoid}
-                  onValueChange={(v) => setResumenMundoForm({ ...resumenMundoForm, mundoid: v })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecciona mundo" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {worlds.map((world) => (
-                      <SelectItem key={world.id} value={world.id}>
-                        {world.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div>
-                <Label>Resúmenes de Pueblos/Naciones</Label>
-                <Textarea
-                  value={resumenMundoForm.allSummaries}
-                  onChange={(e) => setResumenMundoForm({ ...resumenMundoForm, allSummaries: e.target.value })}
-                  placeholder="Pega aquí los resúmenes de todos los pueblos/naciones del mundo"
-                  rows={6}
-                />
-              </div>
-
-              <div>
-                <Label>System Prompt</Label>
-                <Textarea
-                  value={resumenMundoForm.systemPrompt}
-                  onChange={(e) => setResumenMundoForm({ ...resumenMundoForm, systemPrompt: e.target.value })}
-                  placeholder="Instrucciones adicionales (puedes usar {KEY_EXAMPLE_1}mundo.name{KEY_EXAMPLE_2}, etc.)"
-                  rows={3}
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                <Button
-                  className="w-full"
-                  onClick={() => resumenMundoPayload && sendRequest('resumen_mundo', resumenMundoPayload)}
-                  disabled={!resumenMundoForm.mundoid}
-                >
-                  <Send className="h-4 w-4 mr-2" />
-                  Generar Resumen
-                </Button>
-                <Button
-                  variant="outline"
-                  className="w-full"
-                  onClick={handleSaveResumenMundoTemplate}
-                >
-                  <Copy className="h-4 w-4 mr-2" />
-                  Guardar Template
-                </Button>
-              </div>
-
-              {resumenMundoPayload && (
-                <div className="mt-4">
-                  <Label>JSON Preview:</Label>
-                  <pre className="text-xs bg-muted p-4 rounded-lg overflow-x-auto">
-                    {JSON.stringify(resumenMundoPayload, null, 2)}
-                  </pre>
-                  <Badge variant="secondary" className="mt-2">
-                    {countTokens(JSON.stringify(resumenMundoPayload, null, 2))} tokens
-                  </Badge>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Configuración del Resumen de Mundo</CardTitle>
+                <CardDescription>Genera un resumen consolidado de todos los pueblos/naciones del mundo</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div>
+                  <Label>Mundo</Label>
+                  <Select
+                    value={resumenMundoForm.mundoid}
+                    onValueChange={(v) => setResumenMundoForm({ ...resumenMundoForm, mundoid: v })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecciona mundo" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {worlds.map((world) => (
+                        <SelectItem key={world.id} value={world.id}>
+                          {world.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
-              )}
-            </CardContent>
-          </Card>
+
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <Label>System Prompt</Label>
+                    {resumenMundoTemplateSaved && (
+                      <div className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400">
+                        <RefreshCw className="h-3 w-3" />
+                        Guardado
+                      </div>
+                    )}
+                  </div>
+                  <Textarea
+                    value={resumenMundoForm.systemPrompt}
+                    onChange={(e) => setResumenMundoForm({ ...resumenMundoForm, systemPrompt: e.target.value })}
+                    placeholder="Instrucciones para generar el resumen del mundo (puedes usar {{mundo.name}}, {{mundo.estado_mundo}}, {{pueblos_count}}, etc.)"
+                    rows={6}
+                  />
+                  <div className="flex gap-2 mt-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleSaveResumenMundoTemplate}
+                      className="flex-1"
+                    >
+                      <RefreshCw className="h-4 w-4 mr-2" />
+                      Guardar Template
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        localStorage.removeItem('resumenMundoTemplate');
+                        setResumenMundoForm(prev => ({ ...prev, systemPrompt: '' }));
+                        setResumenMundoTemplateSaved(false);
+                        toast({
+                          title: 'Template Eliminado',
+                          description: 'El system prompt de resumen de mundo ha sido eliminado'
+                        });
+                      }}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+
+                <div>
+                  <Label>Resúmenes de Todos los Pueblos/Naciones del Mundo</Label>
+                  <Textarea
+                    value={resumenMundoForm.allSummaries}
+                    onChange={(e) => setResumenMundoForm({ ...resumenMundoForm, allSummaries: e.target.value })}
+                    placeholder="Pega aquí los resúmenes de todos los pueblos/naciones del mundo..."
+                    rows={6}
+                  />
+                </div>
+
+                <div className="border rounded-lg p-4 bg-muted/50">
+                  <h4 className="font-semibold text-sm mb-3 flex items-center gap-2">
+                    <RefreshCw className="h-4 w-4" />
+                    Glosario de Variables Disponibles
+                  </h4>
+                  <div className="space-y-3 text-xs">
+                    <div>
+                      <p className="font-semibold text-foreground mb-1">Variables del Mundo:</p>
+                      <div className="grid grid-cols-2 gap-2 text-muted-foreground">
+                        <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}mundo.name{KEY_EXAMPLE_2}</span>
+                        <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}mundo.estado_mundo{KEY_EXAMPLE_2}</span>
+                        <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}mundo.rumores{KEY_EXAMPLE_2}</span>
+                      </div>
+                    </div>
+
+                    <div>
+                      <p className="font-semibold text-foreground mb-1">Variables de Pueblos/Naciones:</p>
+                      <div className="grid grid-cols-2 gap-2 text-muted-foreground">
+                        <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}pueblos_count{KEY_EXAMPLE_2}</span>
+                        <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}pueblos_names{KEY_EXAMPLE_2}</span>
+                        <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}pueblos_list{KEY_EXAMPLE_2}</span>
+                      </div>
+                    </div>
+
+                    <div>
+                      <p className="font-semibold text-foreground mb-1">Variables de Ubicación:</p>
+                      <div className="grid grid-cols-3 gap-2 text-muted-foreground">
+                        <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}mundo{KEY_EXAMPLE_2}</span>
+                        <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}pueblos{KEY_EXAMPLE_2}</span>
+                        <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}mundo.name{KEY_EXAMPLE_2}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <div className="space-y-4">
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between">
+                  <div>
+                    <CardTitle className="flex items-center gap-2">
+                      <FileText className="h-5 w-5" />
+                      Visualizador de Prompt
+                    </CardTitle>
+                  </div>
+                  <Badge variant="secondary">
+                    {countTokens(resumenMundoPrompt)} tokens / {countWords(resumenMundoPrompt)} palabras
+                  </Badge>
+                </CardHeader>
+                <CardContent>
+                  <ScrollArea className="h-[500px] pr-4">
+                    <div className="space-y-3">
+                      {resumenMundoSections.length === 0 ? (
+                        <div className="text-center text-muted-foreground py-8">
+                          Selecciona un mundo y completa los campos para ver el prompt
+                        </div>
+                      ) : (
+                        resumenMundoSections.map((section, index) => (
+                          <div key={index} className={`rounded-lg border ${section.bgColor}`}>
+                            <div className="border-b border-black/10 dark:border-white/10 bg-white/50 dark:bg-black/20 px-3 py-2">
+                              <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">
+                                {section.label}
+                              </span>
+                            </div>
+                            <pre className="text-sm p-4 whitespace-pre-wrap overflow-x-auto">
+                              {section.content}
+                            </pre>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </ScrollArea>
+                  {resumenMundoSections.length > 0 && (
+                    <div className="mt-4 flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => copyToClipboard(resumenMundoPrompt, 'Prompt copiado')}
+                        className="flex-1"
+                      >
+                        <Copy className="h-4 w-4 mr-2" />
+                        {copied ? 'Copiado' : 'Copiar'}
+                      </Button>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between">
+                  <div>
+                    <CardTitle className="flex items-center gap-2">
+                      <Globe className="h-5 w-5" />
+                      JSON de Request
+                    </CardTitle>
+                  </div>
+                  <Badge variant="secondary">
+                    {countTokens(JSON.stringify(resumenMundoPayload || {}, null, 2))} tokens
+                  </Badge>
+                </CardHeader>
+                <CardContent>
+                  <ScrollArea className="h-[200px] pr-4">
+                    <pre className="text-xs bg-muted p-4 rounded-lg overflow-x-auto">
+                      {JSON.stringify(resumenMundoPayload || {}, null, 2) || '{}'}
+                    </pre>
+                  </ScrollArea>
+                </CardContent>
+              </Card>
+
+              <Button
+                className="w-full"
+                size="lg"
+                onClick={() => resumenMundoPayload && sendRequest('resumen_mundo', resumenMundoPayload)}
+                disabled={!resumenMundoForm.mundoid}
+              >
+                <Send className="h-5 w-5 mr-2" />
+                Generar Resumen de Mundo
+              </Button>
+            </div>
+          </div>
         </TabsContent>
 
         {/* Nuevo Lore Trigger */}
