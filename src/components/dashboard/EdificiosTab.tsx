@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2 } from 'lucide-react';
+import { Plus, Edit2, Trash2, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -9,13 +9,14 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Edificio, World, Pueblo } from '@/lib/types';
+import { Edificio, World, Pueblo, NPC } from '@/lib/types';
 import { toast } from '@/hooks/use-toast';
 
 export default function EdificiosTab() {
   const [edificios, setEdificios] = useState<Edificio[]>([]);
   const [worlds, setWorlds] = useState<World[]>([]);
   const [pueblos, setPueblos] = useState<Pueblo[]>([]);
+  const [npcs, setNpcs] = useState<NPC[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingEdificio, setEditingEdificio] = useState<Edificio | null>(null);
@@ -24,8 +25,28 @@ export default function EdificiosTab() {
     puebloId: '',
     name: '',
     lore: '',
-    eventos_recientes: ''
+    eventos_recientes: '',
+    area: {
+      start: { x: '0', y: '64', z: '0' },
+      end: { x: '10', y: '70', z: '10' }
+    }
   });
+
+  // Función auxiliar para parsear coordenadas permitiendo valores negativos
+  const parseCoordinateValue = (value: string): number => {
+    if (value === '' || value === '-') return 0;
+    const parsed = parseInt(value);
+    return isNaN(parsed) ? 0 : parsed;
+  };
+
+  // Función para convertir los strings de coordenadas a números al guardar
+  const convertCoordinatesToNumbers = (coords: Record<string, string>): Record<string, number> => {
+    const result: Record<string, number> = {};
+    for (const [key, value] of Object.entries(coords)) {
+      result[key] = parseCoordinateValue(value);
+    }
+    return result;
+  };
 
   useEffect(() => {
     fetchData();
@@ -34,18 +55,21 @@ export default function EdificiosTab() {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [edificiosRes, worldsRes, pueblosRes] = await Promise.all([
+      const [edificiosRes, worldsRes, pueblosRes, npcsRes] = await Promise.all([
         fetch('/api/edificios'),
         fetch('/api/worlds'),
-        fetch('/api/pueblos')
+        fetch('/api/pueblos'),
+        fetch('/api/npcs')
       ]);
       const edificiosResult = await edificiosRes.json();
       const worldsResult = await worldsRes.json();
       const pueblosResult = await pueblosRes.json();
+      const npcsResult = await npcsRes.json();
 
       if (edificiosResult.success) setEdificios(edificiosResult.data);
       if (worldsResult.success) setWorlds(worldsResult.data);
       if (pueblosResult.success) setPueblos(pueblosResult.data);
+      if (npcsResult.success) setNpcs(npcsResult.data);
     } catch (error) {
       console.error('Error fetching data:', error);
       toast({
@@ -60,7 +84,17 @@ export default function EdificiosTab() {
 
   const handleCreate = () => {
     setEditingEdificio(null);
-    setFormData({ worldId: '', puebloId: '', name: '', lore: '', eventos_recientes: '' });
+    setFormData({
+      worldId: '',
+      puebloId: '',
+      name: '',
+      lore: '',
+      eventos_recientes: '',
+      area: {
+        start: { x: '0', y: '64', z: '0' },
+        end: { x: '10', y: '70', z: '10' }
+      }
+    });
     setDialogOpen(true);
   };
 
@@ -71,7 +105,19 @@ export default function EdificiosTab() {
       puebloId: edificio.puebloId,
       name: edificio.name,
       lore: edificio.lore,
-      eventos_recientes: edificio.eventos_recientes.join('\n')
+      eventos_recientes: edificio.eventos_recientes.join('\n'),
+      area: {
+        start: {
+          x: String(edificio.area.start.x),
+          y: String(edificio.area.start.y),
+          z: String(edificio.area.start.z)
+        },
+        end: {
+          x: String(edificio.area.end.x),
+          y: String(edificio.area.end.y),
+          z: String(edificio.area.end.z)
+        }
+      }
     });
     setDialogOpen(true);
   };
@@ -111,8 +157,16 @@ export default function EdificiosTab() {
         lore: formData.lore,
         eventos_recientes: formData.eventos_recientes.split('\n').filter(e => e.trim()),
         area: {
-          start: { x: 0, y: 64, z: 0 },
-          end: { x: 10, y: 70, z: 10 }
+          start: {
+            x: parseCoordinateValue(formData.area.start.x),
+            y: parseCoordinateValue(formData.area.start.y),
+            z: parseCoordinateValue(formData.area.start.z)
+          },
+          end: {
+            x: parseCoordinateValue(formData.area.end.x),
+            y: parseCoordinateValue(formData.area.end.y),
+            z: parseCoordinateValue(formData.area.end.z)
+          }
         }
       };
 
@@ -217,9 +271,36 @@ export default function EdificiosTab() {
                       </ul>
                     </div>
                   )}
-                  <div className="text-xs text-muted-foreground">
-                    Área: {edificio.area.start.x}, {edificio.area.start.z} → {edificio.area.end.x}, {edificio.area.end.z}
+                  <div className="text-xs text-muted-foreground space-y-1">
+                    <p className="font-medium">Coordenadas del Área:</p>
+                    <p>Inicio: X:{edificio.area.start.x}, Y:{edificio.area.start.y}, Z:{edificio.area.start.z}</p>
+                    <p>Fin: X:{edificio.area.end.x}, Y:{edificio.area.end.y}, Z:{edificio.area.end.z}</p>
                   </div>
+                  {(() => {
+                    const npcsInEdificio = npcs.filter(npc =>
+                      npc.location.scope === 'edificio' &&
+                      npc.location.edificioId === edificio.id
+                    );
+                    if (npcsInEdificio.length > 0) {
+                      return (
+                        <div>
+                          <p className="text-sm font-medium">NPCs en este edificio:</p>
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            {npcsInEdificio.map(npc => (
+                              <span
+                                key={npc.id}
+                                className="inline-flex items-center gap-1 px-2 py-1 bg-primary/10 text-primary text-xs rounded-md border border-primary/20"
+                              >
+                                <Users className="h-3 w-3" />
+                                {npc.card.data?.name || npc.card.name || 'Sin nombre'}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    }
+                    return null;
+                  })()}
                 </div>
               </CardContent>
             </Card>
@@ -301,6 +382,123 @@ export default function EdificiosTab() {
                 onChange={(e) => setFormData({ ...formData, eventos_recientes: e.target.value })}
                 placeholder="Cada evento en una línea nueva"
               />
+            </div>
+
+            {/* Coordenadas de Área */}
+            <div className="space-y-4 rounded-lg border p-4 bg-muted/50">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-semibold">Coordenadas del Área</span>
+              </div>
+
+              {/* Coordenadas Inicio */}
+              <div>
+                <Label className="text-sm font-medium mb-2 block">Coordenadas Inicio</Label>
+                <div className="grid grid-cols-3 gap-2">
+                  <div>
+                    <Label htmlFor="startX" className="text-xs">X</Label>
+                    <Input
+                      id="startX"
+                      type="number"
+                      value={formData.area.start.x}
+                      onChange={(e) => setFormData({
+                        ...formData,
+                        area: {
+                          ...formData.area,
+                          start: { ...formData.area.start, x: e.target.value }
+                        }
+                      })}
+                      placeholder="0"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="startY" className="text-xs">Y</Label>
+                    <Input
+                      id="startY"
+                      type="number"
+                      value={formData.area.start.y}
+                      onChange={(e) => setFormData({
+                        ...formData,
+                        area: {
+                          ...formData.area,
+                          start: { ...formData.area.start, y: e.target.value }
+                        }
+                      })}
+                      placeholder="64"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="startZ" className="text-xs">Z</Label>
+                    <Input
+                      id="startZ"
+                      type="number"
+                      value={formData.area.start.z}
+                      onChange={(e) => setFormData({
+                        ...formData,
+                        area: {
+                          ...formData.area,
+                          start: { ...formData.area.start, z: e.target.value }
+                        }
+                      })}
+                      placeholder="0"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Coordenadas Fin */}
+              <div>
+                <Label className="text-sm font-medium mb-2 block">Coordenadas Fin</Label>
+                <div className="grid grid-cols-3 gap-2">
+                  <div>
+                    <Label htmlFor="endX" className="text-xs">X</Label>
+                    <Input
+                      id="endX"
+                      type="number"
+                      value={formData.area.end.x}
+                      onChange={(e) => setFormData({
+                        ...formData,
+                        area: {
+                          ...formData.area,
+                          end: { ...formData.area.end, x: e.target.value }
+                        }
+                      })}
+                      placeholder="10"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="endY" className="text-xs">Y</Label>
+                    <Input
+                      id="endY"
+                      type="number"
+                      value={formData.area.end.y}
+                      onChange={(e) => setFormData({
+                        ...formData,
+                        area: {
+                          ...formData.area,
+                          end: { ...formData.area.end, y: e.target.value }
+                        }
+                      })}
+                      placeholder="70"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="endZ" className="text-xs">Z</Label>
+                    <Input
+                      id="endZ"
+                      type="number"
+                      value={formData.area.end.z}
+                      onChange={(e) => setFormData({
+                        ...formData,
+                        area: {
+                          ...formData.area,
+                          end: { ...formData.area.end, z: e.target.value }
+                        }
+                      })}
+                      placeholder="10"
+                    />
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
           <DialogFooter>

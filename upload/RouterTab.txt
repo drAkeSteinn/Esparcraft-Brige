@@ -29,9 +29,6 @@ export default function RouterTab() {
   const [templateSaved, setTemplateSaved] = useState(false);
   const [resumenSesionTemplateSaved, setResumenSesionTemplateSaved] = useState(false);
   const [resumenNPCTemplateSaved, setResumenNPCTemplateSaved] = useState(false);
-  const [resumenEdificioTemplateSaved, setResumenEdificioTemplateSaved] = useState(false);
-  const [resumenPuebloTemplateSaved, setResumenPuebloTemplateSaved] = useState(false);
-  const [resumenMundoTemplateSaved, setResumenMundoTemplateSaved] = useState(false);
 
   // Chat trigger form
   const [chatForm, setChatForm] = useState({
@@ -73,21 +70,6 @@ export default function RouterTab() {
   // Resumen edificio trigger form
   const [resumenEdificioForm, setResumenEdificioForm] = useState({
     edificioid: '',
-    allSummaries: '', // NUEVO: Todos los resúmenes de NPCs del edificio
-    systemPrompt: ''
-  });
-
-  // Resumen Pueblo/Nación trigger form
-  const [resumenPuebloForm, setResumenPuebloForm] = useState({
-    pueblid: '',
-    allSummaries: '', // Resúmenes de todos los edificios del pueblo/nación
-    systemPrompt: ''
-  });
-
-  // Resumen Mundo trigger form
-  const [resumenMundoForm, setResumenMundoForm] = useState({
-    mundoid: '',
-    allSummaries: '', // Resúmenes de todos los pueblos/naciones del mundo
     systemPrompt: ''
   });
 
@@ -157,57 +139,6 @@ export default function RouterTab() {
     }
   }, [resumenNPCForm.systemPrompt]);
 
-  useEffect(() => {
-    // Cargar System Prompt de resumen de edificio del localStorage
-    const savedResumenEdificioTemplate = localStorage.getItem('resumenEdificioTemplate');
-    if (savedResumenEdificioTemplate) {
-      setResumenEdificioForm(prev => ({ ...prev, systemPrompt: savedResumenEdificioTemplate }));
-      setResumenEdificioTemplateSaved(true);
-    }
-  }, []);
-
-  useEffect(() => {
-    // Guardar System Prompt de resumen de edificio en localStorage cuando cambie
-    if (resumenEdificioForm.systemPrompt) {
-      localStorage.setItem('resumenEdificioTemplate', resumenEdificioForm.systemPrompt);
-      setResumenEdificioTemplateSaved(true);
-    }
-  }, [resumenEdificioForm.systemPrompt]);
-
-  useEffect(() => {
-    // Cargar System Prompt de resumen de pueblo del localStorage
-    const savedResumenPuebloTemplate = localStorage.getItem('resumenPuebloTemplate');
-    if (savedResumenPuebloTemplate) {
-      setResumenPuebloForm(prev => ({ ...prev, systemPrompt: savedResumenPuebloTemplate }));
-      setResumenPuebloTemplateSaved(true);
-    }
-  }, []);
-
-  useEffect(() => {
-    // Cargar System Prompt de resumen de mundo del localStorage
-    const savedResumenMundoTemplate = localStorage.getItem('resumenMundoTemplate');
-    if (savedResumenMundoTemplate) {
-      setResumenMundoForm(prev => ({ ...prev, systemPrompt: savedResumenMundoTemplate }));
-      setResumenMundoTemplateSaved(true);
-    }
-  }, []);
-
-  useEffect(() => {
-    // Guardar System Prompt de resumen de pueblo en localStorage cuando cambie
-    if (resumenPuebloForm.systemPrompt) {
-      localStorage.setItem('resumenPuebloTemplate', resumenPuebloForm.systemPrompt);
-      setResumenPuebloTemplateSaved(true);
-    }
-  }, [resumenPuebloForm.systemPrompt]);
-
-  useEffect(() => {
-    // Guardar System Prompt de resumen de mundo en localStorage cuando cambie
-    if (resumenMundoForm.systemPrompt) {
-      localStorage.setItem('resumenMundoTemplate', resumenMundoForm.systemPrompt);
-      setResumenMundoTemplateSaved(true);
-    }
-  }, [resumenMundoForm.systemPrompt]);
-
   const handleSaveTemplate = () => {
     localStorage.setItem('userTemplate', chatForm.templateUser);
     setTemplateSaved(true);
@@ -232,33 +163,6 @@ export default function RouterTab() {
     toast({
       title: 'Template de Resumen NPC Guardado',
       description: 'El system prompt de resumen NPC se ha guardado correctamente'
-    });
-  };
-
-  const handleSaveResumenEdificioTemplate = () => {
-    localStorage.setItem('resumenEdificioTemplate', resumenEdificioForm.systemPrompt);
-    setResumenEdificioTemplateSaved(true);
-    toast({
-      title: 'Template de Resumen Edificio Guardado',
-      description: 'El system prompt de resumen de edificio se ha guardado correctamente'
-    });
-  };
-
-  const handleSaveResumenPuebloTemplate = () => {
-    localStorage.setItem('resumenPuebloTemplate', resumenPuebloForm.systemPrompt);
-    setResumenPuebloTemplateSaved(true);
-    toast({
-      title: 'Template de Resumen Pueblo Guardado',
-      description: 'El system prompt de resumen de pueblo se ha guardado correctamente'
-    });
-  };
-
-  const handleSaveResumenMundoTemplate = () => {
-    localStorage.setItem('resumenMundoTemplate', resumenMundoForm.systemPrompt);
-    setResumenMundoTemplateSaved(true);
-    toast({
-      title: 'Template de Resumen Mundo Guardado',
-      description: 'El system prompt de resumen de mundo se ha guardado correctamente'
     });
   };
 
@@ -365,24 +269,7 @@ export default function RouterTab() {
   const buildResumenEdificioPayload = () => {
     return {
       triggertype: 'resumen_edificio',
-      edificioid: resumenEdificioForm.edificioid,
-      allSummaries: resumenEdificioForm.allSummaries // NUEVO: Resúmenes de todos los NPCs del edificio
-    };
-  };
-
-  const buildResumenPuebloPayload = () => {
-    return {
-      triggertype: 'resumen_pueblo',
-      pueblid: resumenPuebloForm.pueblid,
-      allSummaries: resumenPuebloForm.allSummaries // Resúmenes de todos los edificios del pueblo/nación
-    };
-  };
-
-  const buildResumenMundoPayload = () => {
-    return {
-      triggertype: 'resumen_mundo',
-      mundoid: resumenMundoForm.mundoid,
-      allSummaries: resumenMundoForm.allSummaries // Resúmenes de todos los pueblos/naciones del mundo
+      edificioid: resumenEdificioForm.edificioid
     };
   };
 
@@ -488,43 +375,6 @@ export default function RouterTab() {
       }
       if (key === 'edificio_name' || key === 'edificio') {
         return context.edificio?.name || '';
-      }
-
-      // Edificio object keys (edificio.name, edificio.lore, etc.)
-      if (key.startsWith('edificio.')) {
-        const edificioKey = key.replace('edificio.', '');
-        if (edificioKey === 'name' || edificioKey === 'nombre') return context.edificio?.name || '';
-        if (edificioKey === 'lore') return context.edificio?.lore || '';
-        if (edificioKey === 'eventos') return context.edificio?.eventos || '';
-        if (edificioKey === 'type') return context.edificio?.type || '';
-      }
-
-      // NPC keys para edificio (todos los NPCs en el edificio)
-      if (key === 'npcs_count') {
-        return context.npcs?.length?.toString() || '0';
-      }
-      if (key === 'npcs_names') {
-        return context.npcs?.map((n: any) => n.card?.data?.name || n.card?.name).join(', ') || '';
-      }
-
-      // Pueblo object keys (pueblo.name, pueblo.type, etc.)
-      if (key.startsWith('pueblo.')) {
-        const puebloKey = key.replace('pueblo.', '');
-        if (puebloKey === 'name' || puebloKey === 'nombre') return context.pueblo?.name || '';
-        if (puebloKey === 'type' || puebloKey === 'tipo') return context.pueblo?.type || '';
-        if (puebloKey === 'estado') return context.pueblo?.estado || '';
-        if (puebloKey === 'rumores') return context.pueblo?.rumores || '';
-      }
-
-      // Edificios keys para pueblo (todos los edificios en el pueblo)
-      if (key === 'edificios_count') {
-        return context.edificios?.length?.toString() || '0';
-      }
-      if (key === 'edificios_names') {
-        return context.edificios?.map((e: any) => e.name).join(', ') || '';
-      }
-      if (key === 'edificios_list') {
-        return context.edificios?.map((e: any) => `- ${e.name}`).join('\n') || '';
       }
 
       // Si la key no existe, retorna el match original
@@ -910,158 +760,6 @@ export default function RouterTab() {
     return { text: prompt, sections };
   };
 
-  const buildResumenEdificioPreview = (payload: any): { text: string; sections: Array<{ label: string; content: string; bgColor: string }> } => {
-    if (!payload) return { text: '', sections: [] };
-
-    const edificio = edificios.find(e => e.id === payload.edificioid);
-    const npcsEnEdificio = npcs.filter(n => n.location.edificioId === payload.edificioid);
-
-    // Crear contexto para reemplazo de keys
-    const keyContext = {
-      edificio,
-      npcs: npcsEnEdificio,
-      mundo: worlds.find(w => w.id === edificio?.worldId),
-      pueblo: pueblos.find(p => p.id === edificio?.puebloId)
-    };
-
-    const sections: Array<{ label: string; content: string; bgColor: string }> = [];
-    let prompt = '';
-
-    // 1. System Prompt (solo de la plantilla del usuario para este tipo de trigger)
-    const userSystemPrompt = resumenEdificioForm.systemPrompt || '';
-    if (userSystemPrompt) {
-      const systemPromptText = replaceKeys(userSystemPrompt, keyContext);
-      prompt += systemPromptText + '\n\n';
-      sections.push({
-        label: 'System Prompt',
-        content: systemPromptText,
-        bgColor: 'bg-green-50 dark:bg-green-950'
-      });
-    }
-
-    // 2. Resúmenes de Todos los NPCs del Edificio
-    if (payload.allSummaries) {
-      prompt += `Resúmenes de los NPCs del edificio:\n${payload.allSummaries}\n\n`;
-      sections.push({
-        label: 'Resúmenes de los NPCs del Edificio',
-        content: `Resúmenes de los NPCs del edificio:\n${payload.allSummaries}`,
-        bgColor: 'bg-purple-50 dark:bg-purple-950'
-      });
-    }
-
-    // 3. Información del Edificio
-    if (edificio) {
-      let edificioInfoText = `Edificio: ${edificio.name}\n`;
-      if (edificio.lore) {
-        edificioInfoText += `Lore: ${edificio.lore}\n`;
-      }
-      if (edificio.eventos) {
-        edificioInfoText += `Eventos: ${edificio.eventos}\n`;
-      }
-      prompt += edificioInfoText + '\n';
-      sections.push({
-        label: 'Información del Edificio',
-        content: edificioInfoText,
-        bgColor: 'bg-orange-50 dark:bg-orange-950'
-      });
-    }
-
-    // 4. NPCs en el Edificio
-    if (npcsEnEdificio.length > 0) {
-      let npcsListText = `NPCs en el edificio (${npcsEnEdificio.length}):\n`;
-      npcsEnEdificio.forEach(npc => {
-        const npcName = npc.card?.data?.name || npc.card?.name || 'Sin nombre';
-        const npcDesc = npc.card?.data?.description || npc.card?.description || '';
-        npcsListText += `- ${npcName}${npcDesc ? `: ${npcDesc.substring(0, 100)}` : ''}\n`;
-      });
-      prompt += npcsListText + '\n';
-      sections.push({
-        label: 'NPCs en el Edificio',
-        content: npcsListText,
-        bgColor: 'bg-amber-50 dark:bg-amber-950'
-      });
-    }
-
-    return { text: prompt, sections };
-  };
-
-  const buildResumenPuebloPreview = (payload: any): { text: string; sections: Array<{ label: string; content: string; bgColor: string }> } => {
-    if (!payload) return { text: '', sections: [] };
-
-    const pueblo = pueblos.find(p => p.id === payload.pueblid);
-    const edificiosEnPueblo = edificios.filter(e => e.puebloId === payload.pueblid);
-
-    // Crear contexto para reemplazo de keys
-    const keyContext = {
-      pueblo,
-      edificios: edificiosEnPueblo,
-      mundo: worlds.find(w => w.id === pueblo?.worldId)
-    };
-
-    const sections: Array<{ label: string; content: string; bgColor: string }> = [];
-    let prompt = '';
-
-    // 1. System Prompt (solo de la plantilla del usuario para este tipo de trigger)
-    const userSystemPrompt = resumenPuebloForm.systemPrompt || '';
-    if (userSystemPrompt) {
-      const systemPromptText = replaceKeys(userSystemPrompt, keyContext);
-      prompt += systemPromptText + '\n\n';
-      sections.push({
-        label: 'System Prompt',
-        content: systemPromptText,
-        bgColor: 'bg-green-50 dark:bg-green-950'
-      });
-    }
-
-    // 2. Resúmenes de Todos los Edificios del Pueblo
-    if (payload.allSummaries) {
-      prompt += `Resúmenes de los edificios del pueblo/nación:\n${payload.allSummaries}\n\n`;
-      sections.push({
-        label: 'Resúmenes de los Edificios del Pueblo/Nación',
-        content: `Resúmenes de los edificios del pueblo/nación:\n${payload.allSummaries}`,
-        bgColor: 'bg-purple-50 dark:bg-purple-950'
-      });
-    }
-
-    // 3. Información del Pueblo
-    if (pueblo) {
-      let puebloInfoText = `Pueblo/Nación: ${pueblo.name}\n`;
-      if (pueblo.type) {
-        puebloInfoText += `Tipo: ${pueblo.type}\n`;
-      }
-      if (pueblo.estado) {
-        puebloInfoText += `Estado: ${pueblo.estado}\n`;
-      }
-      if (pueblo.rumores) {
-        puebloInfoText += `Rumores: ${pueblo.rumores}\n`;
-      }
-      prompt += puebloInfoText + '\n';
-      sections.push({
-        label: 'Información del Pueblo/Nación',
-        content: puebloInfoText,
-        bgColor: 'bg-orange-50 dark:bg-orange-950'
-      });
-    }
-
-    // 4. Edificios en el Pueblo
-    if (edificiosEnPueblo.length > 0) {
-      let edificiosListText = `Edificios en el pueblo/nación (${edificiosEnPueblo.length}):\n`;
-      edificiosEnPueblo.forEach(edificio => {
-        const edificioName = edificio.name || 'Sin nombre';
-        const edificioLore = edificio.lore || '';
-        edificiosListText += `- ${edificioName}${edificioLore ? `: ${edificioLore.substring(0, 80)}` : ''}\n`;
-      });
-      prompt += edificiosListText + '\n';
-      sections.push({
-        label: 'Edificios en el Pueblo/Nación',
-        content: edificiosListText,
-        bgColor: 'bg-amber-50 dark:bg-amber-950'
-      });
-    }
-
-    return { text: prompt, sections };
-  };
-
   const chatPayload = buildChatPayload();
   const chatPromptData = buildChatPreview(chatPayload);
   const chatPrompt = chatPromptData.text;
@@ -1075,14 +773,6 @@ export default function RouterTab() {
   const resumenNPCPrompt = resumenNPCPromptData.text;
   const resumenNPCSections = resumenNPCPromptData.sections;
   const resumenEdificioPayload = buildResumenEdificioPayload();
-  const resumenEdificioPromptData = buildResumenEdificioPreview(resumenEdificioPayload);
-  const resumenEdificioPrompt = resumenEdificioPromptData.text;
-  const resumenEdificioSections = resumenEdificioPromptData.sections;
-  const resumenPuebloPayload = buildResumenPuebloPayload();
-  const resumenPuebloPromptData = buildResumenPuebloPreview(resumenPuebloPayload);
-  const resumenPuebloPrompt = resumenPuebloPromptData.text;
-  const resumenPuebloSections = resumenPuebloPromptData.sections;
-  const resumenMundoPayload = buildResumenMundoPayload();
   const nuevoLorePayload = buildNuevoLorePayload();
 
   return (
@@ -1108,7 +798,7 @@ export default function RouterTab() {
       ) : (
         <>
         <Tabs defaultValue="chat" className="w-full">
-          <TabsList className="grid w-full grid-cols-7">
+          <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="chat">
               <MessageSquare className="h-4 w-4 mr-2" />
               Chat
@@ -1125,16 +815,8 @@ export default function RouterTab() {
             <Building className="h-4 w-4 mr-2" />
             Resumen Edificio
           </TabsTrigger>
-          <TabsTrigger value="resumen_pueblo">
-            <MapPin className="h-4 w-4 mr-2" />
-            Resumen Pueblo
-          </TabsTrigger>
-          <TabsTrigger value="resumen_mundo">
-            <Globe className="h-4 w-4 mr-2" />
-            Resumen Mundo
-          </TabsTrigger>
           <TabsTrigger value="nuevo_lore">
-            <FileText className="h-4 w-4 mr-2" />
+            <Globe className="h-4 w-4 mr-2" />
             Nuevo Lore
           </TabsTrigger>
         </TabsList>
@@ -1945,436 +1627,25 @@ export default function RouterTab() {
 
         {/* Resumen Edificio Trigger */}
         <TabsContent value="resumen_edificio" className="space-y-4">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>Configuración del Resumen de Edificio</CardTitle>
-                <CardDescription>Genera un resumen consolidado de todos los NPCs en el edificio</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div>
-                  <Label>Edificio</Label>
-                  <Select
-                    value={resumenEdificioForm.edificioid}
-                    onValueChange={(v) => setResumenEdificioForm({ ...resumenEdificioForm, edificioid: v })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecciona edificio" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {edificios.map((edificio) => (
-                        <SelectItem key={edificio.id} value={edificio.id}>
-                          {edificio.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <Label>System Prompt</Label>
-                    {resumenEdificioTemplateSaved && (
-                      <div className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400">
-                        <RefreshCw className="h-3 w-3" />
-                        Guardado
-                      </div>
-                    )}
-                  </div>
-                  <Textarea
-                    value={resumenEdificioForm.systemPrompt}
-                    onChange={(e) => setResumenEdificioForm({ ...resumenEdificioForm, systemPrompt: e.target.value })}
-                    placeholder="Instrucciones para generar el resumen del edificio (puedes usar {{edificio.name}}, {{edificio.lore}}, {{npcs_count}}, etc.)"
-                    rows={6}
-                  />
-                  <div className="flex gap-2 mt-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handleSaveResumenEdificioTemplate}
-                      className="flex-1"
-                    >
-                      <RefreshCw className="h-4 w-4 mr-2" />
-                      Guardar Template
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        localStorage.removeItem('resumenEdificioTemplate');
-                        setResumenEdificioForm(prev => ({ ...prev, systemPrompt: '' }));
-                        setResumenEdificioTemplateSaved(false);
-                        toast({
-                          title: 'Template Eliminado',
-                          description: 'El system prompt de resumen de edificio ha sido eliminado'
-                        });
-                      }}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-
-                <div>
-                  <Label>Resúmenes de Todos los NPCs del Edificio</Label>
-                  <Textarea
-                    value={resumenEdificioForm.allSummaries}
-                    onChange={(e) => setResumenEdificioForm({ ...resumenEdificioForm, allSummaries: e.target.value })}
-                    placeholder="Pega aquí los resúmenes de todos los NPCs en este edificio..."
-                    rows={6}
-                  />
-                </div>
-
-                <div className="border rounded-lg p-4 bg-muted/50">
-                  <h4 className="font-semibold text-sm mb-3 flex items-center gap-2">
-                    <RefreshCw className="h-4 w-4" />
-                    Glosario de Variables Disponibles
-                  </h4>
-                  <div className="space-y-3 text-xs">
-                    <div>
-                      <p className="font-semibold text-foreground mb-1">Variables del Edificio:</p>
-                      <div className="grid grid-cols-2 gap-2 text-muted-foreground">
-                        <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}edificio.name{KEY_EXAMPLE_2}</span>
-                        <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}edificio.lore{KEY_EXAMPLE_2}</span>
-                        <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}edificio.eventos{KEY_EXAMPLE_2}</span>
-                        <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}edificio.type{KEY_EXAMPLE_2}</span>
-                      </div>
-                    </div>
-
-                    <div>
-                      <p className="font-semibold text-foreground mb-1">Variables de NPCs:</p>
-                      <div className="grid grid-cols-2 gap-2 text-muted-foreground">
-                        <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}npcs_count{KEY_EXAMPLE_2}</span>
-                        <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}npcs_names{KEY_EXAMPLE_2}</span>
-                      </div>
-                    </div>
-
-                    <div>
-                      <p className="font-semibold text-foreground mb-1">Variables de Ubicación:</p>
-                      <div className="grid grid-cols-3 gap-2 text-muted-foreground">
-                        <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}mundo{KEY_EXAMPLE_2}</span>
-                        <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}pueblo{KEY_EXAMPLE_2}</span>
-                        <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}pueblo.name{KEY_EXAMPLE_2}</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <div className="space-y-4">
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between">
-                  <div>
-                    <CardTitle className="flex items-center gap-2">
-                      <FileText className="h-5 w-5" />
-                      Visualizador de Prompt
-                    </CardTitle>
-                  </div>
-                  <Badge variant="secondary">
-                    {countTokens(resumenEdificioPrompt)} tokens / {countWords(resumenEdificioPrompt)} palabras
-                  </Badge>
-                </CardHeader>
-                <CardContent>
-                  <ScrollArea className="h-[500px] pr-4">
-                    <div className="space-y-3">
-                      {resumenEdificioSections.length === 0 ? (
-                        <div className="text-center text-muted-foreground py-8">
-                          Selecciona un edificio y completa los campos para ver el prompt
-                        </div>
-                      ) : (
-                        resumenEdificioSections.map((section, index) => (
-                          <div key={index} className={`rounded-lg border ${section.bgColor}`}>
-                            <div className="border-b border-black/10 dark:border-white/10 bg-white/50 dark:bg-black/20 px-3 py-2">
-                              <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">
-                                {section.label}
-                              </span>
-                            </div>
-                            <pre className="text-sm p-4 whitespace-pre-wrap overflow-x-auto">
-                              {section.content}
-                            </pre>
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  </ScrollArea>
-                  {resumenEdificioSections.length > 0 && (
-                    <div className="mt-4 flex gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => copyToClipboard(resumenEdificioPrompt, 'Prompt copiado')}
-                        className="flex-1"
-                      >
-                        <Copy className="h-4 w-4 mr-2" />
-                        {copied ? 'Copiado' : 'Copiar'}
-                      </Button>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between">
-                  <div>
-                    <CardTitle className="flex items-center gap-2">
-                      <Globe className="h-5 w-5" />
-                      JSON de Request
-                    </CardTitle>
-                  </div>
-                  <Badge variant="secondary">
-                    {countTokens(JSON.stringify(resumenEdificioPayload || {}, null, 2))} tokens
-                  </Badge>
-                </CardHeader>
-                <CardContent>
-                  <ScrollArea className="h-[200px] pr-4">
-                    <pre className="text-xs bg-muted p-4 rounded-lg overflow-x-auto">
-                      {JSON.stringify(resumenEdificioPayload || {}, null, 2) || '{}'}
-                    </pre>
-                  </ScrollArea>
-                </CardContent>
-              </Card>
-
-              <Button
-                className="w-full"
-                size="lg"
-                onClick={() => resumenEdificioPayload && sendRequest('resumen_edificio', resumenEdificioPayload)}
-                disabled={!resumenEdificioForm.edificioid || !resumenEdificioForm.allSummaries}
-              >
-                <Send className="h-5 w-5 mr-2" />
-                Generar Resumen de Edificio
-              </Button>
-            </div>
-          </div>
-        </TabsContent>
-
-        {/* Resumen Pueblo Trigger */}
-        <TabsContent value="resumen_pueblo" className="space-y-4">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>Configuración del Resumen de Pueblo/Nación</CardTitle>
-                <CardDescription>Genera un resumen consolidado de todos los edificios en el pueblo/nación</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div>
-                  <Label>Pueblo/Nación</Label>
-                  <Select
-                    value={resumenPuebloForm.pueblid}
-                    onValueChange={(v) => setResumenPuebloForm({ ...resumenPuebloForm, pueblid: v })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecciona pueblo/nación" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {pueblos.map((pueblo) => (
-                        <SelectItem key={pueblo.id} value={pueblo.id}>
-                          {pueblo.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <Label>System Prompt</Label>
-                    {resumenPuebloTemplateSaved && (
-                      <div className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400">
-                        <RefreshCw className="h-3 w-3" />
-                        Guardado
-                      </div>
-                    )}
-                  </div>
-                  <Textarea
-                    value={resumenPuebloForm.systemPrompt}
-                    onChange={(e) => setResumenPuebloForm({ ...resumenPuebloForm, systemPrompt: e.target.value })}
-                    placeholder="Instrucciones para generar el resumen del pueblo/nación (puedes usar {{pueblo.name}}, {{pueblo.type}}, {{edificios_count}}, etc.)"
-                    rows={6}
-                  />
-                  <div className="flex gap-2 mt-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handleSaveResumenPuebloTemplate}
-                      className="flex-1"
-                    >
-                      <RefreshCw className="h-4 w-4 mr-2" />
-                      Guardar Template
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        localStorage.removeItem('resumenPuebloTemplate');
-                        setResumenPuebloForm(prev => ({ ...prev, systemPrompt: '' }));
-                        setResumenPuebloTemplateSaved(false);
-                        toast({
-                          title: 'Template Eliminado',
-                          description: 'El system prompt de resumen de pueblo ha sido eliminado'
-                        });
-                      }}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-
-                <div>
-                  <Label>Resúmenes de Todos los Edificios del Pueblo/Nación</Label>
-                  <Textarea
-                    value={resumenPuebloForm.allSummaries}
-                    onChange={(e) => setResumenPuebloForm({ ...resumenPuebloForm, allSummaries: e.target.value })}
-                    placeholder="Pega aquí los resúmenes de todos los edificios en este pueblo/nación..."
-                    rows={6}
-                  />
-                </div>
-
-                <div className="border rounded-lg p-4 bg-muted/50">
-                  <h4 className="font-semibold text-sm mb-3 flex items-center gap-2">
-                    <RefreshCw className="h-4 w-4" />
-                    Glosario de Variables Disponibles
-                  </h4>
-                  <div className="space-y-3 text-xs">
-                    <div>
-                      <p className="font-semibold text-foreground mb-1">Variables del Pueblo/Nación:</p>
-                      <div className="grid grid-cols-2 gap-2 text-muted-foreground">
-                        <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}pueblo.name{KEY_EXAMPLE_2}</span>
-                        <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}pueblo.type{KEY_EXAMPLE_2}</span>
-                        <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}pueblo.estado{KEY_EXAMPLE_2}</span>
-                        <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}pueblo.rumores{KEY_EXAMPLE_2}</span>
-                      </div>
-                    </div>
-
-                    <div>
-                      <p className="font-semibold text-foreground mb-1">Variables de Edificios:</p>
-                      <div className="grid grid-cols-2 gap-2 text-muted-foreground">
-                        <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}edificios_count{KEY_EXAMPLE_2}</span>
-                        <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}edificios_names{KEY_EXAMPLE_2}</span>
-                        <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}edificios_list{KEY_EXAMPLE_2}</span>
-                      </div>
-                    </div>
-
-                    <div>
-                      <p className="font-semibold text-foreground mb-1">Variables de Ubicación:</p>
-                      <div className="grid grid-cols-3 gap-2 text-muted-foreground">
-                        <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}mundo{KEY_EXAMPLE_2}</span>
-                        <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}pueblo{KEY_EXAMPLE_2}</span>
-                        <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}pueblo.name{KEY_EXAMPLE_2}</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <div className="space-y-4">
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between">
-                  <div>
-                    <CardTitle className="flex items-center gap-2">
-                      <FileText className="h-5 w-5" />
-                      Visualizador de Prompt
-                    </CardTitle>
-                  </div>
-                  <Badge variant="secondary">
-                    {countTokens(resumenPuebloPrompt)} tokens / {countWords(resumenPuebloPrompt)} palabras
-                  </Badge>
-                </CardHeader>
-                <CardContent>
-                  <ScrollArea className="h-[500px] pr-4">
-                    <div className="space-y-3">
-                      {resumenPuebloSections.length === 0 ? (
-                        <div className="text-center text-muted-foreground py-8">
-                          Selecciona un pueblo/nación y completa los campos para ver el prompt
-                        </div>
-                      ) : (
-                        resumenPuebloSections.map((section, index) => (
-                          <div key={index} className={`rounded-lg border ${section.bgColor}`}>
-                            <div className="border-b border-black/10 dark:border-white/10 bg-white/50 dark:bg-black/20 px-3 py-2">
-                              <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">
-                                {section.label}
-                              </span>
-                            </div>
-                            <pre className="text-sm p-4 whitespace-pre-wrap overflow-x-auto">
-                              {section.content}
-                            </pre>
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  </ScrollArea>
-                  {resumenPuebloSections.length > 0 && (
-                    <div className="mt-4 flex gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => copyToClipboard(resumenPuebloPrompt, 'Prompt copiado')}
-                        className="flex-1"
-                      >
-                        <Copy className="h-4 w-4 mr-2" />
-                        {copied ? 'Copiado' : 'Copiar'}
-                      </Button>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between">
-                  <div>
-                    <CardTitle className="flex items-center gap-2">
-                      <Globe className="h-5 w-5" />
-                      JSON de Request
-                    </CardTitle>
-                  </div>
-                  <Badge variant="secondary">
-                    {countTokens(JSON.stringify(resumenPuebloPayload || {}, null, 2))} tokens
-                  </Badge>
-                </CardHeader>
-                <CardContent>
-                  <ScrollArea className="h-[200px] pr-4">
-                    <pre className="text-xs bg-muted p-4 rounded-lg overflow-x-auto">
-                      {JSON.stringify(resumenPuebloPayload || {}, null, 2) || '{}'}
-                    </pre>
-                  </ScrollArea>
-                </CardContent>
-              </Card>
-
-              <Button
-                className="w-full"
-                size="lg"
-                onClick={() => resumenPuebloPayload && sendRequest('resumen_pueblo', resumenPuebloPayload)}
-                disabled={!resumenPuebloForm.pueblid || !resumenPuebloForm.allSummaries}
-              >
-                <Send className="h-5 w-5 mr-2" />
-                Generar Resumen de Pueblo/Nación
-              </Button>
-            </div>
-          </div>
-        </TabsContent>
-
-        {/* Resumen Mundo Trigger */}
-        <TabsContent value="resumen_mundo" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>Resumen de Mundo</CardTitle>
-              <CardDescription>Genera un resumen basado en los resúmenes de pueblos/naciones del mundo</CardDescription>
+              <CardTitle>Resumen de Edificio</CardTitle>
+              <CardDescription>Genera un resumen basado en los resúmenes de NPCs del edificio</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div>
-                <Label>Mundo</Label>
+                <Label>Edificio</Label>
                 <Select
-                  value={resumenMundoForm.mundoid}
-                  onValueChange={(v) => setResumenMundoForm({ ...resumenMundoForm, mundoid: v })}
+                  value={resumenEdificioForm.edificioid}
+                  onValueChange={(v) => setResumenEdificioForm({ ...resumenEdificioForm, edificioid: v })}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Selecciona mundo" />
+                    <SelectValue placeholder="Selecciona edificio" />
                   </SelectTrigger>
                   <SelectContent>
-                    {worlds.map((world) => (
-                      <SelectItem key={world.id} value={world.id}>
-                        {world.name}
+                    {edificios.map((edificio) => (
+                      <SelectItem key={edificio.id} value={edificio.id}>
+                        {edificio.name}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -2382,52 +1653,32 @@ export default function RouterTab() {
               </div>
 
               <div>
-                <Label>Resúmenes de Pueblos/Naciones</Label>
-                <Textarea
-                  value={resumenMundoForm.allSummaries}
-                  onChange={(e) => setResumenMundoForm({ ...resumenMundoForm, allSummaries: e.target.value })}
-                  placeholder="Pega aquí los resúmenes de todos los pueblos/naciones del mundo"
-                  rows={6}
-                />
-              </div>
-
-              <div>
                 <Label>System Prompt</Label>
                 <Textarea
-                  value={resumenMundoForm.systemPrompt}
-                  onChange={(e) => setResumenMundoForm({ ...resumenMundoForm, systemPrompt: e.target.value })}
-                  placeholder="Instrucciones adicionales (puedes usar {KEY_EXAMPLE_1}mundo.name{KEY_EXAMPLE_2}, etc.)"
+                  value={resumenEdificioForm.systemPrompt}
+                  onChange={(e) => setResumenEdificioForm({ ...resumenEdificioForm, systemPrompt: e.target.value })}
+                  placeholder="Instrucciones adicionales (puedes usar {KEY_EXAMPLE_1}npcid{KEY_EXAMPLE_2} y {KEY_EXAMPLE_1}playername{KEY_EXAMPLE_2}, etc.)"
                   rows={3}
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-2">
-                <Button
-                  className="w-full"
-                  onClick={() => resumenMundoPayload && sendRequest('resumen_mundo', resumenMundoPayload)}
-                  disabled={!resumenMundoForm.mundoid}
-                >
-                  <Send className="h-4 w-4 mr-2" />
-                  Generar Resumen
-                </Button>
-                <Button
-                  variant="outline"
-                  className="w-full"
-                  onClick={handleSaveResumenMundoTemplate}
-                >
-                  <Copy className="h-4 w-4 mr-2" />
-                  Guardar Template
-                </Button>
-              </div>
+              <Button
+                className="w-full"
+                onClick={() => resumenEdificioPayload && sendRequest('resumen_npc', { triggertype: 'resumen_edificio', ...resumenEdificioPayload })}
+                disabled={!resumenEdificioForm.edificioid}
+              >
+                <Send className="h-4 w-4 mr-2" />
+                Generar Resumen de Edificio
+              </Button>
 
-              {resumenMundoPayload && (
+              {resumenEdificioPayload && (
                 <div className="mt-4">
                   <Label>JSON Preview:</Label>
                   <pre className="text-xs bg-muted p-4 rounded-lg overflow-x-auto">
-                    {JSON.stringify(resumenMundoPayload, null, 2)}
+                    {JSON.stringify(resumenEdificioPayload, null, 2)}
                   </pre>
                   <Badge variant="secondary" className="mt-2">
-                    {countTokens(JSON.stringify(resumenMundoPayload, null, 2))} tokens
+                    {countTokens(JSON.stringify(resumenEdificioPayload, null, 2))} tokens
                   </Badge>
                 </div>
               )}
