@@ -22,5 +22,21 @@
       "z": -74
     }
   },
-  "id": "EDIF_1768797417751"
+  "id": "EDIF_1768797417751",
+  "puntosDeInteres": [
+    {
+      "name": "Fogata",
+      "coordenadas": {
+        "x": -8,
+        "y": 68,
+        "z": -45
+      },
+      "descripcion": "Fogata de la taberna",
+      "tipo": "PLACE_TYPE_mesa",
+      "tags": [
+        "fogata"
+      ],
+      "id": "POI_1768894456522"
+    }
+  ]
 }

@@ -4,11 +4,13 @@ import { edificioManager, pointOfInterestManager } from '@/lib/fileManager';
 // POST upload/update POI image
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string; poiId: string } }
+  { params }: { params: Promise<{ id: string; poiId: string }> }
 ) {
   try {
+    const { id, poiId } = await params;
+
     // Check if edificio and POI exist
-    const edificio = edificioManager.getById(params.id);
+    const edificio = edificioManager.getById(id);
     if (!edificio || !edificio.puntosDeInteres) {
       return NextResponse.json(
         { error: 'Edificio or POI not found' },
@@ -16,7 +18,7 @@ export async function POST(
       );
     }
 
-    const poi = edificio.puntosDeInteres.find(p => p.id === params.poiId);
+    const poi = edificio.puntosDeInteres.find(p => p.id === poiId);
     if (!poi) {
       return NextResponse.json(
         { error: 'Point of interest not found' },
@@ -57,11 +59,11 @@ export async function POST(
     const buffer = Buffer.from(arrayBuffer);
 
     // Save image
-    pointOfInterestManager.saveImage(params.id, params.poiId, buffer);
+    pointOfInterestManager.saveImage(id, poiId, buffer);
 
     // Update POI with image path
-    const imagePath = `/api/edificios/${params.id}/points-of-interest/${params.poiId}/image`;
-    const updatedEdificio = pointOfInterestManager.updateInEdificio(params.id, params.poiId, {
+    const imagePath = `/api/edificios/${id}/points-of-interest/${poiId}/image`;
+    const updatedEdificio = pointOfInterestManager.updateInEdificio(id, poiId, {
       imagen: imagePath
     });
 
@@ -91,13 +93,14 @@ export async function POST(
 // GET POI image
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string; poiId: string } }
+  { params }: { params: Promise<{ id: string; poiId: string }> }
 ) {
   try {
+    const { id, poiId } = await params;
     const fs = require('fs');
     const path = require('path');
 
-    const imagePath = pointOfInterestManager.getImagePath(params.id, params.poiId);
+    const imagePath = pointOfInterestManager.getImagePath(id, poiId);
 
     if (!fs.existsSync(imagePath)) {
       return NextResponse.json(

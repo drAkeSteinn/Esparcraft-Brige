@@ -4,10 +4,11 @@ import { placeTypeManager } from '@/lib/fileManager';
 // GET place type by ID
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const placeType = placeTypeManager.getById(params.id);
+    const { id } = await params;
+    const placeType = placeTypeManager.getById(id);
 
     if (!placeType) {
       return NextResponse.json(
@@ -32,13 +33,14 @@ export async function GET(
 // PUT update place type
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     const body = await request.json();
 
     // Check if place type exists
-    const existing = placeTypeManager.getById(params.id);
+    const existing = placeTypeManager.getById(id);
     if (!existing) {
       return NextResponse.json(
         { error: 'Place type not found' },
@@ -46,7 +48,7 @@ export async function PUT(
       );
     }
 
-    const updated = placeTypeManager.update(params.id, {
+    const updated = placeTypeManager.update(id, {
       name: body.name,
       icon: body.icon,
       color: body.color
@@ -68,11 +70,13 @@ export async function PUT(
 // DELETE place type
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
+
     // Check if place type exists
-    const existing = placeTypeManager.getById(params.id);
+    const existing = placeTypeManager.getById(id);
     if (!existing) {
       return NextResponse.json(
         { error: 'Place type not found' },
@@ -81,7 +85,7 @@ export async function DELETE(
     }
 
     // Check if place type is in use
-    const isInUse = placeTypeManager.isInUse(params.id);
+    const isInUse = placeTypeManager.isInUse(id);
     if (isInUse) {
       return NextResponse.json(
         { error: 'Cannot delete: this place type is in use by one or more points of interest' },
@@ -89,7 +93,7 @@ export async function DELETE(
       );
     }
 
-    const deleted = placeTypeManager.delete(params.id);
+    const deleted = placeTypeManager.delete(id);
 
     if (!deleted) {
       return NextResponse.json(

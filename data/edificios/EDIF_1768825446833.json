@@ -22,5 +22,21 @@
       "z": -18
     }
   },
-  "id": "EDIF_1768825446833"
+  "id": "EDIF_1768825446833",
+  "puntosDeInteres": [
+    {
+      "name": "Vesitbulo",
+      "coordenadas": {
+        "x": 86,
+        "y": 75,
+        "z": -27
+      },
+      "descripcion": "Vestibulo donde se hacen los tratos",
+      "tipo": "PLACE_TYPE_mesa",
+      "tags": [
+        "comercio"
+      ],
+      "id": "POI_1768894372687"
+    }
+  ]
 }

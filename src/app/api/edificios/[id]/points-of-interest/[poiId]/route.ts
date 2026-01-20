@@ -4,13 +4,14 @@ import { edificioManager, pointOfInterestManager } from '@/lib/fileManager';
 // PUT update point of interest
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string; poiId: string } }
+  { params }: { params: Promise<{ id: string; poiId: string }> }
 ) {
   try {
+    const { id, poiId } = await params;
     const body = await request.json();
 
     // Check if edificio exists
-    const edificio = edificioManager.getById(params.id);
+    const edificio = edificioManager.getById(id);
     if (!edificio || !edificio.puntosDeInteres) {
       return NextResponse.json(
         { error: 'Edificio or POI not found' },
@@ -19,7 +20,7 @@ export async function PUT(
     }
 
     // Check if POI exists
-    const poi = edificio.puntosDeInteres.find(p => p.id === params.poiId);
+    const poi = edificio.puntosDeInteres.find(p => p.id === poiId);
     if (!poi) {
       return NextResponse.json(
         { error: 'Point of interest not found' },
@@ -35,7 +36,7 @@ export async function PUT(
     if (body.imagen !== undefined) updates.imagen = body.imagen;
     if (body.tags !== undefined) updates.tags = body.tags;
 
-    const updatedEdificio = pointOfInterestManager.updateInEdificio(params.id, params.poiId, updates);
+    const updatedEdificio = pointOfInterestManager.updateInEdificio(id, poiId, updates);
 
     if (!updatedEdificio) {
       return NextResponse.json(
@@ -44,8 +45,8 @@ export async function PUT(
       );
     }
 
-    // Return the updated POI
-    const updatedPOI = updatedEdificio.puntosDeInteres?.find(p => p.id === params.poiId);
+    // Return updated POI
+    const updatedPOI = updatedEdificio.puntosDeInteres?.find(p => p.id === poiId);
 
     return NextResponse.json({
       success: true,
@@ -63,11 +64,13 @@ export async function PUT(
 // DELETE point of interest
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string; poiId: string } }
+  { params }: { params: Promise<{ id: string; poiId: string }> }
 ) {
   try {
+    const { id, poiId } = await params;
+
     // Check if edificio exists
-    const edificio = edificioManager.getById(params.id);
+    const edificio = edificioManager.getById(id);
     if (!edificio || !edificio.puntosDeInteres) {
       return NextResponse.json(
         { error: 'Edificio or POI not found' },
@@ -76,7 +79,7 @@ export async function DELETE(
     }
 
     // Check if POI exists
-    const poi = edificio.puntosDeInteres.find(p => p.id === params.poiId);
+    const poi = edificio.puntosDeInteres.find(p => p.id === poiId);
     if (!poi) {
       return NextResponse.json(
         { error: 'Point of interest not found' },
@@ -86,10 +89,10 @@ export async function DELETE(
 
     // Delete POI image if exists
     if (poi.imagen) {
-      pointOfInterestManager.deleteImage(params.id, params.poiId);
+      pointOfInterestManager.deleteImage(id, poiId);
     }
 
-    const updatedEdificio = pointOfInterestManager.removeFromEdificio(params.id, params.poiId);
+    const updatedEdificio = pointOfInterestManager.removeFromEdificio(id, poiId);
 
     if (!updatedEdificio) {
       return NextResponse.json(

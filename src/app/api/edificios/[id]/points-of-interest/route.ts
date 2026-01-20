@@ -4,10 +4,11 @@ import { edificioManager, pointOfInterestManager } from '@/lib/fileManager';
 // GET all points of interest for an edificio
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const edificio = edificioManager.getById(params.id);
+    const { id } = await params;
+    const edificio = edificioManager.getById(id);
 
     if (!edificio) {
       return NextResponse.json(
@@ -32,9 +33,10 @@ export async function GET(
 // POST create point of interest
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     const body = await request.json();
 
     // Validate required fields
@@ -54,7 +56,7 @@ export async function POST(
       tags: body.tags // optional
     };
 
-    const updatedEdificio = pointOfInterestManager.addToEdificio(params.id, poiData);
+    const updatedEdificio = pointOfInterestManager.addToEdificio(id, poiData);
 
     if (!updatedEdificio) {
       return NextResponse.json(

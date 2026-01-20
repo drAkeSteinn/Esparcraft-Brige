@@ -298,7 +298,42 @@ export default function EdificiosSection() {
   };
 
   const handleSubmitPoi = async () => {
-    if (!editingEdificio) return;
+    if (!editingEdificio) {
+      toast({
+        title: 'Error',
+        description: 'No hay un edificio seleccionado',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    // Validar campos requeridos antes de enviar
+    if (!poiFormData.name || !poiFormData.name.trim()) {
+      toast({
+        title: 'Error',
+        description: 'El nombre del punto de interés es requerido',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    if (!poiFormData.tipo || !poiFormData.tipo.trim()) {
+      toast({
+        title: 'Error',
+        description: 'El tipo de punto de interés es requerido',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    if (!poiFormData.descripcion || !poiFormData.descripcion.trim()) {
+      toast({
+        title: 'Error',
+        description: 'La descripción del punto de interés es requerida',
+        variant: 'destructive'
+      });
+      return;
+    }
 
     try {
       const coords = {
@@ -307,18 +342,10 @@ export default function EdificiosSection() {
         z: parseCoordinateValue(poiFormData.coordenadas.z)
       };
 
-      // Validar coordenadas
+      // Validar coordenadas usando el área del edificio (no del formData)
       const warnings = validateCoordinatesInArea(coords, {
-        start: {
-          x: parseCoordinateValue(formData.area.start.x),
-          y: parseCoordinateValue(formData.area.start.y),
-          z: parseCoordinateValue(formData.area.start.z)
-        },
-        end: {
-          x: parseCoordinateValue(formData.area.end.x),
-          y: parseCoordinateValue(formData.area.end.y),
-          z: parseCoordinateValue(formData.area.end.z)
-        }
+        start: editingEdificio.area.start,
+        end: editingEdificio.area.end
       });
 
       if (warnings.length > 0) {
@@ -329,10 +356,10 @@ export default function EdificiosSection() {
       }
 
       const payload: any = {
-        name: poiFormData.name,
-        tipo: poiFormData.tipo,
+        name: poiFormData.name.trim(),
+        tipo: poiFormData.tipo.trim(),
         coordenadas: coords,
-        descripcion: poiFormData.descripcion,
+        descripcion: poiFormData.descripcion.trim(),
         tags: poiFormData.tags ? poiFormData.tags.split(',').map(t => t.trim()).filter(t => t) : undefined
       };
 
@@ -367,6 +394,15 @@ export default function EdificiosSection() {
       });
 
       const result = await response.json();
+
+      if (!result.success && result.error) {
+        toast({
+          title: 'Error',
+          description: result.error,
+          variant: 'destructive'
+        });
+        return;
+      }
 
       if (result.success) {
         toast({
@@ -993,6 +1029,17 @@ export default function EdificiosSection() {
                   No hay tipos creados. Ve a la pestaña "Tipos de Lugares" para crearlos.
                 </p>
               )}
+            </div>
+
+            <div>
+              <Label htmlFor="poiDescripcion">Descripción *</Label>
+              <Textarea
+                id="poiDescripcion"
+                value={poiFormData.descripcion}
+                onChange={(e) => setPoiFormData({ ...poiFormData, descripcion: e.target.value })}
+                placeholder="Describe este punto de interés"
+                rows={3}
+              />
             </div>
 
             <div>
