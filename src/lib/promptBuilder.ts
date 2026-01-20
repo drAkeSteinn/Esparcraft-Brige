@@ -1,5 +1,13 @@
 import { World, Pueblo, Edificio, NPC, Session, ChatMessage, PromptBuildContext, getCardField } from './types';
 import { npcStateManager, sessionManager } from './fileManager';
+import {
+  retrieveRelevantEmbeddings,
+  formatRetrievedContext,
+  getRetrievalConfigForOperation,
+  createNPCNamespace,
+  createLocationNamespaces,
+  RetrievalConfig
+} from './embeddings/context-retrieval';
 
 // Token estimation (roughly 4 characters per token for English/Spanish)
 export function estimateTokens(text: string): number {
@@ -149,7 +157,7 @@ export function buildChatSystemPrompt(
 }
 
 // Build messages for chat trigger (SillyTavern format)
-export function buildChatMessages(
+export async function buildChatMessages(
   userMessage: string,
   context: PromptBuildContext,
   jugador?: {
@@ -163,9 +171,33 @@ export function buildChatMessages(
     reputacion?: string;
     hora?: string;
     clima?: string;
+  },
+  embeddingsConfig?: RetrievalConfig
+): Promise<ChatMessage[]> {
+  let systemPrompt = buildChatSystemPrompt(context, jugador);
+
+  // Add retrieved embeddings context if enabled
+  if (embeddingsConfig && embeddingsConfig.enabled && context.npc) {
+    try {
+      const retrievedContext = await retrieveRelevantEmbeddings(
+        context.npc,
+        context.world || null,
+        context.pueblo || null,
+        context.edificio || null,
+        userMessage,
+        embeddingsConfig
+      );
+
+      if (retrievedContext.documents.length > 0) {
+        const formattedContext = formatRetrievedContext(retrievedContext);
+        systemPrompt = formattedContext + '\n\n' + systemPrompt;
+      }
+    } catch (error) {
+      console.error('Error retrieving embeddings context:', error);
+      // Continuar sin embeddings si falla la recuperación
+    }
   }
-): ChatMessage[] {
-  const systemPrompt = buildChatSystemPrompt(context, jugador);
+
   const messages: ChatMessage[] = [
     { role: 'system', content: systemPrompt, timestamp: new Date().toISOString() }
   ];

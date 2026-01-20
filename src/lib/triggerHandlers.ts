@@ -1,5 +1,3 @@
-'use server';
-
 import {
   ChatTriggerPayload,
   ResumenSesionTriggerPayload,
@@ -21,7 +19,8 @@ import {
   buildChatMessages,
   buildSessionSummaryPrompt,
   buildNPCSummaryPrompt,
-  buildNuevoLorePrompt
+  buildNuevoLorePrompt,
+  getRetrievalConfigForOperation
 } from './promptBuilder';
 
 // LLM Configuration
@@ -58,8 +57,8 @@ async function callLLM(messages: ChatMessage[]): Promise<string> {
 }
 
 // Chat trigger handler
-export async function handleChatTrigger(payload: ChatTriggerPayload): Promise<{ response: string; sessionId: string }> {
-  const { message, npcid, playersessionid, jugador } = payload;
+export async function handleChatTrigger(payload: ChatTrigger): Promise<{ response: string; sessionId: string; contextUsed?: any }> {
+  const { message, npcid, playersessionid, jugador, use_embeddings = true } = payload;
 
   // Get NPC
   const npc = npcManager.getById(npcid);
@@ -88,14 +87,17 @@ export async function handleChatTrigger(payload: ChatTriggerPayload): Promise<{ 
     });
   }
 
-  // Build messages
-  const messages = buildChatMessages(message, {
+  // Get embeddings configuration for chat
+  const embeddingsConfig = use_embeddings ? getRetrievalConfigForOperation('chat') : undefined;
+
+  // Build messages (now async to support embeddings)
+  const messages = await buildChatMessages(message, {
     world,
     pueblo,
     edificio,
     npc,
     session
-  });
+  }, jugador, embeddingsConfig);
 
   // Call LLM
   const response = await callLLM(messages);
@@ -113,7 +115,13 @@ export async function handleChatTrigger(payload: ChatTriggerPayload): Promise<{ 
 
   return {
     response,
-    sessionId: session.id
+    sessionId: session.id,
+    contextUsed: embeddingsConfig ? {
+      embeddings: true,
+      config: embeddingsConfig
+    } : {
+      embeddings: false
+    }
   };
 }
 
@@ -300,7 +308,7 @@ export async function previewTriggerPrompt(payload: AnyTriggerPayload): Promise<
         edificio,
         npc,
         session
-      });
+      }, chatPayload.jugador);
 
       return {
         systemPrompt: messages.find(m => m.role === 'system')?.content || '',
