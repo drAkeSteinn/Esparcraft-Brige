@@ -7,22 +7,46 @@
 
 import pg from 'pg';
 
-// Configuración de conexión
-const config = {
+// Configuración de conexión por defecto (variables de entorno)
+const defaultConfig = {
   host: process.env.EMBEDDINGS_DB_HOST || 'localhost',
-  port: parseInt(process.env.EMBEDDINGS_DB_PORT) || 5432,
+  port: parseInt(process.env.EMBEDDINGS_DB_PORT) || '5432',
   database: process.env.EMBEDDINGS_DB_NAME || 'bridge_embeddings',
   user: process.env.EMBEDDINGS_DB_USER || 'postgres',
   password: process.env.EMBEDDINGS_DB_PASSWORD || 'postgres'
 };
 
-// Pool de conexiones
-const pool = new pg.Pool({
-  ...config,
+// Pool de conexiones con configuración por defecto
+let pool = new pg.Pool({
+  ...defaultConfig,
   max: 20,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 2000
 });
+
+/**
+ * Configura el pool de conexiones con nueva configuración
+ */
+export function configurePool(config: {
+  host: string;
+  port: number;
+  database: string;
+  user: string;
+  password: string;
+}): void {
+  // Cerrar pool existente si hay uno
+  pool.end().catch(err => console.error('Error cerrando pool:', err));
+
+  // Crear nuevo pool con la configuración
+  pool = new pg.Pool({
+    ...config,
+    max: 20,
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 2000
+  });
+
+  console.log('✅ Pool de PostgreSQL reconfigurado con:', config.host);
+}
 
 /**
  * Interfaz para Embedding

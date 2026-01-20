@@ -1,4 +1,4 @@
-// Types for Bridge IA - Gestor Narrativo
+// Types for the Bridge IA - Gestor Narrativo
 
 export interface World {
   id: string;
@@ -162,7 +162,6 @@ export interface ChatTriggerPayload extends TriggerPayload {
     hora?: string;
     clima?: string;
   };
-  use_embeddings?: boolean; // NEW: Habilitar/deshabilitar embeddings en el chat
 }
 
 export interface ResumenSesionTriggerPayload extends TriggerPayload {

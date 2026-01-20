@@ -1,13 +1,87 @@
+# Dependencias
+node_modules
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+bun.lockb
+
+# Dependencias de prueba
+.npm
+.nyc_output
+
+# Archivos de construcción
+.next
+out
+build
+dist
+
+# Archivos de entorno
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Archivos de datos
+data/*
+!data/.gitkeep
+logs/*
+!logs/.gitkeep
+
+# Archivos de IDE
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# Archivos de sistema
+.DS_Store
+Thumbs.db
+
+# Archivos de Git
+.git
+.gitignore
+.gitattributes
+
+# Archivos de documentación
+README.md
+CHANGELOG.md
+LICENSE
+
+# Archivos de configuración
+*.config.js
+*.config.ts
+
+# Cache
+.cache
+.parcel-cache
+.eslintcache
+
+# Archivos de Docker (excepto los necesarios)
+docker-compose.yml
+docker-compose.override.yml
 Dockerfile
 .dockerignore
-node_modules
-npm-debug.log
-README.md
-.next
-.git
-package-lock.json
-yarn.lock
-pnpm-lock.yaml
-test
+
+# Archivos temporales
+*.tmp
+*.temp
+.cache
+
+# Archivos de prueba
+coverage
+.nyc_output
+
+# Archivos de CI/CD
+.github
+.gitlab-ci.yml
+.travis.yml
+circle.yml
+
+# Otros archivos innecesarios
 *.log
-local-*
+*.sql
+*.sqlite
+*.db

@@ -1,0 +1,66 @@
+version: '3.8'
+
+services:
+  # Aplicación Next.js principal
+  bridge-ia:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: bridge-ia-app
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+    volumes:
+      # Montar directorio de datos para persistencia
+      - ./data:/data
+      # Montar directorio de logs para depuración
+      - ./logs:/app/logs
+    networks:
+      - bridge-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000", "--timeout=10"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  # Volumen para datos persistentes
+  data:
+    driver: local
+  # Volumen para logs
+  logs:
+    driver: local
+
+networks:
+  bridge-network:
+    driver: bridge
+
+# Notas de uso:
+#
+# 1. Iniciar todos los servicios:
+#    docker-compose up -d
+#
+# 2. Ver logs de la aplicación:
+#    docker-compose logs -f bridge-ia
+#
+# 3. Detener todos los servicios:
+#    docker-compose down
+#
+# 4. Reconstruir y reiniciar:
+#    docker-compose up -d --build
+#
+# 5. Verificar estado de los servicios:
+#    docker-compose ps
+#
+# Configuración de servicios externos:
+# - PostgreSQL: Configurar en la interfaz (Configuración > PostgreSQL)
+# - Text Generation WebUI: Configurar en la interfaz (Configuración > Embeddings)
+# - LLM API: Configurar en la interfaz (Configuración > LLM)
+#
+# Estructura de directorios:
+# ./data/ - Directorio de datos persistentes
+# ./logs/ - Directorio de logs de la aplicación

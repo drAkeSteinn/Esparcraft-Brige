@@ -1,3 +1,5 @@
+'use server';
+
 import {
   ChatTriggerPayload,
   ResumenSesionTriggerPayload,
@@ -19,9 +21,9 @@ import {
   buildChatMessages,
   buildSessionSummaryPrompt,
   buildNPCSummaryPrompt,
-  buildNuevoLorePrompt,
-  getRetrievalConfigForOperation
+  buildNuevoLorePrompt
 } from './promptBuilder';
+import { EmbeddingTriggers } from './embedding-triggers';
 
 // LLM Configuration
 const LLM_API_URL = process.env.LLM_API_URL || 'http://127.0.0.1:5000/v1/chat/completions';
@@ -57,8 +59,8 @@ async function callLLM(messages: ChatMessage[]): Promise<string> {
 }
 
 // Chat trigger handler
-export async function handleChatTrigger(payload: ChatTrigger): Promise<{ response: string; sessionId: string; contextUsed?: any }> {
-  const { message, npcid, playersessionid, jugador, use_embeddings = true } = payload;
+export async function handleChatTrigger(payload: ChatTriggerPayload): Promise<{ response: string; sessionId: string }> {
+  const { message, npcid, playersessionid, jugador } = payload;
 
   // Get NPC
   const npc = npcManager.getById(npcid);
@@ -87,20 +89,45 @@ export async function handleChatTrigger(payload: ChatTrigger): Promise<{ respons
     });
   }
 
-  // Get embeddings configuration for chat
-  const embeddingsConfig = use_embeddings ? getRetrievalConfigForOperation('chat') : undefined;
-
-  // Build messages (now async to support embeddings)
-  const messages = await buildChatMessages(message, {
+  // Build messages
+  const messages = buildChatMessages(message, {
     world,
     pueblo,
     edificio,
     npc,
     session
-  }, jugador, embeddingsConfig);
+  });
+
+  // Buscar contexto relevante de embeddings (síncrono, no bloquear)
+  let embeddingContext = '';
+  try {
+    embeddingContext = await EmbeddingTriggers.searchContext(message, {
+      namespace: undefined, // Buscar en todos los namespaces
+      limit: 3, // Máximo 3 contextos relevantes
+      threshold: 0.7 // 70% de similitud mínima
+    });
+  } catch (error) {
+    console.error('Error buscando embeddings:', error);
+    // Continuar sin contexto de embeddings
+  }
+
+  // Si hay contexto de embeddings, agregarlo al prompt
+  let finalMessages = messages;
+  if (embeddingContext) {
+    const systemMessage = messages.find(m => m.role === 'system');
+    if (systemMessage) {
+      finalMessages = [
+        {
+          ...systemMessage,
+          content: `${systemMessage.content}\n\n---\nContexto relevante de documentos:\n${embeddingContext}\n---`
+        },
+        ...messages.filter(m => m.role !== 'system')
+      ];
+    }
+  }
 
   // Call LLM
-  const response = await callLLM(messages);
+  const response = await callLLM(finalMessages);
 
   // Save messages to session
   sessionManager.addMessage(session.id, {
@@ -115,13 +142,7 @@ export async function handleChatTrigger(payload: ChatTrigger): Promise<{ respons
 
   return {
     response,
-    sessionId: session.id,
-    contextUsed: embeddingsConfig ? {
-      embeddings: true,
-      config: embeddingsConfig
-    } : {
-      embeddings: false
-    }
+    sessionId: session.id
   };
 }
 
@@ -308,7 +329,7 @@ export async function previewTriggerPrompt(payload: AnyTriggerPayload): Promise<
         edificio,
         npc,
         session
-      }, chatPayload.jugador);
+      });
 
       return {
         systemPrompt: messages.find(m => m.role === 'system')?.content || '',
