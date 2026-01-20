@@ -1,13 +1,14 @@
 'use client';
 
 import { useState } from 'react';
-import { Globe, MapPin, Building } from 'lucide-react';
+import { Globe, MapPin, Building, Layers } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
-// Subcomponentes (se crearán en pasos siguientes)
+// Subcomponentes
 import MundosSection from './mundo/MundosSection';
 import PueblosSection from './mundo/PueblosSection';
 import EdificiosSection from './mundo/EdificiosSection';
+import PlaceTypesSection from './mundo/PlaceTypesSection';
 
 export default function MundoTab() {
   return (
@@ -18,7 +19,7 @@ export default function MundoTab() {
       </div>
 
       <Tabs defaultValue="mundos" className="w-full">
-        <TabsList className="grid w-full grid-cols-3 lg:w-auto lg:inline-grid">
+        <TabsList className="grid w-full grid-cols-2 md:grid-cols-4 lg:w-auto lg:inline-grid">
           <TabsTrigger value="mundos" className="flex items-center gap-2">
             <Globe className="h-4 w-4" />
             <span>Mundos</span>
@@ -30,6 +31,11 @@ export default function MundoTab() {
           <TabsTrigger value="edificios" className="flex items-center gap-2">
             <Building className="h-4 w-4" />
             <span>Edificaciones</span>
+          </TabsTrigger>
+          <TabsTrigger value="tipos-lugares" className="flex items-center gap-2">
+            <Layers className="h-4 w-4" />
+            <span className="hidden sm:inline">Tipos de Lugares</span>
+            <span className="sm:hidden">Tipos</span>
           </TabsTrigger>
         </TabsList>
 
@@ -43,6 +49,10 @@ export default function MundoTab() {
 
         <TabsContent value="edificios" className="mt-6">
           <EdificiosSection />
+        </TabsContent>
+
+        <TabsContent value="tipos-lugares" className="mt-6">
+          <PlaceTypesSection />
         </TabsContent>
       </Tabs>
     </div>

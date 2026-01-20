@@ -32,6 +32,25 @@ export interface Area {
   end: Coords3D;
 }
 
+// PlaceType: Tipo de lugar compartido globalmente
+export interface PlaceType {
+  id: string;
+  name: string;
+  icon: string; // Icono de Lucide (ej: 'Door', 'Table', 'Monitor')
+  color?: string; // Color personalizado opcional (ej: '#FF5733', '#3498DB')
+}
+
+// PointOfInterest: Punto de interés dentro de un edificio
+export interface PointOfInterest {
+  id: string;
+  name: string; // Nombre específico del POI
+  coordenadas: Coords3D; // Posición X, Y, Z
+  descripcion: string; // Qué se hace en este punto
+  tipo: string; // Referencia al PlaceType (ID del tipo)
+  imagen?: string; // Ruta de la imagen (opcional)
+  tags?: string[]; // Tags adicionales personalizables (opcional)
+}
+
 export interface Edificio {
   id: string;
   worldId: string;
@@ -40,6 +59,7 @@ export interface Edificio {
   lore: string;
   eventos_recientes: string[];
   area: Area;
+  puntosDeInteres?: PointOfInterest[]; // Puntos de interés dentro del edificio
 }
 
 export interface SillyTavernCard {

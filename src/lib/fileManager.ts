@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { World, Pueblo, Edificio, NPC, Session, SillyTavernCard } from './types';
+import { World, Pueblo, Edificio, NPC, Session, SillyTavernCard, PlaceType, PointOfInterest } from './types';
 
 const DATA_DIR = path.join(process.cwd(), 'data');
 
@@ -186,6 +186,131 @@ export const edificioManager = {
     } catch {
       return false;
     }
+  }
+};
+
+// PlaceType operations
+export const placeTypeManager = {
+  getFilePath: (id: string) => path.join(DATA_DIR, 'place-types', `${id}.json`),
+
+  getAll(): PlaceType[] {
+    const files = listFiles(path.join(DATA_DIR, 'place-types'));
+    return files
+      .map(f => readJSON<PlaceType>(path.join(DATA_DIR, 'place-types', f)))
+      .filter((p): p is PlaceType => p !== null);
+  },
+
+  getById(id: string): PlaceType | null {
+    return readJSON<PlaceType>(this.getFilePath(id));
+  },
+
+  create(placeType: Omit<PlaceType, 'id'>, id?: string): PlaceType {
+    const typeId = id || `PLACE_TYPE_${Date.now()}`;
+    const newPlaceType: PlaceType = { ...placeType, id: typeId };
+    writeJSON(this.getFilePath(typeId), newPlaceType);
+    return newPlaceType;
+  },
+
+  update(id: string, placeType: Partial<PlaceType>): PlaceType | null {
+    const existing = this.getById(id);
+    if (!existing) return null;
+    const updated = { ...existing, ...placeType };
+    writeJSON(this.getFilePath(id), updated);
+    return updated;
+  },
+
+  delete(id: string): boolean {
+    try {
+      deleteFile(this.getFilePath(id));
+      return true;
+    } catch {
+      return false;
+    }
+  },
+
+  // Check if a place type is in use by any POI
+  isInUse(typeId: string): boolean {
+    const edificios = edificioManager.getAll();
+    for (const edificio of edificios) {
+      if (edificio.puntosDeInteres) {
+        const inUse = edificio.puntosDeInteres.some(poi => poi.tipo === typeId);
+        if (inUse) return true;
+      }
+    }
+    return false;
+  }
+};
+
+// Point of Interest operations (nested within Edificios)
+export const pointOfInterestManager = {
+  // Get POIs image path
+  getImagePath: (edificioId: string, poiId: string) =>
+    path.join(DATA_DIR, 'edificios', 'images', `${edificioId}_${poiId}.png`),
+
+  // Save image for POI
+  saveImage(edificioId: string, poiId: string, imageData: Buffer): void {
+    const imageDir = path.join(DATA_DIR, 'edificios', 'images');
+    ensureDir(imageDir);
+    const imagePath = this.getImagePath(edificioId, poiId);
+    fs.writeFileSync(imagePath, imageData);
+  },
+
+  // Delete image for POI
+  deleteImage(edificioId: string, poiId: string): void {
+    try {
+      const imagePath = this.getImagePath(edificioId, poiId);
+      if (fs.existsSync(imagePath)) {
+        fs.unlinkSync(imagePath);
+      }
+    } catch (error) {
+      console.error('Error deleting POI image:', error);
+    }
+  },
+
+  // Add POI to edificio
+  addToEdificio(edificioId: string, poi: Omit<PointOfInterest, 'id'>): Edificio | null {
+    const edificio = edificioManager.getById(edificioId);
+    if (!edificio) return null;
+
+    const poiId = `POI_${Date.now()}`;
+    const newPOI: PointOfInterest = { ...poi, id: poiId };
+    const puntosDeInteres = edificio.puntosDeInteres || [];
+
+    edificioManager.update(edificioId, {
+      puntosDeInteres: [...puntosDeInteres, newPOI]
+    });
+
+    return edificioManager.getById(edificioId);
+  },
+
+  // Update POI in edificio
+  updateInEdificio(edificioId: string, poiId: string, updates: Partial<PointOfInterest>): Edificio | null {
+    const edificio = edificioManager.getById(edificioId);
+    if (!edificio || !edificio.puntosDeInteres) return null;
+
+    const updatedPOIs = edificio.puntosDeInteres.map(poi =>
+      poi.id === poiId ? { ...poi, ...updates } : poi
+    );
+
+    edificioManager.update(edificioId, {
+      puntosDeInteres: updatedPOIs
+    });
+
+    return edificioManager.getById(edificioId);
+  },
+
+  // Delete POI from edificio
+  removeFromEdificio(edificioId: string, poiId: string): Edificio | null {
+    const edificio = edificioManager.getById(edificioId);
+    if (!edificio || !edificio.puntosDeInteres) return null;
+
+    const updatedPOIs = edificio.puntosDeInteres.filter(poi => poi.id !== poiId);
+
+    edificioManager.update(edificioId, {
+      puntosDeInteres: updatedPOIs
+    });
+
+    return edificioManager.getById(edificioId);
   }
 };
 
