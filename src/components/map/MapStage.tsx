@@ -7,7 +7,8 @@
 
 import { useRef, useEffect, ReactNode } from 'react';
 import { Stage, Layer } from 'react-konva';
-import { useViewport, UseViewportOptions } from './useViewport';
+import { useViewport, UseViewportOptions } from '@/lib/map/useViewport';
+import { LayerSelectionBox } from './LayerSelectionBox';
 
 interface MapStageProps {
   children?: ReactNode;
@@ -17,6 +18,7 @@ interface MapStageProps {
   width?: number;
   height?: number;
   options?: UseViewportOptions;
+  onSelectionBoxChange?: (selectionBox: { startX: number; startY: number; endX: number; endY: number; visible: boolean } | null) => void;
 }
 
 /**
@@ -33,9 +35,15 @@ export function MapStage({
   onStageMouseMove,
   width = 1000,
   height = 800,
-  options
+  options,
+  onSelectionBoxChange
 }: MapStageProps) {
   const stageRef = useRef<any>(null);
+
+  // Estado para drag-box selection
+  const [selectionBox, setSelectionBox] = useState<{ startX: number; startY: number; endX: number; endY: number; visible: boolean } | null>(null);
+  const [isDraggingBox, setIsDraggingBox] = useState(false);
+  const [boxStart, setBoxStart] = useState<{ x: number; y: number } | null>(null);
 
   // Obtener funciones del hook de viewport
   const {
@@ -61,10 +69,71 @@ export function MapStage({
   };
 
   /**
-   * Maneja movimiento del mouse en el stage
+   * Maneja mousedown para iniciar drag-box
    */
-  const handleStageMouseMove = (event: any) => {
+  const handleContainerMouseDown = (event: React.MouseEvent) => {
+    // Solo iniciar drag-box si no es Shift/Ctrl
+    // y el click fue en el fondo del stage
+    const isModifierKey = event.shiftKey || event.ctrlKey || event.metaKey;
+
+    if (!isModifierKey && event.button === 0) { // Click izquierdo sin Shift/Ctrl
+      // Obtener posición del mouse relativa al contenedor
+      const container = event.currentTarget as HTMLElement;
+      const rect = container.getBoundingClientRect();
+      const mouseX = event.clientX - rect.left;
+      const mouseY = event.clientY - rect.top;
+
+      setBoxStart({ x: mouseX, y: mouseY });
+      setIsDraggingBox(true);
+
+      // Notificar inicio de caja
+      setSelectionBox({
+        startX: mouseX,
+        startY: mouseY,
+        endX: mouseX,
+        endY: mouseY,
+        visible: true
+      });
+    }
+  };
+
+  /**
+   * Maneja movimiento del mouse para actualizar drag-box
+   */
+  const handleContainerMouseMove = (event: React.MouseEvent) => {
     onStageMouseMove?.(event);
+
+    if (isDraggingBox && boxStart) {
+      const container = event.currentTarget as HTMLElement;
+      const rect = container.getBoundingClientRect();
+      const mouseX = event.clientX - rect.left;
+      const mouseY = event.clientY - rect.top;
+
+      // Actualizar el tamaño de la caja de selección
+      const newBox = {
+        startX: boxStart.x,
+        startY: boxStart.y,
+        endX: mouseX,
+        endY: mouseY,
+        visible: true
+      };
+      setSelectionBox(newBox);
+    }
+  };
+
+  /**
+   * Maneja mouseup para finalizar drag-box
+   */
+  const handleContainerMouseUp = () => {
+    if (isDraggingBox) {
+      setIsDraggingBox(false);
+      setBoxStart(null);
+
+      // Notificar finalización con la caja visible
+      if (selectionBox) {
+        onSelectionBoxChange?.(selectionBox);
+      }
+    }
   };
 
   /**
@@ -78,6 +147,7 @@ export function MapStage({
   useEffect(() => {
     const handleGlobalMouseUp = () => {
       handleMouseUp();
+      handleContainerMouseUp();
     };
 
     // Agregar listener para mouseup en document
@@ -87,7 +157,7 @@ export function MapStage({
     return () => {
       document.removeEventListener('mouseup', handleGlobalMouseUp);
     };
-  }, [handleMouseUp]);
+  }, [handleMouseUp, handleContainerMouseUp]);
 
   /**
    * Maneja redimensionamiento del contenedor
@@ -126,11 +196,20 @@ export function MapStage({
         backgroundColor: '#f8fafc',
         border: '1px solid #e2e8f0',
         borderRadius: '8px',
-        cursor: viewport.scale > 1 ? 'grab' : 'default'
+        cursor: isDraggingBox ? 'crosshair' : (viewport.scale > 1 ? 'grab' : 'default')
       }}
       onWheel={handleWheel}
-      onMouseDown={handleMouseDown}
-      onMouseMove={handleStageMouseMove}
+      onMouseDown={(e) => {
+        // Si es un drag-box potencial (sin Shift/Ctrl), manejar en contenedor
+        const isModifierKey = e.shiftKey || e.ctrlKey || e.metaKey;
+        if (!isModifierKey && e.button === 0) {
+          handleContainerMouseDown(e);
+        } else {
+          // De lo contrario, dejar que el hook de viewport maneje el pan
+          handleMouseDown(e);
+        }
+      }}
+      onMouseMove={handleContainerMouseMove}
       onDoubleClick={handleDoubleClick}
     >
       {/* Overlay informativo de zoom */}
@@ -169,6 +248,7 @@ export function MapStage({
           <span>🖱️ Arrastra para mover</span>
           <span>🔄 Rueda para zoom</span>
           <span>⏱️ Doble click para resetear</span>
+          <span>📦 Arrastra para seleccionar múltiples (sin Shift/Ctrl)</span>
         </div>
       </div>
 
@@ -187,6 +267,10 @@ export function MapStage({
         <Layer>
           {children}
         </Layer>
+        {/* Capa de caja de selección */}
+        {selectionBox && selectionBox.visible && (
+          <LayerSelectionBox selectionBox={selectionBox} />
+        )}
       </Stage>
     </div>
   );
