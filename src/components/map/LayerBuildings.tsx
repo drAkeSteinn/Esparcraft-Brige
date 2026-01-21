@@ -1,11 +1,11 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import { Rect, Text, Group, Layer as KonvaLayer } from 'react-konva';
 import { useViewport } from '@/lib/map/useViewport';
 import { useLayers } from '@/lib/map/useLayers';
 import { CoordConverter } from '@/lib/map/coordUtils';
-import { MapBuilding, MapLayerType } from '@/lib/map/types';
+import { MapBuilding } from '@/lib/map/types';
 import { ELEMENT_COLORS } from '@/lib/map/types';
 
 interface LayerBuildingsProps {
@@ -40,14 +40,13 @@ export default function LayerBuildings({
   selectedBuildingIds = new Set()
 }: LayerBuildingsProps) {
   const { state: viewport } = useViewport();
-  const { state: layers, isLayerVisible, isLayerLocked } = useLayers();
+  const { layers, isLayerVisible, isLayerLocked } = useLayers();
   const [edificios, setEdificios] = useState<EdificioData[]>([]);
   const [loading, setLoading] = useState(true);
   const [hoveredBuilding, setHoveredBuilding] = useState<string | null>(null);
 
-  const converter = useRef(new CoordConverter(1));
-  const layerVisible = isLayerVisible(MapLayerType.Buildings);
-  const layerLocked = isLayerLocked(MapLayerType.Buildings);
+  const layerVisible = isLayerVisible('buildings');
+  const layerLocked = isLayerLocked('buildings');
 
   // Cargar edificios desde la API
   useEffect(() => {
@@ -91,8 +90,8 @@ export default function LayerBuildings({
     const startCoords = { x: minX, z: minZ };
     const endCoords = { x: maxX, z: maxZ };
 
-    const pixelStart = converter.current.minecraftToPixels(startCoords);
-    const pixelEnd = converter.current.minecraftToPixels(endCoords);
+    const pixelStart = CoordConverter.minecraftToPixel(startCoords, { scale: 1 });
+    const pixelEnd = CoordConverter.minecraftToPixel(endCoords, { scale: 1 });
 
     return {
       id: edificio.id,
@@ -130,7 +129,7 @@ export default function LayerBuildings({
   };
 
   // Determinar si mostrar labels (solo si el zoom es suficiente)
-  const shouldShowLabels = showLabels && viewport.scale >= 0.8;
+  const shouldShowLabels = showLabels && viewport?.scale >= 0.8;
 
   // Colores para edificios
   const getBuildingColor = (building: MapBuilding, isHovered: boolean) => {
@@ -147,7 +146,7 @@ export default function LayerBuildings({
   };
 
   // Opacidad de la capa
-  const layerOpacity = layers.layers.find(l => l.type === MapLayerType.Buildings)?.opacity ?? 100;
+  const layerOpacity = layers.layers['buildings']?.opacity ?? 100;
 
   // Si la capa no es visible, no renderizar nada
   if (!layerVisible) {

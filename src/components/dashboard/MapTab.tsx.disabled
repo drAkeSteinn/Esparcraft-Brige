@@ -118,9 +118,6 @@ function MultipleSelectionDisplay({
 }
 
 export default function MapTab() {
-  // Por defecto, usar el mundo Esparcraft
-  const [selectedWorldId, setSelectedWorldId] = useState<string>('WORLD_ESPARCRAFT');
-
   // Estado de selección simple (mantiene compatibilidad)
   const [selectedBuilding, setSelectedBuilding] = useState<MapBuilding | null>(null);
   const [hoveredBuilding, setHoveredBuilding] = useState<MapBuilding | null>(null);
@@ -149,20 +146,6 @@ export default function MapTab() {
 
   // Estado para edición de elementos
   const [isEditing, setIsEditing] = useState(false);
-
-  const clearAllSelection = useCallback(() => {
-    setSelectedBuildingIds(new Set());
-    setSelectedZoneIds(new Set());
-    setSelectedNPCIds(new Set());
-    setIsMultiSelect(false);
-    setSelectedBuilding(null);
-    setSelectedZone(null);
-    setSelectedNPC(null);
-    setSelectedElement(null);
-    setHoveredElement(null);
-    // Limpiar la caja de selección final
-    setFinalSelectionBox(null);
-  }, []);
 
   // Keyboard shortcuts: Ctrl+A (seleccionar todo), Esc (deseleccionar todo)
   useEffect(() => {
@@ -194,7 +177,21 @@ export default function MapTab() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [buildingsRef, zonesRef, npcsRef, clearAllSelection]);
+  }, [buildingsRef, zonesRef, npcsRef]);
+
+  const clearAllSelection = useCallback(() => {
+    setSelectedBuildingIds(new Set());
+    setSelectedZoneIds(new Set());
+    setSelectedNPCIds(new Set());
+    setIsMultiSelect(false);
+    setSelectedBuilding(null);
+    setSelectedZone(null);
+    setSelectedNPC(null);
+    setSelectedElement(null);
+    setHoveredElement(null);
+    // Limpiar la caja de selección final
+    setFinalSelectionBox(null);
+  }, []);
 
   const handleBuildingClick = (building: MapBuilding, event?: React.MouseEvent) => {
     const isShiftKey = event?.shiftKey || false;
@@ -295,7 +292,6 @@ export default function MapTab() {
       setIsEditing(false);
       // Limpiar la caja de selección
       setFinalSelectionBox(null);
-    }
 
     setSelectedElement({
       id: zone.id,
@@ -356,7 +352,6 @@ export default function MapTab() {
       setIsEditing(false);
       // Limpiar la caja de selección
       setFinalSelectionBox(null);
-    }
 
     setSelectedElement({
       id: npc.id,
@@ -757,21 +752,18 @@ export default function MapTab() {
                 onSelectionBoxChange={handleSelectionBoxChange}
               >
                 <LayerZones
-                  worldId={selectedWorldId}
                   onZoneClick={handleZoneClick}
                   onZoneHover={handleZoneHover}
                   showLabels={true}
                   selectedZoneIds={selectedZoneIds}
                 />
                 <LayerBuildings
-                  worldId={selectedWorldId}
                   onBuildingClick={handleBuildingClick}
                   onBuildingHover={handleBuildingHover}
                   showLabels={true}
                   selectedBuildingIds={selectedBuildingIds}
                 />
                 <LayerNPCs
-                  worldId={selectedWorldId}
                   onNPCClick={handleNPCClick}
                   onNPCHover={handleNPCHover}
                   onNPCDragStart={handleNPCDragStart}

@@ -5,10 +5,10 @@
 
 'use client';
 
-import { useRef, useEffect, ReactNode } from 'react';
+import { useRef, useEffect, useState, ReactNode } from 'react';
 import { Stage, Layer } from 'react-konva';
 import { useViewport, UseViewportOptions } from '@/lib/map/useViewport';
-import { LayerSelectionBox } from './LayerSelectionBox';
+import LayerSelectionBox from './LayerSelectionBox';
 
 interface MapStageProps {
   children?: ReactNode;

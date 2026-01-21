@@ -1,11 +1,11 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import { Circle, Text, Group, Layer as KonvaLayer, Star } from 'react-konva';
 import { useViewport } from '@/lib/map/useViewport';
 import { useLayers } from '@/lib/map/useLayers';
 import { CoordConverter } from '@/lib/map/coordUtils';
-import { MapNPC, MapLayerType } from '@/lib/map/types';
+import { MapNPC } from '@/lib/map/types';
 import { ELEMENT_COLORS } from '@/lib/map/types';
 
 interface LayerNPCsProps {
@@ -60,15 +60,14 @@ export default function LayerNPCs({
   onNPCDragEnd,
 }: LayerNPCsProps) {
   const { state: viewport } = useViewport();
-  const { state: layers, isLayerVisible, isLayerLocked } = useLayers();
+  const { layers, isLayerVisible, isLayerLocked } = useLayers();
   const [npcs, setNPCs] = useState<NPCData[]>([]);
   const [loading, setLoading] = useState(true);
   const [hoveredNPC, setHoveredNPC] = useState<string | null>(null);
   const [edificiosCache, setEdificiosCache] = useState<Record<string, EdificioData>>({});
 
-  const converter = useRef(new CoordConverter(1));
-  const layerVisible = isLayerVisible(MapLayerType.NPCs);
-  const layerLocked = isLayerLocked(MapLayerType.NPCs);
+  const layerVisible = isLayerVisible('npcs');
+  const layerLocked = isLayerLocked('npcs');
 
   // Cargar NPCs desde la API
   useEffect(() => {
@@ -155,10 +154,10 @@ export default function LayerNPCs({
     const npcName = npc.card.data?.name || npc.card.name;
 
     // Obtener coordenadas en píxeles
-    const pixelCoords = converter.current.minecraftToPixels({
+    const pixelCoords = CoordConverter.minecraftToPixel({
       worldX: position.x,
       worldZ: position.z
-    });
+    }, { scale: 1 });
 
     return {
       id: npc.id,
@@ -209,7 +208,7 @@ export default function LayerNPCs({
     const pixelY = event.target.y();
 
     // Convertir a coordenadas de Minecraft
-    const mcCoords = converter.current.pixelsToMinecraft({ x: pixelX, y: pixelY });
+    const mcCoords = CoordConverter.pixelToMinecraft({ x: pixelX, y: pixelY }, { scale: 1 });
     onNPCDrag?.(npc.id, { worldX: mcCoords.worldX, worldZ: mcCoords.worldZ });
   };
 
@@ -221,15 +220,15 @@ export default function LayerNPCs({
     const pixelY = event.target.y();
 
     // Convertir a coordenadas de Minecraft
-    const mcCoords = converter.current.pixelsToMinecraft({ x: pixelX, y: pixelY });
+    const mcCoords = CoordConverter.pixelToMinecraft({ x: pixelX, y: pixelY }, { scale: 1 });
     onNPCDragEnd?.(npc.id, { worldX: mcCoords.worldX, worldZ: mcCoords.worldZ });
   };
 
   // Determinar si mostrar labels (solo si el zoom es suficiente)
-  const shouldShowLabels = showLabels && viewport.scale >= 1.0;
+  const shouldShowLabels = showLabels && viewport?.scale >= 1.0;
 
   // Opacidad de la capa
-  const layerOpacity = layers.layers.find(l => l.type === MapLayerType.NPCs)?.opacity ?? 100;
+  const layerOpacity = layers.layers['npcs']?.opacity ?? 100;
 
   // Si la capa no es visible, no renderizar nada
   if (!layerVisible) {

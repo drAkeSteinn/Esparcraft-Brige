@@ -1,11 +1,11 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import { Line, Text, Group, Layer as KonvaLayer, Circle } from 'react-konva';
 import { useViewport } from '@/lib/map/useViewport';
 import { useLayers } from '@/lib/map/useLayers';
 import { CoordConverter } from '@/lib/map/coordUtils';
-import { MapZone, MapLayerType } from '@/lib/map/types';
+import { MapZone } from '@/lib/map/types';
 import { ELEMENT_COLORS } from '@/lib/map/types';
 
 interface LayerZonesProps {
@@ -37,14 +37,13 @@ export default function LayerZones({
   selectedZoneIds = new Set()
 }: LayerZonesProps) {
   const { state: viewport } = useViewport();
-  const { state: layers, isLayerVisible, isLayerLocked } = useLayers();
+  const { layers, isLayerVisible, isLayerLocked } = useLayers();
   const [pueblos, setPueblos] = useState<PuebloData[]>([]);
   const [loading, setLoading] = useState(true);
   const [hoveredZone, setHoveredZone] = useState<string | null>(null);
 
-  const converter = useRef(new CoordConverter(1));
-  const layerVisible = isLayerVisible(MapLayerType.Zones);
-  const layerLocked = isLayerLocked(MapLayerType.Zones);
+  const layerVisible = isLayerVisible('zones');
+  const layerLocked = isLayerLocked('zones');
 
   // Cargar pueblos desde la API
   useEffect(() => {
@@ -83,7 +82,7 @@ export default function LayerZones({
 
     // Transformar coordenadas del polígono
     const transformedPolygon = pueblo.polygon.map(point => {
-      const pixelCoords = converter.current.minecraftToPixels({ worldX: point.x, worldZ: point.z });
+      const pixelCoords = CoordConverter.minecraftToPixel({ worldX: point.x, worldZ: point.z }, { scale: 1 });
       return {
         x: pixelCoords.x,
         y: pixelCoords.y,
@@ -144,10 +143,10 @@ export default function LayerZones({
   };
 
   // Determinar si mostrar labels (solo si el zoom es suficiente)
-  const shouldShowLabels = showLabels && viewport.scale >= 0.6;
+  const shouldShowLabels = showLabels && viewport?.scale >= 0.6;
 
   // Opacidad de la capa
-  const layerOpacity = layers.layers.find(l => l.type === MapLayerType.Zones)?.opacity ?? 100;
+  const layerOpacity = layers.layers['zones']?.opacity ?? 100;
 
   // Si la capa no es visible, no renderizar nada
   if (!layerVisible) {

@@ -15,7 +15,7 @@ import {
 /**
  * Utilidades de conversión de coordenadas
  */
-export const coordConverter: CoordConverter = {
+export const CoordConverter: CoordConverter = {
   /**
    * Convierte coordenadas Minecraft a píxeles
    * x = worldX * scale + offsetX
@@ -97,7 +97,7 @@ export function transformCoordsToPixels(
   coords: MinecraftCoords[],
   options: CoordTransformOptions
 ): PixelCoords[] {
-  return coords.map(mc => coordConverter.minecraftToPixel(mc, options));
+  return coords.map(mc => CoordConverter.minecraftToPixel(mc, options));
 }
 
 /**
@@ -107,7 +107,7 @@ export function transformPixelsToMinecraft(
   coords: PixelCoords[],
   options: CoordTransformOptions
 ): MinecraftCoords[] {
-  return coords.map(px => coordConverter.pixelToMinecraft(px, options));
+  return coords.map(px => CoordConverter.pixelToMinecraft(px, options));
 }
 
 /**
@@ -139,7 +139,7 @@ export function pointInRect(
   point: MinecraftCoords,
   bounds: CoordBounds
 ): boolean {
-  const normalized = coordConverter.normalizeRect(bounds);
+  const normalized = CoordConverter.normalizeRect(bounds);
   const minX = Math.min(normalized.start.worldX, normalized.end.worldX);
   const maxX = Math.max(normalized.start.worldX, normalized.end.worldX);
   const minZ = Math.min(normalized.start.worldZ, normalized.end.worldZ);
@@ -160,8 +160,8 @@ export function rectsIntersect(
   rect1: CoordBounds,
   rect2: CoordBounds
 ): boolean {
-  const norm1 = coordConverter.normalizeRect(rect1);
-  const norm2 = coordConverter.normalizeRect(rect2);
+  const norm1 = CoordConverter.normalizeRect(rect1);
+  const norm2 = CoordConverter.normalizeRect(rect2);
 
   const min1X = Math.min(norm1.start.worldX, norm1.end.worldX);
   const max1X = Math.max(norm1.start.worldX, norm1.end.worldX);

@@ -5,12 +5,12 @@
 
 'use client';
 
-import { Layer, Circle, Eye, EyeOff, Lock, Unlock, Layers } from 'lucide-react';
+import { Layer, Circle, Eye, EyeOff, Lock, Unlock, Layers, MapPin, Building, Users, Activity } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { Slider } from '@/components/ui/slider';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useLayers } from '@/lib/map/useLayers';
-import { MapLayerType, LayerConfig } from '@/lib/map/types';
+import { LayerConfig } from '@/lib/map/types';
 
 interface LayerControlProps {
   className?: string;
@@ -31,7 +31,7 @@ export function LayerControl({ className = '' }: LayerControlProps) {
   } = useLayers();
 
   // Iconos por tipo de capa
-  const layerIcons: Record<MapLayerType, React.ReactNode> = {
+  const layerIcons: Record<string, React.ReactNode> = {
     background: <Layers className="h-5 w-5" />,
     zones: <MapPin className="h-5 w-5" />,
     buildings: <Building className="h-5 w-5" />,
@@ -42,8 +42,8 @@ export function LayerControl({ className = '' }: LayerControlProps) {
   };
 
   // Ordenar capas por z-index para mostrarlas correctamente
-  const layerTypes: MapLayerType[] = Object.keys(layers) as MapLayerType[];
-  const sortedLayers = layerTypes.sort((a, b) => layers[a].zIndex - layers[b].zIndex);
+  const layerTypes: string[] = Object.keys(layers);
+  const sortedLayers = layerTypes.sort((a, b) => layers[a as keyof typeof layers].zIndex - layers[b as keyof typeof layers].zIndex);
 
   return (
     <Card className={className}>

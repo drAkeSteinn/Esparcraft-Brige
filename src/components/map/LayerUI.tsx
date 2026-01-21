@@ -3,7 +3,7 @@
 import { Text, Group, Layer as KonvaLayer, Rect, Tag, Line } from 'react-konva';
 import { useViewport } from '@/lib/map/useViewport';
 import { useLayers } from '@/lib/map/useLayers';
-import { MapLayerType, SelectableElement } from '@/lib/map/types';
+import { SelectableElement } from '@/lib/map/types';
 
 interface LayerUIProps {
   hoveredElement?: SelectableElement | null;
@@ -29,8 +29,8 @@ export default function LayerUI({
 }: LayerUIProps) {
   const { state: viewport } = useViewport();
   const { isLayerVisible, isLayerLocked } = useLayers();
-  const layerVisible = isLayerVisible(MapLayerType.UI);
-  const layerLocked = isLayerLocked(MapLayerType.UI);
+  const layerVisible = isLayerVisible('ui');
+  const layerLocked = isLayerLocked('ui');
 
   // Calcular posición del tooltip
   const tooltipX = hoveredElement ? viewport.offsetX + hoveredElement.coords.worldX * viewport.scale : 0;

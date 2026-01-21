@@ -210,7 +210,7 @@ export function useLayers(options: UseLayersOptions = {}) {
         zones: { visible: true },
         buildings: { visible: false },
         npcs: { visible: false },
-        routes: visible: false },
+        routes: { visible: false },
         activity: { visible: false },
         ui: { visible: true }
       }
