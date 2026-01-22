@@ -13,12 +13,5 @@
       "El alcalde no ha salido de su casa desde la última luna llena"
     ]
   },
-  "id": "PUEBLO_1768819105950",
-  "polygon": [
-    { "x": 70, "y": 75, "z": -30 },
-    { "x": 100, "y": 75, "z": -30 },
-    { "x": 100, "y": 75, "z": -15 },
-    { "x": 85, "y": 75, "z": -10 },
-    { "x": 70, "y": 75, "z": -15 }
-  ]
+  "id": "PUEBLO_1768819105950"
 }
