@@ -229,3 +229,51 @@ Stage (viewport)
 - ✅ Estado completo del mapa (Map2DState)
 
 **Siguiente paso:** Implementar Stage y Viewport con pan/zoom (Tarea 3-a)
+
+---
+
+## Task ID: INSTALL
+**Agent:** Principal
+**Task:** Instalación del repositorio Esparcraft-Brige desde GitHub
+
+### Work Log:
+- Clonado repositorio desde: https://github.com/drAkeSteinn/Esparcraft-Brige.git
+- Respaldado package.json original como package.json.backup.original
+- Copiado contenido completo del repositorio al directorio principal del proyecto (/home/z/my-project/)
+- Sobrescritos archivos existentes con versiones del repositorio
+- Ejecutado `bun install` para instalar/verificar dependencias
+- Verificado estado del servidor de desarrollo
+- Eliminado directorio temporal de clonación
+
+### Stage Summary:
+- ✅ Repositorio clonado exitosamente
+- ✅ Todos los archivos del proyecto Esparcraft copiados correctamente
+- ✅ Dependencias instaladas (866 installs across 935 packages)
+- ✅ Servidor de desarrollo funcionando en http://localhost:3000
+- ✅ Sistema de Mapa 2D al 26.7% de completado
+- ✅ Documentación del proyecto disponible (TODO.md, PROJECT_RESUME.md, PROJECT_WORKLOG.md)
+
+**Archivos del proyecto Esparcraft:**
+- `src/lib/map/` - Sistema completo de mapa 2D (types, coordUtils, useViewport, useLayers, index)
+- `src/components/map/` - Componentes del mapa (MapStage, LayerControl)
+- `src/components/dashboard/` - Dashboard completo (MundoTab, NpcsTab, MapTab, SessionsTab, RouterTab, EmbeddingsTab, SettingsTab)
+- `data-esparcraft/` - Datos del proyecto (npcs, edificios, pueblos, worlds)
+- `TODO.md` - Estado actual del proyecto (26.7% completado)
+- `PROJECT_RESUME.md` - Resumen completo del proyecto
+- `PROJECT_WORKLOG.md` - Historial detallado
+
+**Estado del proyecto:**
+- FASE 1: ✅ 100% completada
+- FASE 2: ✅ 50% completada
+- FASE 3: ⏳ 0% completada (pendiente)
+- FASE 4: ⏳ 0% completada (pendiente)
+- FASE 5: ⏳ 0% completada (pendiente)
+- FASE 6: ⏳ 0% completada (pendiente)
+
+**Siguiente paso recomendado:**
+Tarea 4-c: Layer de Edificios (ALTA PRIORIDAD)
+- Renderizar edificios como rectángulos con coordenadas Minecraft
+- Integrar con `/api/edificios`
+- Implementar hover highlight
+- Mostrar labels con nombres de edificios
+

@@ -10,5 +10,17 @@
       "En las ruinas del templo se escuchan cánticos nocturnos",
       "El rey ha cerrado las puertas del castillo hace tres lunas"
     ]
+  },
+  "area": {
+    "start": {
+      "x": -28,
+      "y": 68,
+      "z": -74
+    },
+    "end": {
+      "x": 95,
+      "y": 112,
+      "z": 385
+    }
   }
 }

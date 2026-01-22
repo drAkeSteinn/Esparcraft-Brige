@@ -10,5 +10,17 @@
     ]
   },
   "id": "PUEBLO_1768818733453",
-  "description": "Nacion de los Vampiros"
+  "description": "Nacion de los Vampiros",
+  "area": {
+    "start": {
+      "x": 5,
+      "y": 71,
+      "z": 316
+    },
+    "end": {
+      "x": 95,
+      "y": 112,
+      "z": 385
+    }
+  }
 }

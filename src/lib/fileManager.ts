@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { World, Pueblo, Edificio, NPC, Session, SillyTavernCard, PlaceType, PointOfInterest } from './types';
 
-const DATA_DIR = path.join(process.cwd(), 'data');
+const DATA_DIR = path.join(process.cwd(), 'data-esparcraft');
 
 // Helper functions
 export function ensureDir(dirPath: string): void {

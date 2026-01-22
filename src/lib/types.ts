@@ -7,6 +7,7 @@ export interface World {
     estado_mundo: string;
     rumores: string[];
   };
+  area?: Area; // Área calculada a partir de las regiones (pueblos) que contiene
 }
 
 export interface Pueblo {
@@ -19,6 +20,7 @@ export interface Pueblo {
     estado_pueblo: string;
     rumores: string[];
   };
+  area?: Area; // Área calculada a partir de las edificaciones que contiene
 }
 
 export interface Coords3D {

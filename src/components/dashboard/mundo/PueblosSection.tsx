@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, MapPin, Building2 } from 'lucide-react';
+import { Plus, Edit2, Trash2, MapPin, Building2, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -26,6 +26,7 @@ export default function PueblosSection() {
   const [edificios, setEdificios] = useState<Edificio[]>([]);
   const [placeTypes, setPlaceTypes] = useState<PlaceType[]>([]);
   const [loading, setLoading] = useState(true);
+  const [updatingAreas, setUpdatingAreas] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingPueblo, setEditingPueblo] = useState<Pueblo | null>(null);
   const [formData, setFormData] = useState({
@@ -125,6 +126,37 @@ export default function PueblosSection() {
     }
   };
 
+  const handleUpdateAllAreas = async () => {
+    try {
+      setUpdatingAreas(true);
+      const response = await fetch('/api/boundingBox');
+      const result = await response.json();
+
+      if (result.success) {
+        toast({
+          title: 'Éxito',
+          description: result.message
+        });
+        fetchData();
+      } else {
+        toast({
+          title: 'Error',
+          description: result.message || 'No se pudieron actualizar las áreas',
+          variant: 'destructive'
+        });
+      }
+    } catch (error) {
+      console.error('Error updating areas:', error);
+      toast({
+        title: 'Error',
+        description: 'No se pudieron actualizar las áreas',
+        variant: 'destructive'
+      });
+    } finally {
+      setUpdatingAreas(false);
+    }
+  };
+
   const handleSubmit = async () => {
     try {
       const payload = {
@@ -184,6 +216,10 @@ export default function PueblosSection() {
           <p className="text-sm text-muted-foreground">Gestiona las regiones del mundo</p>
         </div>
         <div className="flex gap-2">
+          <Button onClick={handleUpdateAllAreas} variant="outline" disabled={updatingAreas}>
+            <RefreshCw className={`h-4 w-4 mr-2 ${updatingAreas ? 'animate-spin' : ''}`} />
+            {updatingAreas ? 'Actualizando...' : 'Actualizar Áreas'}
+          </Button>
           <Button onClick={handleCreatePueblo}>
             <MapPin className="h-4 w-4 mr-2" />
             Crear Pueblo
@@ -263,62 +299,24 @@ export default function PueblosSection() {
                   )}
                   {(() => {
                     const edificiosEnPueblo = edificios.filter(e => e.puebloId === pueblo.id);
-                    if (edificiosEnPueblo.length > 0) {
-                      return (
-                        <div className="space-y-2">
+                    return (
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
                           <p className="text-sm font-medium">Edificaciones en esta región:</p>
-                          <div className="space-y-3">
-                            {edificiosEnPueblo.map(edif => {
-                              const pois = edif.puntosDeInteres || [];
-                              return (
-                                <div key={edif.id} className="p-2 border rounded-lg bg-muted/30">
-                                  <div className="flex items-center gap-2 mb-2">
-                                    <Building2 className="h-3 w-3" />
-                                    <span className="text-sm font-medium">{edif.name}</span>
-                                  </div>
-                                  {pois.length > 0 && (
-                                    <div className="ml-5 space-y-1">
-                                      <p className="text-xs text-muted-foreground flex items-center gap-1">
-                                        <MapPin className="h-3 w-3" />
-                                        Puntos de interés ({pois.length}):
-                                      </p>
-                                      <div className="flex flex-wrap gap-1">
-                                        {pois.map(poi => {
-                                          const placeType = placeTypes.find(pt => pt.id === poi.tipo);
-                                          return (
-                                            <Badge
-                                              key={poi.id}
-                                              variant="outline"
-                                              className="text-xs"
-                                              title={poi.descripcion}
-                                            >
-                                              <div
-                                                className="p-0.5 rounded-sm mr-1"
-                                                style={{
-                                                  backgroundColor: placeType?.color ? `${placeType.color}30` : 'hsl(var(--muted))'
-                                                }}
-                                              >
-                                                <IconComponent
-                                                  name={placeType?.icon || 'MapPin'}
-                                                  size={10}
-                                                  style={placeType?.color ? { color: placeType.color } : undefined}
-                                                />
-                                              </div>
-                                              {poi.name}
-                                            </Badge>
-                                          );
-                                        })}
-                                      </div>
-                                    </div>
-                                  )}
-                                </div>
-                              );
-                            })}
-                          </div>
+                          <span className="text-xs text-muted-foreground">{edificiosEnPueblo.length} edificios</span>
                         </div>
-                      );
-                    }
-                    return null;
+                        {pueblo.area ? (
+                          <div className="text-xs bg-muted/50 p-2 rounded">
+                            <p className="font-medium text-primary mb-1">Área calculada:</p>
+                            <p>X: {pueblo.area.start.x} → {pueblo.area.end.x}</p>
+                            <p>Z: {pueblo.area.start.z} → {pueblo.area.end.z}</p>
+                            <p>Dimensiones: {Math.abs(pueblo.area.end.x - pueblo.area.start.x)} × {Math.abs(pueblo.area.end.z - pueblo.area.start.z)}</p>
+                          </div>
+                        ) : (
+                          <p className="text-xs text-muted-foreground">Sin área calculada (sin edificaciones)</p>
+                        )}
+                      </div>
+                    );
                   })()}
                 </div>
               </CardContent>
