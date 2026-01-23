@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { edificioManager, pointOfInterestManager } from '@/lib/fileManager';
+import fs from 'fs';
+import path from 'path';
 
 // POST upload/update POI image
 export async function POST(
@@ -97,8 +99,6 @@ export async function GET(
 ) {
   try {
     const { id, poiId } = await params;
-    const fs = require('fs');
-    const path = require('path');
 
     const imagePath = pointOfInterestManager.getImagePath(id, poiId);
 

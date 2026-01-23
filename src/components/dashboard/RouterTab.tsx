@@ -506,10 +506,10 @@ export default function RouterTab() {
         if (edificioKey === 'poislist' || edificioKey === 'puntos_de_interes_list') {
           if (context.edificio?.puntosDeInteres && context.edificio.puntosDeInteres.length > 0) {
             return context.edificio.puntosDeInteres.map((poi: any) => {
-              const tipo = poi.tipo || 'Sin tipo';
-              const nombre = poi.nombre || 'Sin nombre';
-              const coords = poi.coords ? `-28,68,-26` : 'Sin coordenadas';
-              return `"${tipo}" "${nombre}" ${coords}`;
+              const nombre = poi.name || 'Sin nombre';
+              const descripcion = poi.descripcion || '';
+              const coords = poi.coordenadas || { x: 0, y: 0, z: 0 };
+              return `${nombre} (${descripcion}) {"coordenadas": {"x": ${coords.x},"y": ${coords.y},"z": ${coords.z}}}`;
             }).join('\n');
           }
           return '(Sin puntos de interés)';

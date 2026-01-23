@@ -37,6 +37,17 @@
         "comercio"
       ],
       "id": "POI_1769155649492"
+    },
+    {
+      "name": "Silla 1",
+      "coordenadas": {
+        "x": -6,
+        "y": 67,
+        "z": -56
+      },
+      "descripcion": "Silla1 de la mesa 1",
+      "tipo": "PLACE_TYPE_silla",
+      "id": "POI_1769157521263"
     }
   ]
 }

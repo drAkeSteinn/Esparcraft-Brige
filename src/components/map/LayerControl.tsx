@@ -5,7 +5,7 @@
 
 'use client';
 
-import { Layer, Circle, Eye, EyeOff, Lock, Unlock, Layers } from 'lucide-react';
+import { Layer, Circle, Eye, EyeOff, Lock, Unlock, Layers, MapPin, Building, Users, Activity } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { Slider } from '@/components/ui/slider';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
