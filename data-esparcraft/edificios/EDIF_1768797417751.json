@@ -13,7 +13,7 @@
   "area": {
     "start": {
       "x": -28,
-      "y": 68,
+      "y": 62,
       "z": -26
     },
     "end": {
@@ -22,5 +22,21 @@
       "z": -74
     }
   },
-  "id": "EDIF_1768797417751"
+  "id": "EDIF_1768797417751",
+  "puntosDeInteres": [
+    {
+      "name": "Vesitbulo",
+      "coordenadas": {
+        "x": -8,
+        "y": 67,
+        "z": -60
+      },
+      "descripcion": "Barra de la taverna",
+      "tipo": "PLACE_TYPE_mesa",
+      "tags": [
+        "comercio"
+      ],
+      "id": "POI_1769155649492"
+    }
+  ]
 }

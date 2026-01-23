@@ -56,7 +56,7 @@ export default function Dashboard() {
             </TabsTrigger>
             <TabsTrigger value="sessions" className="flex items-center gap-2">
               <MessageSquare className="h-4 w-4" />
-              <span className="hidden sm:inline">Sessions</span>
+              <span className="hidden sm:inline">Sesiones</span>
             </TabsTrigger>
             <TabsTrigger value="router" className="flex items-center gap-2">
               <Network className="h-4 w-4" />

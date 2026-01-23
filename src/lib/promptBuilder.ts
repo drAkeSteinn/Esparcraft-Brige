@@ -10,6 +10,109 @@ export function estimateMessagesTokens(messages: ChatMessage[]): number {
   return messages.reduce((sum, msg) => sum + estimateTokens(msg.content), 0);
 }
 
+// Helper function to process card fields and replace variables
+function processCardField(
+  fieldName: string,
+  card: SillyTavernCard,
+  context: PromptBuildContext
+): string {
+  const fieldValue = getCardField(card, fieldName, '');
+  
+  // If fieldValue exists and contains {{variables}}, replace them
+  if (fieldValue && fieldValue.includes('{{')) {
+    // For system_prompt, use a different context (sin jugador)
+    if (fieldName === 'system_prompt') {
+      const keyContext: {
+        npc: { card },
+        world: context.world,
+        mundo: context.world,
+        pueblo: context.pueblo,
+        edificio: context.edificio
+      };
+      return replaceKeys(fieldValue, keyContext);
+    } else {
+      // For other fields, include jugador data in context
+      const keyContext = {
+        npc: { card },
+        world: context.world,
+        mundo: context.world,
+        pueblo: context.pueblo,
+        edificio: context.edificio,
+        jugador: context.jugador
+      };
+      return replaceKeys(fieldValue, keyContext);
+    }
+  }
+  
+  return fieldValue || '';
+}
+
+// Build system prompt for chat (SillyTavern format)
+export function buildChatSystemPrompt(
+  context: PromptBuildContext,
+  jugador?: {
+    nombre?: string;
+    raza?: string;
+    nivel?: string;
+    almakos?: string;
+    deuda?: string;
+    piedras_del_alma?: string;
+    salud_actual?: string;
+    reputacion?: string;
+    hora?: string;
+    clima?: string;
+  }
+): string {
+  const { world, pueblo, edificio, npc, session } = context;
+
+  let prompt = '';
+
+  // System prompt de la card del NPC (instrucciones base)
+  const systemPrompt = processCardField('system_prompt', npc.card, context);
+  if (systemPrompt) {
+    prompt += systemPrompt + '\n\n';
+  }
+
+  // Contexto del mundo (DEBAJO de la card del NPC)
+  if (world) {
+    prompt += `=== CONTEXTO DEL MUNDO ===\n`;
+    prompt += `Mundo: ${world.name}\n`;
+    prompt += `Estado: ${world.lore?.estado_mundo}\n`;
+    if (world.lore?.rumores && world.lore.rumores.length > 0) {
+      prompt += `Rumores: ${world.lore.rumores.join(', ')}\n`;
+    }
+    prompt += '\n';
+  }
+
+  // Contexto del pueblo (DEBAJO de la card del NPC)
+  if (pueblo) {
+    prompt += `=== CONTEXTO DEL PUEBLO ===\n`;
+    prompt += `Pueblo: ${pueblo.name}\n`;
+    if (pueblo.lore?.estado_pueblo) {
+      prompt += `Estado: ${pueblo.lore.estado_pueblo}\n`;
+    }
+    if (pueblo.lore?.rumores && pueblo.lore.rumores.length > 0) {
+      prompt += `Rumores: ${pueblo.lore.rumores.join(', ')}\n`;
+    }
+    prompt += '\n';
+  }
+
+  // Contexto del edificio (DEBAJO de la card del NPC)
+  if (edificio) {
+    prompt += `=== CONTEXTO DEL EDIFICIO ===\n`;
+    prompt += `Ubicación: ${edificio.name}\n`;
+    if (edificio.lore) {
+      prompt += `Descripción: ${edificio.lore}\n`;
+    }
+    if (edificio.eventos_recientes && edificio.eventos_recientes.length > 0) {
+      prompt += `Eventos recientes: ${edificio.eventos_recientes.join(', ')}\n`;
+    }
+    prompt += '\n';
+  }
+
+  return prompt;
+}
+
 // Build system prompt for chat (SillyTavern format)
 export function buildChatSystemPrompt(
   context: PromptBuildContext,

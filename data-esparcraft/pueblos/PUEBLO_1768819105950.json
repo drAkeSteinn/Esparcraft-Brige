@@ -2,9 +2,9 @@
   "worldId": "WORLD_ESPARCRAFT",
   "name": "Meslajho",
   "type": "pueblo",
-  "description": "Pueblo inicial",
+  "description": "Pueblo inicial donde todo inicio, el decreto de dolor se libero en este lugar y desde que eso paso ya nada fue igual",
   "lore": {
-    "estado_pueblo": "Nada en especial...",
+    "estado_pueblo": "El pueblo se encuentra tenso por las desapariciones que hay por la noche.",
     "rumores": [
       "El tabernero sabe más de lo que dice sobre las desapariciones",
       "Un viajero misterioso llegó hace dos noches y se hospeda en la posada",

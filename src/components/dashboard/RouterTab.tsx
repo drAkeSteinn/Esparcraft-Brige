@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Send, RefreshCw, Network, MessageSquare, Globe, MapPin, Building, User, Eye, MessageCircle, FileText, Copy, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -51,7 +51,8 @@ export default function RouterTab() {
       clima: ''
     },
     mensaje: '', // Mensaje del jugador (context por mensaje)
-    templateUser: '' // Plantilla del usuario (reemplaza systemPrompt)
+    templateUser: '', // Plantilla del usuario (reemplaza systemPrompt)
+    historyLimit: 10 // Número de mensajes del historial a enviar
   });
 
   // Resumen sesion trigger form
@@ -320,22 +321,20 @@ export default function RouterTab() {
     const npc = npcs.find(n => n.id === chatForm.npcid);
     if (!npc) return null;
 
-    const world = worlds.find(w => w.id === npc.location.worldId);
-    const pueblo = pueblos.find(p => p.id === npc.location.puebloId);
-    const edificio = edificios.find(e => e.id === npc.location.edificioId);
+    const world = worlds.find(w => w.id === npc.location?.worldId);
+    const pueblo = pueblos.find(p => p.id === npc.location?.puebloId);
+    const edificio = edificios.find(e => e.id === npc.location?.edificioId);
 
-    let sessionid = chatForm.playersessionid;
+    let playersessionid = chatForm.playersessionid;
     if (chatForm.sessionType === 'new') {
-      sessionid = '';
+      playersessionid = undefined;
     }
 
     return {
-      triggertype: 'chat',
-      sesion: chatForm.sessionType,
       npcid: chatForm.npcid,
-      sessionid,
+      playersessionid,
       jugador: chatForm.jugador,
-      mensaje: chatForm.mensaje, // Mensaje del jugador (context por mensaje)
+      message: chatForm.mensaje, // Mensaje del jugador (message en lugar de mensaje)
       context: {
         mundo: world,
         pueblo,
@@ -346,9 +345,8 @@ export default function RouterTab() {
 
   const buildResumenSesionPayload = () => {
     return {
-      triggertype: 'resumen_sesion',
       npcid: resumenSesionForm.npcid,
-      sessionid: resumenSesionForm.sessionid,
+      playersessionid: resumenSesionForm.sessionid,
       lastSummary: resumenSesionForm.lastSummary,
       chatHistory: resumenSesionForm.chatHistory
     };
@@ -356,7 +354,6 @@ export default function RouterTab() {
 
   const buildResumenNPCPayload = () => {
     return {
-      triggertype: 'resumen_npc',
       npcid: resumenNPCForm.npcid,
       allSummaries: resumenNPCForm.allSummaries
     };
@@ -372,7 +369,6 @@ export default function RouterTab() {
 
   const buildResumenPuebloPayload = () => {
     return {
-      triggertype: 'resumen_pueblo',
       pueblid: resumenPuebloForm.pueblid,
       allSummaries: resumenPuebloForm.allSummaries // Resúmenes de todos los edificios del pueblo/nación
     };
@@ -380,7 +376,6 @@ export default function RouterTab() {
 
   const buildResumenMundoPayload = () => {
     return {
-      triggertype: 'resumen_mundo',
       mundoid: resumenMundoForm.mundoid,
       allSummaries: resumenMundoForm.allSummaries // Resúmenes de todos los pueblos/naciones del mundo
     };
@@ -388,16 +383,13 @@ export default function RouterTab() {
 
   const buildNuevoLorePayload = () => {
     const base = {
-      triggertype: 'nuevo_lore',
       scope: nuevoLoreForm.scope
     };
 
     if (nuevoLoreForm.scope === 'mundo') {
-      return { ...base, mundoid: nuevoLoreForm.mundoid };
+      return { ...base, targetId: nuevoLoreForm.mundoid };
     } else if (nuevoLoreForm.scope === 'pueblo') {
-      return { ...base, pueblid: nuevoLoreForm.pueblid };
-    } else if (nuevoLoreForm.scope === 'edificio') {
-      return { ...base, edificioid: nuevoLoreForm.edificioid };
+      return { ...base, targetId: nuevoLoreForm.pueblid };
     }
     return base;
   };
@@ -411,7 +403,8 @@ export default function RouterTab() {
     if (!text) return '';
 
     // Reemplaza todas las llaves dobles {{key}} por sus valores
-    return text.replace(/\{\{([\w.]+)\}\}/g, (match: string, key: string) => {
+    // Permite espacios opcionales: {{jugador.nombre}} o {{ jugador.nombre }}
+    return text.replace(/\{\{\s*([\w.]+)\s*\}\}/g, (match: string, key: string) => {
       // NPC object keys (npc.name, npc.description, etc.)
       if (key.startsWith('npc.')) {
         const npcKey = key.replace('npc.', '');
@@ -430,6 +423,17 @@ export default function RouterTab() {
       }
       if (key === 'npc_personality' || key === 'npc.personality') {
         return context.npc?.card?.data?.personality || '';
+      }
+
+      // Historial del NPC
+      if (key === 'npc_historial' || key === 'npc.historial') {
+        if (context.session && context.session.messages && context.session.messages.length > 0) {
+          return context.session.messages.map((msg: any) => {
+            const role = msg.role === 'user' ? 'Usuario' : 'NPC';
+            return `${role}: ${msg.content}`;
+          }).join('\n');
+        }
+        return '(Sin historial)';
       }
 
       // Player keys (nombre, playername, player_name)
@@ -477,6 +481,7 @@ export default function RouterTab() {
         if (jugadorKey === 'almakos') return context.jugador?.almakos || '';
         if (jugadorKey === 'deuda') return context.jugador?.deuda || '';
         if (jugadorKey === 'piedras_del_alma' || jugadorKey === 'piedras') return context.jugador?.piedras_del_alma || '';
+        if (jugadorKey === 'mensaje') return context.mensaje || ''; // Mensaje del jugador actual
       }
 
       // Location keys
@@ -494,9 +499,21 @@ export default function RouterTab() {
       if (key.startsWith('edificio.')) {
         const edificioKey = key.replace('edificio.', '');
         if (edificioKey === 'name' || edificioKey === 'nombre') return context.edificio?.name || '';
+        if (edificioKey === 'descripcion') return context.edificio?.lore || ''; // lore es un string directo en edificios
         if (edificioKey === 'lore') return context.edificio?.lore || '';
-        if (edificioKey === 'eventos') return context.edificio?.eventos || '';
+        if (edificioKey === 'eventos' || edificioKey === 'eventos_recientes') return context.edificio?.eventos_recientes?.join(', ') || '';
         if (edificioKey === 'type') return context.edificio?.type || '';
+        if (edificioKey === 'poislist' || edificioKey === 'puntos_de_interes_list') {
+          if (context.edificio?.puntosDeInteres && context.edificio.puntosDeInteres.length > 0) {
+            return context.edificio.puntosDeInteres.map((poi: any) => {
+              const tipo = poi.tipo || 'Sin tipo';
+              const nombre = poi.nombre || 'Sin nombre';
+              const coords = poi.coords ? `-28,68,-26` : 'Sin coordenadas';
+              return `"${tipo}" "${nombre}" ${coords}`;
+            }).join('\n');
+          }
+          return '(Sin puntos de interés)';
+        }
       }
 
       // NPC keys para edificio (todos los NPCs en el edificio)
@@ -511,9 +528,10 @@ export default function RouterTab() {
       if (key.startsWith('pueblo.')) {
         const puebloKey = key.replace('pueblo.', '');
         if (puebloKey === 'name' || puebloKey === 'nombre') return context.pueblo?.name || '';
-        if (puebloKey === 'type' || puebloKey === 'tipo') return context.pueblo?.type || '';
-        if (puebloKey === 'estado') return context.pueblo?.estado || '';
-        if (puebloKey === 'rumores') return context.pueblo?.rumores || '';
+        if (puebloKey === 'tipo') return context.pueblo?.type || '';
+        if (puebloKey === 'descripcion') return context.pueblo?.lore?.estado_pueblo || context.pueblo?.description || ''; // Descripción del estado o description general
+        if (puebloKey === 'estado') return context.pueblo?.lore?.estado_pueblo || '';
+        if (puebloKey === 'rumores') return context.pueblo?.lore?.rumores?.join(', ') || '';
       }
 
       // Edificios keys para pueblo (todos los edificios en el pueblo)
@@ -531,7 +549,7 @@ export default function RouterTab() {
       if (key.startsWith('mundo.')) {
         const mundoKey = key.replace('mundo.', '');
         if (mundoKey === 'name' || mundoKey === 'nombre') return context.mundo?.name || '';
-        if (mundoKey === 'estado_mundo' || mundoKey === 'estado') return context.mundo?.lore?.estado_mundo || '';
+        if (mundoKey === 'estado' || mundoKey === 'estado_mundo') return context.mundo?.lore?.estado_mundo || '';
         if (mundoKey === 'rumores') return context.mundo?.lore?.rumores?.join(', ') || '';
       }
 
@@ -602,15 +620,18 @@ export default function RouterTab() {
     const world = worlds.find(w => w.id === npc?.location?.worldId);
     const pueblo = pueblos.find(p => p.id === npc?.location?.puebloId);
     const edificio = edificios.find(e => e.id === npc?.location?.edificioId);
-    const session = sessions.find(s => s.id === payload.sessionid);
+    const session = sessions.find(s => s.id === payload.playersessionid);
 
     // Crear contexto para reemplazo de keys
     const keyContext = {
       npc,
       world,
+      mundo: world, // Alias para variables {{mundo.*}}
       pueblo,
       edificio,
-      jugador: payload.jugador
+      jugador: payload.jugador,
+      session, // Para variable {{npc.historial}}
+      mensaje: payload.message // Para variable {{jugador.mensaje}}
     };
 
     const sections: Array<{ label: string; content: string; bgColor: string }> = [];
@@ -662,7 +683,11 @@ export default function RouterTab() {
       });
     }
 
-    // 4. World Lore (Mundo, Pueblo, Edificio)
+    // 4. World Lore (Mundo, Pueblo, Edificio) - REMOVIDO
+    // Estas secciones ya no se agregan automáticamente al prompt
+    // Las variables {{mundo.estado}}, {{mundo.rumores}}, {{pueblo.estado}}, {{pueblo.rumores}},
+    // {{edificio.descripcion}}, {{edificio.eventos}} pueden usarse manualmente en Template User o system_prompt
+    /*
     let worldLoreText = '';
     if (world?.lore) {
       if (world.lore.estado_mundo) {
@@ -685,8 +710,10 @@ export default function RouterTab() {
         bgColor: 'bg-yellow-50 dark:bg-yellow-950'
       });
     }
+    */
 
-    // Pueblo Lore
+    // Pueblo Lore - REMOVIDO
+    /*
     let puebloLoreText = '';
     if (pueblo?.lore) {
       if (pueblo.lore.estado_pueblo) {
@@ -709,8 +736,10 @@ export default function RouterTab() {
         bgColor: 'bg-amber-50 dark:bg-amber-950'
       });
     }
+    */
 
-    // Edificio Lore
+    // Edificio Lore - REMOVIDO
+    /*
     let edificioLoreText = '';
     if (edificio?.lore) {
       if (edificio.lore.descripcion) {
@@ -736,6 +765,7 @@ export default function RouterTab() {
         bgColor: 'bg-orange-50 dark:bg-orange-950'
       });
     }
+    */
 
     // 5. Scenario
     if (npc?.card?.data?.scenario) {
@@ -770,43 +800,39 @@ export default function RouterTab() {
       });
     }
 
-    // 8. Chat History
+    // 8. Historial y Último Mensaje
+    let historyText = '';
+
+    // 8.1. Chat History (historial de la sesión) - limitado por historyLimit
+    const historyLimit = chatForm.historyLimit || 10;
     if (session && session.messages && session.messages.length > 0) {
-      let chatHistoryText = '';
-      session.messages.forEach((msg: any) => {
+      const messagesToShow = session.messages.slice(-historyLimit);
+      messagesToShow.forEach((msg: any) => {
         const role = msg.role === 'user' ? 'Usuario' : 'NPC';
-        chatHistoryText += `${role}: ${msg.content}\n`;
+        historyText += `${role}: ${msg.content}\n`;
       });
-      prompt += chatHistoryText + '\n';
-      sections.push({
-        label: 'Chat History',
-        content: chatHistoryText,
-        bgColor: 'bg-gray-50 dark:bg-gray-950'
-      });
+      historyText += '\n';
     }
 
-    // 9. Last User Message (mensaje del jugador)
-    let lastUserMessageText = '';
-    lastUserMessageText += `Jugador: ${payload.jugador?.nombre || 'Desconocido'}\n`;
-    if (payload.jugador?.raza) lastUserMessageText += `Raza: ${payload.jugador.raza}\n`;
-    if (payload.jugador?.nivel) lastUserMessageText += `Nivel: ${payload.jugador.nivel}\n`;
-    if (payload.jugador?.salud_actual) lastUserMessageText += `Salud: ${payload.jugador.salud_actual}\n`;
-    if (payload.jugador?.reputacion) lastUserMessageText += `Reputación: ${payload.jugador.reputacion}\n`;
-    if (payload.jugador?.almakos) lastUserMessageText += `Almakos: ${payload.jugador.almakos}\n`;
-    if (payload.jugador?.deuda) lastUserMessageText += `Deuda: ${payload.jugador.deuda}\n`;
-    if (payload.jugador?.piedras_del_alma) lastUserMessageText += `Piedras del Alma: ${payload.jugador.piedras_del_alma}\n`;
-    if (payload.jugador?.hora) lastUserMessageText += `Hora: ${payload.jugador.hora}\n`;
-    if (payload.jugador?.clima) lastUserMessageText += `Clima: ${payload.jugador.clima}\n`;
-    if (payload.mensaje) lastUserMessageText += `\nMensaje: ${payload.mensaje}`;
+    // 8.2. Last User Message (solo el mensaje del jugador)
+    if (payload.message) {
+      const mensajeReemplazado = replaceKeys(payload.message, keyContext);
+      historyText += `Mensaje: ${mensajeReemplazado}`;
+    }
 
-    prompt += lastUserMessageText + '\n\n';
+    // Siempre mostrar la sección, aunque esté vacía
+    if (!historyText) {
+      historyText = '(Sin historial ni mensaje)';
+    }
+
+    prompt += historyText + '\n\n';
     sections.push({
       label: 'Last User Message',
-      content: lastUserMessageText,
+      content: historyText,
       bgColor: 'bg-slate-50 dark:bg-slate-950'
     });
 
-    // 10. POST-HISTORY
+    // 9. POST-HISTORY
     if (npc?.card?.data?.post_history_instructions) {
       const phiText = replaceKeys(npc.card.data.post_history_instructions, keyContext);
       prompt += `${phiText}\n\n`;
@@ -824,11 +850,20 @@ export default function RouterTab() {
     if (!payload) return { text: '', sections: [] };
 
     const npc = npcs.find(n => n.id === payload.npcid);
-    const session = sessions.find(s => s.id === payload.sessionid);
+    const session = sessions.find(s => s.id === payload.playersessionid);
+
+    // Buscar world, pueblo y edificio del NPC para las variables de ubicación
+    const world = worlds.find(w => w.id === npc?.location?.worldId);
+    const pueblo = pueblos.find(p => p.id === npc?.location?.puebloId);
+    const edificio = edificios.find(e => e.id === npc?.location?.edificioId);
 
     // Crear contexto para reemplazo de keys
     const keyContext = {
-      npc
+      npc,
+      world,
+      mundo: world, // Alias para variables {{mundo.*}}
+      pueblo,
+      edificio
     };
 
     const sections: Array<{ label: string; content: string; bgColor: string }> = [];
@@ -879,9 +914,18 @@ export default function RouterTab() {
 
     const npc = npcs.find(n => n.id === payload.npcid);
 
+    // Buscar world, pueblo y edificio del NPC para las variables de ubicación
+    const world = worlds.find(w => w.id === npc?.location?.worldId);
+    const pueblo = pueblos.find(p => p.id === npc?.location?.puebloId);
+    const edificio = edificios.find(e => e.id === npc?.location?.edificioId);
+
     // Crear contexto para reemplazo de keys
     const keyContext = {
-      npc
+      npc,
+      world,
+      mundo: world, // Alias para variables {{mundo.*}}
+      pueblo,
+      edificio
     };
 
     const sections: Array<{ label: string; content: string; bgColor: string }> = [];
@@ -934,13 +978,16 @@ export default function RouterTab() {
 
     const edificio = edificios.find(e => e.id === payload.edificioid);
     const npcsEnEdificio = npcs.filter(n => n.location.edificioId === payload.edificioid);
+    const mundo = worlds.find(w => w.id === edificio?.worldId);
+    const pueblo = pueblos.find(p => p.id === edificio?.puebloId);
 
     // Crear contexto para reemplazo de keys
     const keyContext = {
       edificio,
       npcs: npcsEnEdificio,
-      mundo: worlds.find(w => w.id === edificio?.worldId),
-      pueblo: pueblos.find(p => p.id === edificio?.puebloId)
+      mundo,
+      mundo: mundo, // Alias para variables {{mundo.*}}
+      pueblo
     };
 
     const sections: Array<{ label: string; content: string; bgColor: string }> = [];
@@ -1009,12 +1056,15 @@ export default function RouterTab() {
 
     const pueblo = pueblos.find(p => p.id === payload.pueblid);
     const edificiosEnPueblo = edificios.filter(e => e.puebloId === payload.pueblid);
+    const mundo = worlds.find(w => w.id === pueblo?.worldId);
 
     // Crear contexto para reemplazo de keys
     const keyContext = {
       pueblo,
       edificios: edificiosEnPueblo,
-      mundo: worlds.find(w => w.id === pueblo?.worldId)
+      mundo,
+      mundo: mundo, // Alias para variables {{mundo.*}}
+      pueblos: worlds.filter(w => w.id === mundo?.id)
     };
 
     const sections: Array<{ label: string; content: string; bgColor: string }> = [];
@@ -1090,6 +1140,7 @@ export default function RouterTab() {
     // Crear contexto para reemplazo de keys
     const keyContext = {
       mundo,
+      mundo: mundo, // Alias para variables {{mundo.*}}
       pueblos: pueblosEnMundo
     };
 
@@ -1155,31 +1206,32 @@ export default function RouterTab() {
     return { text: prompt, sections };
   };
 
-  const chatPayload = buildChatPayload();
-  const chatPromptData = buildChatPreview(chatPayload);
+  // Construir payloads y previews con useMemo para actualizar automáticamente
+  const chatPayload = useMemo(() => buildChatPayload(), [chatForm, npcs, worlds, pueblos, edificios, sessions]);
+  const chatPromptData = useMemo(() => buildChatPreview(chatPayload), [chatPayload, chatForm, npcs, worlds, pueblos, edificios, sessions]);
   const chatPrompt = chatPromptData.text;
   const chatPromptSections = chatPromptData.sections;
-  const resumenSesionPayload = buildResumenSesionPayload();
-  const resumenSesionPromptData = buildResumenSesionPreview(resumenSesionPayload);
+  const resumenSesionPayload = useMemo(() => buildResumenSesionPayload(), [resumenSesionForm]);
+  const resumenSesionPromptData = useMemo(() => buildResumenSesionPreview(resumenSesionPayload), [resumenSesionPayload, resumenSesionForm, npcs, sessions]);
   const resumenSesionPrompt = resumenSesionPromptData.text;
   const resumenSesionSections = resumenSesionPromptData.sections;
-  const resumenNPCPayload = buildResumenNPCPayload();
-  const resumenNPCPromptData = buildResumenNPCPreview(resumenNPCPayload);
+  const resumenNPCPayload = useMemo(() => buildResumenNPCPayload(), [resumenNPCForm]);
+  const resumenNPCPromptData = useMemo(() => buildResumenNPCPreview(resumenNPCPayload), [resumenNPCPayload, resumenNPCForm, npcs]);
   const resumenNPCPrompt = resumenNPCPromptData.text;
   const resumenNPCSections = resumenNPCPromptData.sections;
-  const resumenEdificioPayload = buildResumenEdificioPayload();
-  const resumenEdificioPromptData = buildResumenEdificioPreview(resumenEdificioPayload);
+  const resumenEdificioPayload = useMemo(() => buildResumenEdificioPayload(), [resumenEdificioForm]);
+  const resumenEdificioPromptData = useMemo(() => buildResumenEdificioPreview(resumenEdificioPayload), [resumenEdificioPayload, resumenEdificioForm]);
   const resumenEdificioPrompt = resumenEdificioPromptData.text;
   const resumenEdificioSections = resumenEdificioPromptData.sections;
-  const resumenPuebloPayload = buildResumenPuebloPayload();
-  const resumenPuebloPromptData = buildResumenPuebloPreview(resumenPuebloPayload);
+  const resumenPuebloPayload = useMemo(() => buildResumenPuebloPayload(), [resumenPuebloForm]);
+  const resumenPuebloPromptData = useMemo(() => buildResumenPuebloPreview(resumenPuebloPayload), [resumenPuebloPayload, resumenPuebloForm]);
   const resumenPuebloPrompt = resumenPuebloPromptData.text;
   const resumenPuebloSections = resumenPuebloPromptData.sections;
-  const resumenMundoPayload = buildResumenMundoPayload();
-  const resumenMundoPromptData = buildResumenMundoPreview(resumenMundoPayload);
+  const resumenMundoPayload = useMemo(() => buildResumenMundoPayload(), [resumenMundoForm]);
+  const resumenMundoPromptData = useMemo(() => buildResumenMundoPreview(resumenMundoPayload), [resumenMundoPayload, resumenMundoForm]);
   const resumenMundoPrompt = resumenMundoPromptData.text;
   const resumenMundoSections = resumenMundoPromptData.sections;
-  const nuevoLorePayload = buildNuevoLorePayload();
+  const nuevoLorePayload = useMemo(() => buildNuevoLorePayload(), [nuevoLoreForm]);
 
   return (
     <div className="space-y-4">
@@ -1414,9 +1466,26 @@ export default function RouterTab() {
                   <Textarea
                     value={chatForm.templateUser}
                     onChange={(e) => setChatForm({ ...chatForm, templateUser: e.target.value })}
-                    placeholder="Ej: Eres un guerrero de nivel {{jugador.nivel}} de raza {{jugador.raza}} llamado {{jugador.nombre}}. Tu salud actual es {{jugador.salud_actual}} y estás en {{edificio}}."
+                    placeholder="Ej: Eres un guerrero de nivel {{jugador.nivel}} de raza {{jugador.raza}} llamado {{jugador.nombre}}. Tu salud actual es {{jugador.salud_actual}} y estás en {{edificio}}.&#10;&#10;El mundo donde estás: {{mundo.estado}}&#10;Rumores del mundo: {{mundo.rumores}}&#10;Rumores del pueblo: {{pueblo.rumores}}&#10;Eventos en el edificio: {{edificio.eventos}}&#10;Puntos de interés: {{edificio.poislist}}&#10;&#10;Variables disponibles:&#10;- {{npc.historial}} - Historial de la sesión&#10;- {{jugador.mensaje}} - Mensaje actual del jugador&#10;- {{mundo.estado}}, {{mundo.rumores}} - Datos del mundo&#10;- {{pueblo.tipo}}, {{pueblo.descripcion}}, {{pueblo.estado}}, {{pueblo.rumores}} - Datos del pueblo&#10;- {{edificio.descripcion}}, {{edificio.eventos}}, {{edificio.poislist}} - Datos del edificio&#10;- {{npc.name}}, {{jugador.nombre}}, etc."
                     rows={6}
                   />
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <Label className="min-w-fit">Límite del Historial:</Label>
+                      <Input
+                        type="number"
+                        min="1"
+                        max="100"
+                        value={chatForm.historyLimit}
+                        onChange={(e) => setChatForm({ ...chatForm, historyLimit: parseInt(e.target.value) || 10 })}
+                        className="w-32"
+                      />
+                      <span className="text-xs text-muted-foreground">mensajes a incluir</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Define cuántos mensajes del historial de la sesión se enviarán al LLM. Usa los últimos N mensajes.
+                    </p>
+                  </div>
                   <div className="flex gap-2">
                     <Button
                       variant="outline"
@@ -1455,7 +1524,7 @@ export default function RouterTab() {
                   <Textarea
                     value={chatForm.mensaje}
                     onChange={(e) => setChatForm({ ...chatForm, mensaje: e.target.value })}
-                    placeholder="Escribe el mensaje del jugador..."
+                    placeholder="Escribe el mensaje del jugador... (puedes usar variables como {{jugador.nombre}}, {{mundo.estado}}, {{mundo.rumores}}, {{pueblo.rumores}}, {{edificio.eventos}}, etc.)"
                     rows={3}
                   />
 
@@ -1478,6 +1547,7 @@ export default function RouterTab() {
                           <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}jugador.piedras_del_alma{KEY_EXAMPLE_2}</span>
                           <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}jugador.hora{KEY_EXAMPLE_2}</span>
                           <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}jugador.clima{KEY_EXAMPLE_2}</span>
+                          <span className="font-mono bg-background px-2 py-1 rounded text-blue-600 dark:text-blue-400">{KEY_EXAMPLE_1}jugador.mensaje{KEY_EXAMPLE_2}</span>
                         </div>
                       </div>
 
@@ -1488,15 +1558,45 @@ export default function RouterTab() {
                           <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}npc.description{KEY_EXAMPLE_2}</span>
                           <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}npc.personality{KEY_EXAMPLE_2}</span>
                           <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}npc.scenario{KEY_EXAMPLE_2}</span>
+                          <span className="font-mono bg-background px-2 py-1 rounded text-blue-600 dark:text-blue-400">{KEY_EXAMPLE_1}npc.historial{KEY_EXAMPLE_2}</span>
                         </div>
                       </div>
 
                       <div>
                         <p className="font-semibold text-foreground mb-1">Variables de Ubicación:</p>
-                        <div className="grid grid-cols-3 gap-2 text-muted-foreground">
+                        <div className="grid grid-cols-2 gap-2 text-muted-foreground">
                           <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}mundo{KEY_EXAMPLE_2}</span>
                           <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}pueblo{KEY_EXAMPLE_2}</span>
                           <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}edificio{KEY_EXAMPLE_2}</span>
+                        </div>
+                      </div>
+
+                      <div>
+                        <p className="font-semibold text-foreground mb-1">Variables del Mundo:</p>
+                        <div className="grid grid-cols-2 gap-2 text-muted-foreground">
+                          <span className="font-mono bg-background px-2 py-1 rounded text-blue-600 dark:text-blue-400">{KEY_EXAMPLE_1}mundo.estado{KEY_EXAMPLE_2}</span>
+                          <span className="font-mono bg-background px-2 py-1 rounded text-blue-600 dark:text-blue-400">{KEY_EXAMPLE_1}mundo.rumores{KEY_EXAMPLE_2}</span>
+                        </div>
+                      </div>
+
+                      <div>
+                        <p className="font-semibold text-foreground mb-1">Variables del Pueblo:</p>
+                        <div className="grid grid-cols-2 gap-2 text-muted-foreground">
+                          <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}pueblo.name{KEY_EXAMPLE_2}</span>
+                          <span className="font-mono bg-background px-2 py-1 rounded text-blue-600 dark:text-blue-400">{KEY_EXAMPLE_1}pueblo.tipo{KEY_EXAMPLE_2}</span>
+                          <span className="font-mono bg-background px-2 py-1 rounded text-blue-600 dark:text-blue-400">{KEY_EXAMPLE_1}pueblo.descripcion{KEY_EXAMPLE_2}</span>
+                          <span className="font-mono bg-background px-2 py-1 rounded text-blue-600 dark:text-blue-400">{KEY_EXAMPLE_1}pueblo.estado{KEY_EXAMPLE_2}</span>
+                          <span className="font-mono bg-background px-2 py-1 rounded text-blue-600 dark:text-blue-400">{KEY_EXAMPLE_1}pueblo.rumores{KEY_EXAMPLE_2}</span>
+                        </div>
+                      </div>
+
+                      <div>
+                        <p className="font-semibold text-foreground mb-1">Variables del Edificio:</p>
+                        <div className="grid grid-cols-2 gap-2 text-muted-foreground">
+                          <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}edificio.name{KEY_EXAMPLE_2}</span>
+                          <span className="font-mono bg-background px-2 py-1 rounded text-blue-600 dark:text-blue-400">{KEY_EXAMPLE_1}edificio.descripcion{KEY_EXAMPLE_2}</span>
+                          <span className="font-mono bg-background px-2 py-1 rounded text-blue-600 dark:text-blue-400">{KEY_EXAMPLE_1}edificio.eventos{KEY_EXAMPLE_2}</span>
+                          <span className="font-mono bg-background px-2 py-1 rounded text-blue-600 dark:text-blue-400">{KEY_EXAMPLE_1}edificio.poislist{KEY_EXAMPLE_2}</span>
                         </div>
                       </div>
 
@@ -1663,7 +1763,7 @@ export default function RouterTab() {
                   <Textarea
                     value={resumenSesionForm.systemPrompt}
                     onChange={(e) => setResumenSesionForm({ ...resumenSesionForm, systemPrompt: e.target.value })}
-                    placeholder="Instrucciones para generar el resumen (puedes usar {{npc.name}}, {{mundo}}, {{pueblo}}, {{edificio}}, etc.)"
+                    placeholder="Instrucciones para generar el resumen (puedes usar {{npc.name}}, {{jugador.nombre}}, {{mundo.estado}}, {{mundo.rumores}}, {{pueblo.tipo}}, {{pueblo.descripcion}}, {{pueblo.estado}}, {{pueblo.rumores}}, {{edificio.descripcion}}, {{edificio.eventos}}, {{edificio.poislist}}, etc.)"
                     rows={6}
                   />
                 </div>
@@ -1685,11 +1785,51 @@ export default function RouterTab() {
                     </div>
 
                     <div>
-                      <p className="font-semibold text-foreground mb-1">Variables de Ubicación:</p>
-                      <div className="grid grid-cols-3 gap-2 text-muted-foreground">
+                      <p className="font-semibold text-foreground mb-1">Variables del Jugador:</p>
+                      <div className="grid grid-cols-2 gap-2 text-muted-foreground">
+                        <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}jugador.nombre{KEY_EXAMPLE_2}</span>
+                        <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}jugador.raza{KEY_EXAMPLE_2}</span>
+                        <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}jugador.nivel{KEY_EXAMPLE_2}</span>
+                        <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}jugador.salud_actual{KEY_EXAMPLE_2}</span>
+                        <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}jugador.reputacion{KEY_EXAMPLE_2}</span>
+                        <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}jugador.almakos{KEY_EXAMPLE_2}</span>
+                        <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}jugador.deuda{KEY_EXAMPLE_2}</span>
+                        <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}jugador.piedras_del_alma{KEY_EXAMPLE_2}</span>
+                        <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}jugador.hora{KEY_EXAMPLE_2}</span>
+                        <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}jugador.clima{KEY_EXAMPLE_2}</span>
+                        <span className="font-mono bg-background px-2 py-1 rounded text-blue-600 dark:text-blue-400">{KEY_EXAMPLE_1}jugador.mensaje{KEY_EXAMPLE_2}</span>
+                      </div>
+                    </div>
+
+                    <div>
+                      <p className="font-semibold text-foreground mb-1">Variables del Mundo:</p>
+                      <div className="grid grid-cols-2 gap-2 text-muted-foreground">
                         <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}mundo{KEY_EXAMPLE_2}</span>
+                        <span className="font-mono bg-background px-2 py-1 rounded text-blue-600 dark:text-blue-400">{KEY_EXAMPLE_1}mundo.estado{KEY_EXAMPLE_2}</span>
+                        <span className="font-mono bg-background px-2 py-1 rounded text-blue-600 dark:text-blue-400">{KEY_EXAMPLE_1}mundo.rumores{KEY_EXAMPLE_2}</span>
+                      </div>
+                    </div>
+
+                    <div>
+                      <p className="font-semibold text-foreground mb-1">Variables del Pueblo:</p>
+                      <div className="grid grid-cols-2 gap-2 text-muted-foreground">
                         <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}pueblo{KEY_EXAMPLE_2}</span>
+                        <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}pueblo.name{KEY_EXAMPLE_2}</span>
+                        <span className="font-mono bg-background px-2 py-1 rounded text-blue-600 dark:text-blue-400">{KEY_EXAMPLE_1}pueblo.tipo{KEY_EXAMPLE_2}</span>
+                        <span className="font-mono bg-background px-2 py-1 rounded text-blue-600 dark:text-blue-400">{KEY_EXAMPLE_1}pueblo.descripcion{KEY_EXAMPLE_2}</span>
+                        <span className="font-mono bg-background px-2 py-1 rounded text-blue-600 dark:text-blue-400">{KEY_EXAMPLE_1}pueblo.estado{KEY_EXAMPLE_2}</span>
+                        <span className="font-mono bg-background px-2 py-1 rounded text-blue-600 dark:text-blue-400">{KEY_EXAMPLE_1}pueblo.rumores{KEY_EXAMPLE_2}</span>
+                      </div>
+                    </div>
+
+                    <div>
+                      <p className="font-semibold text-foreground mb-1">Variables del Edificio:</p>
+                      <div className="grid grid-cols-2 gap-2 text-muted-foreground">
                         <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}edificio{KEY_EXAMPLE_2}</span>
+                        <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}edificio.name{KEY_EXAMPLE_2}</span>
+                        <span className="font-mono bg-background px-2 py-1 rounded text-blue-600 dark:text-blue-400">{KEY_EXAMPLE_1}edificio.descripcion{KEY_EXAMPLE_2}</span>
+                        <span className="font-mono bg-background px-2 py-1 rounded text-blue-600 dark:text-blue-400">{KEY_EXAMPLE_1}edificio.eventos{KEY_EXAMPLE_2}</span>
+                        <span className="font-mono bg-background px-2 py-1 rounded text-blue-600 dark:text-blue-400">{KEY_EXAMPLE_1}edificio.poislist{KEY_EXAMPLE_2}</span>
                       </div>
                     </div>
 
@@ -1733,7 +1873,11 @@ export default function RouterTab() {
 
                 <Button
                   className="w-full"
-                  onClick={() => resumenSesionPayload && sendRequest('resumen_sesion', resumenSesionPayload)}
+                  onClick={() => {
+                    if (resumenSesionPayload && resumenSesionPayload.playersessionid) {
+                      sendRequest('resumen_sesion', resumenSesionPayload);
+                    }
+                  }}
                   disabled={!resumenSesionPayload.npcid || !resumenSesionForm.sessionid}
                 >
                   <Send className="h-4 w-4 mr-2" />
@@ -2131,9 +2275,10 @@ export default function RouterTab() {
                       <p className="font-semibold text-foreground mb-1">Variables del Edificio:</p>
                       <div className="grid grid-cols-2 gap-2 text-muted-foreground">
                         <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}edificio.name{KEY_EXAMPLE_2}</span>
-                        <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}edificio.lore{KEY_EXAMPLE_2}</span>
+                        <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}edificio.descripcion{KEY_EXAMPLE_2}</span>
                         <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}edificio.eventos{KEY_EXAMPLE_2}</span>
                         <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}edificio.type{KEY_EXAMPLE_2}</span>
+                        <span className="font-mono bg-background px-2 py-1 rounded text-blue-600 dark:text-blue-400">{KEY_EXAMPLE_1}edificio.poislist{KEY_EXAMPLE_2}</span>
                       </div>
                     </div>
 
@@ -2542,8 +2687,20 @@ export default function RouterTab() {
                       <p className="font-semibold text-foreground mb-1">Variables del Mundo:</p>
                       <div className="grid grid-cols-2 gap-2 text-muted-foreground">
                         <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}mundo.name{KEY_EXAMPLE_2}</span>
+                        <span className="font-mono bg-background px-2 py-1 rounded text-blue-600 dark:text-blue-400">{KEY_EXAMPLE_1}mundo.estado{KEY_EXAMPLE_2}</span>
                         <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}mundo.estado_mundo{KEY_EXAMPLE_2}</span>
                         <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}mundo.rumores{KEY_EXAMPLE_2}</span>
+                      </div>
+                    </div>
+
+                    <div>
+                      <p className="font-semibold text-foreground mb-1">Variables del Pueblo:</p>
+                      <div className="grid grid-cols-2 gap-2 text-muted-foreground">
+                        <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}pueblo.name{KEY_EXAMPLE_2}</span>
+                        <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}pueblo.tipo{KEY_EXAMPLE_2}</span>
+                        <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}pueblo.descripcion{KEY_EXAMPLE_2}</span>
+                        <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}pueblo.estado{KEY_EXAMPLE_2}</span>
+                        <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}pueblo.rumores{KEY_EXAMPLE_2}</span>
                       </div>
                     </div>
 
