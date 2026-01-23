@@ -426,7 +426,7 @@ export default function NpcsTab() {
       </Dialog>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-4xl max-h-[90vh]">
+        <DialogContent className="max-w-[95vw] max-h-[95vh]">
           <DialogHeader>
             <DialogTitle className="flex items-center justify-between">
               <span>
@@ -442,7 +442,7 @@ export default function NpcsTab() {
               {editingNpc ? 'Actualiza la información del NPC' : 'Completa la información del nuevo NPC'}
             </DialogDescription>
           </DialogHeader>
-          <ScrollArea className="max-h-[calc(90vh-140px)]">
+          <ScrollArea className="max-h-[calc(95vh-140px)]">
             <Tabs defaultValue="basic" className="w-full">
               <TabsList className="grid w-full grid-cols-3">
                 <TabsTrigger value="basic">Básico</TabsTrigger>
@@ -451,7 +451,7 @@ export default function NpcsTab() {
               </TabsList>
 
               <TabsContent value="basic" className="space-y-4">
-              <ScrollArea className="max-h-[50vh] pr-4">
+              <ScrollArea className="max-h-[70vh] pr-4">
                 <div className="space-y-4">
                   <div>
                     <Label htmlFor="npcId">ID del NPC (UUID de Minecraft)</Label>
@@ -509,7 +509,7 @@ export default function NpcsTab() {
             </TabsContent>
 
             <TabsContent value="advanced" className="space-y-4">
-              <ScrollArea className="max-h-[50vh] pr-4">
+              <ScrollArea className="max-h-[70vh] pr-4">
                 <div className="space-y-4">
                   <div>
                     <Label htmlFor="cardFirstMes">Primer Mensaje</Label>

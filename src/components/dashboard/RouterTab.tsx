@@ -398,175 +398,210 @@ export default function RouterTab() {
   const KEY_EXAMPLE_1 = '{' + '{';
   const KEY_EXAMPLE_2 = '}' + '}';
 
-  // Función para reemplazar keys {{key}} por valores reales
+  // Función para reemplazar keys {{key}} por valores reales (con soporte recursivo)
   const replaceKeys = (text: string, context: any): string => {
     if (!text) return '';
 
-    // Reemplaza todas las llaves dobles {{key}} por sus valores
-    // Permite espacios opcionales: {{jugador.nombre}} o {{ jugador.nombre }}
-    return text.replace(/\{\{\s*([\w.]+)\s*\}\}/g, (match: string, key: string) => {
-      // NPC object keys (npc.name, npc.description, etc.)
-      if (key.startsWith('npc.')) {
-        const npcKey = key.replace('npc.', '');
-        if (npcKey === 'name' || npcKey === 'nombre') return context.npc?.card?.data?.name || context.npc?.card?.name || '';
-        if (npcKey === 'description' || npcKey === 'descripcion') return context.npc?.card?.data?.description || context.npc?.card?.description || '';
-        if (npcKey === 'personality' || npcKey === 'personalidad') return context.npc?.card?.data?.personality || '';
-        if (npcKey === 'scenario') return context.npc?.card?.data?.scenario || '';
-      }
-
-      // NPC keys
-      if (key === 'npcid' || key === 'npc_name' || key === 'npc.name' || key === 'npc') {
-        return context.npc?.card?.data?.name || context.npc?.card?.name || '';
-      }
-      if (key === 'npc_description' || key === 'npc.description') {
-        return context.npc?.card?.data?.description || context.npc?.card?.description || '';
-      }
-      if (key === 'npc_personality' || key === 'npc.personality') {
-        return context.npc?.card?.data?.personality || '';
-      }
-
-      // Historial del NPC
-      if (key === 'npc_historial' || key === 'npc.historial') {
-        if (context.session && context.session.messages && context.session.messages.length > 0) {
-          return context.session.messages.map((msg: any) => {
-            const role = msg.role === 'user' ? 'Usuario' : 'NPC';
-            return `${role}: ${msg.content}`;
-          }).join('\n');
+    // Función auxiliar para hacer una sola pasada de reemplazo
+    const replaceSinglePass = (inputText: string): string => {
+      return inputText.replace(/\{\{\s*([\w.]+)\s*\}\}/g, (match: string, key: string) => {
+        // NPC object keys (npc.name, npc.description, etc.)
+        if (key.startsWith('npc.')) {
+          const npcKey = key.replace('npc.', '');
+          if (npcKey === 'name' || npcKey === 'nombre') return context.npc?.card?.data?.name || context.npc?.card?.name || '';
+          if (npcKey === 'description' || npcKey === 'descripcion') return context.npc?.card?.data?.description || context.npc?.card?.description || '';
+          if (npcKey === 'personality' || npcKey === 'personalidad') return context.npc?.card?.data?.personality || '';
+          if (npcKey === 'scenario') return context.npc?.card?.data?.scenario || '';
         }
-        return '(Sin historial)';
-      }
 
-      // Player keys (nombre, playername, player_name)
-      if (key === 'playername' || key === 'player_name' || key === 'nombre') {
-        return context.jugador?.nombre || '';
-      }
-      if (key === 'player_race' || key === 'player_raza' || key === 'raza') {
-        return context.jugador?.raza || '';
-      }
-      if (key === 'player_level' || key === 'player_nivel' || key === 'nivel') {
-        return context.jugador?.nivel || '';
-      }
-      if (key === 'player_health' || key === 'player_salud' || key === 'salud_actual' || key === 'salud') {
-        return context.jugador?.salud_actual || '';
-      }
-      if (key === 'player_reputation' || key === 'player_reputacion' || key === 'reputacion' || key === 'reputación') {
-        return context.jugador?.reputacion || '';
-      }
-      if (key === 'player_time' || key === 'player_hora' || key === 'hora') {
-        return context.jugador?.hora || '';
-      }
-      if (key === 'player_weather' || key === 'player_clima' || key === 'clima') {
-        return context.jugador?.clima || '';
-      }
-      if (key === 'almakos') {
-        return context.jugador?.almakos || '';
-      }
-      if (key === 'deuda') {
-        return context.jugador?.deuda || '';
-      }
-      if (key === 'piedras_del_alma' || key === 'piedras') {
-        return context.jugador?.piedras_del_alma || '';
-      }
+        // NPC keys
+        if (key === 'npcid' || key === 'npc_name' || key === 'npc.name' || key === 'npc') {
+          return context.npc?.card?.data?.name || context.npc?.card?.name || '';
+        }
+        if (key === 'npc_description' || key === 'npc.description') {
+          return context.npc?.card?.data?.description || context.npc?.card?.description || '';
+        }
+        if (key === 'npc_personality' || key === 'npc.personality') {
+          return context.npc?.card?.data?.personality || '';
+        }
 
-      // Jugador object keys (jugador.nombre, jugador.raza, etc.)
-      if (key.startsWith('jugador.')) {
-        const jugadorKey = key.replace('jugador.', '');
-        if (jugadorKey === 'nombre') return context.jugador?.nombre || '';
-        if (jugadorKey === 'raza') return context.jugador?.raza || '';
-        if (jugadorKey === 'nivel') return context.jugador?.nivel || '';
-        if (jugadorKey === 'salud_actual' || jugadorKey === 'salud') return context.jugador?.salud_actual || '';
-        if (jugadorKey === 'reputacion' || jugadorKey === 'reputación') return context.jugador?.reputacion || '';
-        if (jugadorKey === 'hora') return context.jugador?.hora || '';
-        if (jugadorKey === 'clima') return context.jugador?.clima || '';
-        if (jugadorKey === 'almakos') return context.jugador?.almakos || '';
-        if (jugadorKey === 'deuda') return context.jugador?.deuda || '';
-        if (jugadorKey === 'piedras_del_alma' || jugadorKey === 'piedras') return context.jugador?.piedras_del_alma || '';
-        if (jugadorKey === 'mensaje') return context.mensaje || ''; // Mensaje del jugador actual
-      }
-
-      // Location keys
-      if (key === 'world_name' || key === 'mundo_nombre' || key === 'mundo') {
-        return context.world?.name || '';
-      }
-      if (key === 'pueblo_name' || key === 'pueblo') {
-        return context.pueblo?.name || '';
-      }
-      if (key === 'edificio_name' || key === 'edificio') {
-        return context.edificio?.name || '';
-      }
-
-      // Edificio object keys (edificio.name, edificio.lore, etc.)
-      if (key.startsWith('edificio.')) {
-        const edificioKey = key.replace('edificio.', '');
-        if (edificioKey === 'name' || edificioKey === 'nombre') return context.edificio?.name || '';
-        if (edificioKey === 'descripcion') return context.edificio?.lore || ''; // lore es un string directo en edificios
-        if (edificioKey === 'lore') return context.edificio?.lore || '';
-        if (edificioKey === 'eventos' || edificioKey === 'eventos_recientes') return context.edificio?.eventos_recientes?.join(', ') || '';
-        if (edificioKey === 'type') return context.edificio?.type || '';
-        if (edificioKey === 'poislist' || edificioKey === 'puntos_de_interes_list') {
-          if (context.edificio?.puntosDeInteres && context.edificio.puntosDeInteres.length > 0) {
-            return context.edificio.puntosDeInteres.map((poi: any) => {
-              const nombre = poi.name || 'Sin nombre';
-              const descripcion = poi.descripcion || '';
-              const coords = poi.coordenadas || { x: 0, y: 0, z: 0 };
-              return `${nombre} (${descripcion}) {"coordenadas": {"x": ${coords.x},"y": ${coords.y},"z": ${coords.z}}}`;
+        // Historial del NPC
+        if (key === 'npc_historial' || key === 'npc.historial') {
+          if (context.session && context.session.messages && context.session.messages.length > 0) {
+            return context.session.messages.map((msg: any) => {
+              const role = msg.role === 'user' ? 'Usuario' : 'NPC';
+              return `${role}: ${msg.content}`;
             }).join('\n');
           }
-          return '(Sin puntos de interés)';
+          return '(Sin historial)';
         }
+
+        // Player keys (nombre, playername, player_name)
+        if (key === 'playername' || key === 'player_name' || key === 'nombre') {
+          return context.jugador?.nombre || '';
+        }
+        if (key === 'player_race' || key === 'player_raza' || key === 'raza') {
+          return context.jugador?.raza || '';
+        }
+        if (key === 'player_level' || key === 'player_nivel' || key === 'nivel') {
+          return context.jugador?.nivel || '';
+        }
+        if (key === 'player_health' || key === 'player_salud' || key === 'salud_actual' || key === 'salud') {
+          return context.jugador?.salud_actual || '';
+        }
+        if (key === 'player_reputation' || key === 'player_reputacion' || key === 'reputacion' || key === 'reputación') {
+          return context.jugador?.reputacion || '';
+        }
+        if (key === 'player_time' || key === 'player_hora' || key === 'hora') {
+          return context.jugador?.hora || '';
+        }
+        if (key === 'player_weather' || key === 'player_clima' || key === 'clima') {
+          return context.jugador?.clima || '';
+        }
+        if (key === 'almakos') {
+          return context.jugador?.almakos || '';
+        }
+        if (key === 'deuda') {
+          return context.jugador?.deuda || '';
+        }
+        if (key === 'piedras_del_alma' || key === 'piedras') {
+          return context.jugador?.piedras_del_alma || '';
+        }
+
+        // Jugador object keys (jugador.nombre, jugador.raza, etc.)
+        if (key.startsWith('jugador.')) {
+          const jugadorKey = key.replace('jugador.', '');
+          if (jugadorKey === 'nombre') return context.jugador?.nombre || '';
+          if (jugadorKey === 'raza') return context.jugador?.raza || '';
+          if (jugadorKey === 'nivel') return context.jugador?.nivel || '';
+          if (jugadorKey === 'salud_actual' || jugadorKey === 'salud') return context.jugador?.salud_actual || '';
+          if (jugadorKey === 'reputacion' || jugadorKey === 'reputación') return context.jugador?.reputacion || '';
+          if (jugadorKey === 'hora') return context.jugador?.hora || '';
+          if (jugadorKey === 'clima') return context.jugador?.clima || '';
+          if (jugadorKey === 'almakos') return context.jugador?.almakos || '';
+          if (jugadorKey === 'deuda') return context.jugador?.deuda || '';
+          if (jugadorKey === 'piedras_del_alma' || jugadorKey === 'piedras') return context.jugador?.piedras_del_alma || '';
+          if (jugadorKey === 'mensaje') return context.mensaje || ''; // Mensaje del jugador actual
+        }
+
+        // Location keys
+        if (key === 'world_name' || key === 'mundo_nombre' || key === 'mundo') {
+          return context.world?.name || '';
+        }
+        if (key === 'pueblo_name' || key === 'pueblo') {
+          return context.pueblo?.name || '';
+        }
+        if (key === 'edificio_name' || key === 'edificio') {
+          return context.edificio?.name || '';
+        }
+
+        // Edificio object keys (edificio.name, edificio.lore, etc.)
+        if (key.startsWith('edificio.')) {
+          const edificioKey = key.replace('edificio.', '');
+          if (edificioKey === 'name' || edificioKey === 'nombre') return context.edificio?.name || '';
+          if (edificioKey === 'descripcion') return context.edificio?.lore || ''; // lore es un string directo en edificios
+          if (edificioKey === 'lore') return context.edificio?.lore || '';
+          if (edificioKey === 'eventos' || edificioKey === 'eventos_recientes') {
+            if (context.edificio?.eventos_recientes && context.edificio.eventos_recientes.length > 0) {
+              return context.edificio.eventos_recientes.map(e => `- ${e}`).join('\n');
+            }
+            return '(Sin eventos)';
+          }
+          if (edificioKey === 'type') return context.edificio?.type || '';
+          if (edificioKey === 'poislist' || edificioKey === 'puntos_de_interes_list') {
+            if (context.edificio?.puntosDeInteres && context.edificio.puntosDeInteres.length > 0) {
+              return context.edificio.puntosDeInteres.map((poi: any) => {
+                const nombre = poi.name || 'Sin nombre';
+                const descripcion = poi.descripcion || '';
+                const coords = poi.coordenadas || { x: 0, y: 0, z: 0 };
+                return `- ${nombre} (${descripcion}) {"coordenadas": {"x": ${coords.x},"y": ${coords.y},"z": ${coords.z}}}`;
+              }).join('\n');
+            }
+            return '(Sin puntos de interés)';
+          }
+        }
+
+        // NPC keys para edificio (todos los NPCs en el edificio)
+        if (key === 'npcs_count') {
+          return context.npcs?.length?.toString() || '0';
+        }
+        if (key === 'npcs_names') {
+          return context.npcs?.map((n: any) => n.card?.data?.name || n.card?.name).join(', ') || '';
+        }
+
+        // Pueblo object keys (pueblo.name, pueblo.type, etc.)
+        if (key.startsWith('pueblo.')) {
+          const puebloKey = key.replace('pueblo.', '');
+          if (puebloKey === 'name' || puebloKey === 'nombre') return context.pueblo?.name || '';
+          if (puebloKey === 'tipo') return context.pueblo?.type || '';
+          if (puebloKey === 'descripcion') return context.pueblo?.description || ''; // Descripción general
+          if (puebloKey === 'estado') return context.pueblo?.lore?.estado_pueblo || '';
+          if (puebloKey === 'rumores') {
+            if (context.pueblo?.lore?.rumores && context.pueblo.lore.rumores.length > 0) {
+              return context.pueblo.lore.rumores.map(r => `- ${r}`).join('\n');
+            }
+            return '(Sin rumores)';
+          }
+        }
+
+        // Edificios keys para pueblo (todos los edificios en el pueblo)
+        if (key === 'edificios_count') {
+          return context.edificios?.length?.toString() || '0';
+        }
+        if (key === 'edificios_names') {
+          return context.edificios?.map((e: any) => e.name).join(', ') || '';
+        }
+        if (key === 'edificios_list') {
+          return context.edificios?.map((e: any) => `- ${e.name}`).join('\n') || '';
+        }
+
+        // Mundo object keys (mundo.name, mundo.lore, etc.)
+        if (key.startsWith('mundo.')) {
+          const mundoKey = key.replace('mundo.', '');
+          if (mundoKey === 'name' || mundoKey === 'nombre') return context.mundo?.name || '';
+          if (mundoKey === 'estado' || mundoKey === 'estado_mundo') return context.mundo?.lore?.estado_mundo || '';
+          if (mundoKey === 'rumores') {
+            if (context.mundo?.lore?.rumores && context.mundo.lore.rumores.length > 0) {
+              return context.mundo.lore.rumores.map(r => `- ${r}`).join('\n');
+            }
+            return '(Sin rumores)';
+          }
+        }
+
+        // Pueblos keys para mundo (todos los pueblos/naciones en el mundo)
+        if (key === 'pueblos_count') {
+          return context.pueblos?.length?.toString() || '0';
+        }
+        if (key === 'pueblos_names') {
+          return context.pueblos?.map((p: any) => p.name).join(', ') || '';
+        }
+        if (key === 'pueblos_list') {
+          return context.pueblos?.map((p: any) => `- ${p.name}`).join('\n') || '';
+        }
+
+        // Si la key no existe, retorna el match original
+        return match;
+      });
+    };
+
+    // Procesamiento recursivo: hacer múltiples pasadas hasta que no haya más cambios
+    let result = text;
+    let iterations = 0;
+    const maxIterations = 10;
+
+    while (iterations < maxIterations) {
+      const previousResult = result;
+      result = replaceSinglePass(result);
+
+      // Si no hubo cambios en esta iteración, terminamos
+      if (result === previousResult) {
+        break;
       }
 
-      // NPC keys para edificio (todos los NPCs en el edificio)
-      if (key === 'npcs_count') {
-        return context.npcs?.length?.toString() || '0';
-      }
-      if (key === 'npcs_names') {
-        return context.npcs?.map((n: any) => n.card?.data?.name || n.card?.name).join(', ') || '';
-      }
+      iterations++;
+    }
 
-      // Pueblo object keys (pueblo.name, pueblo.type, etc.)
-      if (key.startsWith('pueblo.')) {
-        const puebloKey = key.replace('pueblo.', '');
-        if (puebloKey === 'name' || puebloKey === 'nombre') return context.pueblo?.name || '';
-        if (puebloKey === 'tipo') return context.pueblo?.type || '';
-        if (puebloKey === 'descripcion') return context.pueblo?.lore?.estado_pueblo || context.pueblo?.description || ''; // Descripción del estado o description general
-        if (puebloKey === 'estado') return context.pueblo?.lore?.estado_pueblo || '';
-        if (puebloKey === 'rumores') return context.pueblo?.lore?.rumores?.join(', ') || '';
-      }
-
-      // Edificios keys para pueblo (todos los edificios en el pueblo)
-      if (key === 'edificios_count') {
-        return context.edificios?.length?.toString() || '0';
-      }
-      if (key === 'edificios_names') {
-        return context.edificios?.map((e: any) => e.name).join(', ') || '';
-      }
-      if (key === 'edificios_list') {
-        return context.edificios?.map((e: any) => `- ${e.name}`).join('\n') || '';
-      }
-
-      // Mundo object keys (mundo.name, mundo.lore, etc.)
-      if (key.startsWith('mundo.')) {
-        const mundoKey = key.replace('mundo.', '');
-        if (mundoKey === 'name' || mundoKey === 'nombre') return context.mundo?.name || '';
-        if (mundoKey === 'estado' || mundoKey === 'estado_mundo') return context.mundo?.lore?.estado_mundo || '';
-        if (mundoKey === 'rumores') return context.mundo?.lore?.rumores?.join(', ') || '';
-      }
-
-      // Pueblos keys para mundo (todos los pueblos/naciones en el mundo)
-      if (key === 'pueblos_count') {
-        return context.pueblos?.length?.toString() || '0';
-      }
-      if (key === 'pueblos_names') {
-        return context.pueblos?.map((p: any) => p.name).join(', ') || '';
-      }
-      if (key === 'pueblos_list') {
-        return context.pueblos?.map((p: any) => `- ${p.name}`).join('\n') || '';
-      }
-
-      // Si la key no existe, retorna el match original
-      return match;
-    });
+    return result;
   };
 
   const sendRequest = async (triggerType: string, payload: any) => {
@@ -953,20 +988,51 @@ export default function RouterTab() {
       });
     }
 
-    // 3. Información del NPC
+    // 3. Información del NPC (usando replaceKeys para variables anidadas)
     if (npc) {
-      let npcInfoText = `NPC: ${npc.card?.data?.name || npc.card?.name || ''}\n`;
-      if (npc.card?.data?.description || npc.card?.description) {
-        npcInfoText += `Descripción: ${npc.card?.data?.description || npc.card?.description}\n`;
-      }
-      if (npc.card?.data?.personality) {
-        npcInfoText += `Personalidad: ${npc.card?.data?.personality}\n`;
-      }
+      const npcInfoTemplate = `PERSONAJE ({{npc.name}})
+Descripción: {{npc.description}}
+Personalidad: {{npc.personality}}
+Escenario: {{npc.scenario}}`;
+
+      const npcInfoText = replaceKeys(npcInfoTemplate, keyContext);
       prompt += npcInfoText + '\n';
       sections.push({
-        label: 'Información del NPC',
+        label: 'Información del Personaje',
         content: npcInfoText,
         bgColor: 'bg-yellow-50 dark:bg-yellow-950'
+      });
+    }
+
+    // 4. World, Pueblo, Edificio - Contexto del entorno
+    if (world || pueblo || edificio) {
+      const contextTemplate = `CONTEXTO DEL ENTORNO
+
+CONTEXTO DEL MUNDO ({{mundo.name}})
+Estado: {{mundo.estado}}
+Rumores:
+{{mundo.rumores}}
+
+CONTEXTO DE REGIÓN
+Tipo: {{pueblo.tipo}}
+Nombre: {{pueblo.name}}
+Rumores:
+{{pueblo.rumores}}
+
+CONTEXTO DEL EDIFICIO ACTUAL
+Nombre: {{edificio.name}}
+Descripción: {{edificio.descripcion}}
+Eventos recientes:
+{{edificio.eventos}}
+POIs disponibles:
+{{edificio.poislist}}`;
+
+      const contextText = replaceKeys(contextTemplate, keyContext);
+      prompt += contextText + '\n';
+      sections.push({
+        label: 'Contexto del Entorno',
+        content: contextText,
+        bgColor: 'bg-purple-50 dark:bg-purple-950'
       });
     }
 
@@ -1015,15 +1081,17 @@ export default function RouterTab() {
       });
     }
 
-    // 3. Información del Edificio
+    // 3. Información del Edificio (usando replaceKeys para variables anidadas)
     if (edificio) {
-      let edificioInfoText = `Edificio: ${edificio.name}\n`;
-      if (edificio.lore) {
-        edificioInfoText += `Lore: ${edificio.lore}\n`;
-      }
-      if (edificio.eventos) {
-        edificioInfoText += `Eventos: ${edificio.eventos}\n`;
-      }
+      const edificioTemplate = `EDIFICIO ({{edificio.name}})
+Descripción: {{edificio.descripcion}}
+Tipo: {{edificio.type}}
+Eventos recientes:
+{{edificio.eventos}}
+POIs disponibles:
+{{edificio.poislist}}`;
+
+      const edificioInfoText = replaceKeys(edificioTemplate, keyContext);
       prompt += edificioInfoText + '\n';
       sections.push({
         label: 'Información del Edificio',
@@ -1032,19 +1100,43 @@ export default function RouterTab() {
       });
     }
 
-    // 4. NPCs en el Edificio
+    // 4. NPCs en el Edificio (usando replaceKeys)
     if (npcsEnEdificio.length > 0) {
       let npcsListText = `NPCs en el edificio (${npcsEnEdificio.length}):\n`;
       npcsEnEdificio.forEach(npc => {
         const npcName = npc.card?.data?.name || npc.card?.name || 'Sin nombre';
         const npcDesc = npc.card?.data?.description || npc.card?.description || '';
-        npcsListText += `- ${npcName}${npcDesc ? `: ${npcDesc.substring(0, 100)}` : ''}\n`;
+        // Procesar la descripción para reemplazar variables
+        const processedDesc = npcDesc ? replaceKeys(npcDesc, { ...keyContext, npc }) : '';
+        npcsListText += `- ${npcName}${processedDesc ? `: ${processedDesc.substring(0, 100)}` : ''}\n`;
       });
       prompt += npcsListText + '\n';
       sections.push({
         label: 'NPCs en el Edificio',
         content: npcsListText,
         bgColor: 'bg-amber-50 dark:bg-amber-950'
+      });
+    }
+
+    // 5. Contexto del Pueblo/Mundo del Edificio
+    if (pueblo || mundo) {
+      const contextTemplate = `CONTEXTO DE LA REGIÓN
+Tipo: {{pueblo.tipo}}
+Nombre: {{pueblo.name}}
+Rumores:
+{{pueblo.rumores}}
+
+CONTEXTO DEL MUNDO ({{mundo.name}})
+Estado: {{mundo.estado}}
+Rumores:
+{{mundo.rumores}}`;
+
+      const contextText = replaceKeys(contextTemplate, keyContext);
+      prompt += contextText + '\n';
+      sections.push({
+        label: 'Contexto de la Región',
+        content: contextText,
+        bgColor: 'bg-teal-50 dark:bg-teal-950'
       });
     }
 
@@ -1092,18 +1184,16 @@ export default function RouterTab() {
       });
     }
 
-    // 3. Información del Pueblo
+    // 3. Información del Pueblo (usando replaceKeys para variables anidadas)
     if (pueblo) {
-      let puebloInfoText = `Pueblo/Nación: ${pueblo.name}\n`;
-      if (pueblo.type) {
-        puebloInfoText += `Tipo: ${pueblo.type}\n`;
-      }
-      if (pueblo.estado) {
-        puebloInfoText += `Estado: ${pueblo.estado}\n`;
-      }
-      if (pueblo.rumores) {
-        puebloInfoText += `Rumores: ${pueblo.rumores}\n`;
-      }
+      const puebloTemplate = `PUEBLO/NACIÓN ({{pueblo.name}})
+Tipo: {{pueblo.tipo}}
+Descripción: {{pueblo.descripcion}}
+Estado: {{pueblo.estado}}
+Rumores:
+{{pueblo.rumores}}`;
+
+      const puebloInfoText = replaceKeys(puebloTemplate, keyContext);
       prompt += puebloInfoText + '\n';
       sections.push({
         label: 'Información del Pueblo/Nación',
@@ -1112,19 +1202,37 @@ export default function RouterTab() {
       });
     }
 
-    // 4. Edificios en el Pueblo
+    // 4. Edificios en el Pueblo (usando replaceKeys)
     if (edificiosEnPueblo.length > 0) {
       let edificiosListText = `Edificios en el pueblo/nación (${edificiosEnPueblo.length}):\n`;
       edificiosEnPueblo.forEach(edificio => {
         const edificioName = edificio.name || 'Sin nombre';
         const edificioLore = edificio.lore || '';
-        edificiosListText += `- ${edificioName}${edificioLore ? `: ${edificioLore.substring(0, 80)}` : ''}\n`;
+        // Procesar el lore para reemplazar variables
+        const processedLore = edificioLore ? replaceKeys(edificioLore, { ...keyContext, edificio }) : '';
+        edificiosListText += `- ${edificioName}${processedLore ? `: ${processedLore.substring(0, 80)}` : ''}\n`;
       });
       prompt += edificiosListText + '\n';
       sections.push({
         label: 'Edificios en el Pueblo/Nación',
         content: edificiosListText,
         bgColor: 'bg-amber-50 dark:bg-amber-950'
+      });
+    }
+
+    // 5. Contexto del Mundo del Pueblo
+    if (mundo) {
+      const contextTemplate = `CONTEXTO DEL MUNDO ({{mundo.name}})
+Estado: {{mundo.estado}}
+Rumores:
+{{mundo.rumores}}`;
+
+      const contextText = replaceKeys(contextTemplate, keyContext);
+      prompt += contextText + '\n';
+      sections.push({
+        label: 'Contexto del Mundo',
+        content: contextText,
+        bgColor: 'bg-teal-50 dark:bg-teal-950'
       });
     }
 
@@ -1169,15 +1277,14 @@ export default function RouterTab() {
       });
     }
 
-    // 3. Información del Mundo
+    // 3. Información del Mundo (usando replaceKeys para variables anidadas)
     if (mundo) {
-      let mundoInfoText = `Mundo: ${mundo.name}\n`;
-      if (mundo.lore?.estado_mundo) {
-        mundoInfoText += `Estado del Mundo: ${mundo.lore.estado_mundo}\n`;
-      }
-      if (mundo.lore?.rumores && mundo.lore.rumores.length > 0) {
-        mundoInfoText += `Rumores: ${mundo.lore.rumores.join(', ')}\n`;
-      }
+      const mundoTemplate = `MUNDO ({{mundo.name}})
+Estado del Mundo: {{mundo.estado}}
+Rumores:
+{{mundo.rumores}}`;
+
+      const mundoInfoText = replaceKeys(mundoTemplate, keyContext);
       prompt += mundoInfoText + '\n';
       sections.push({
         label: 'Información del Mundo',
@@ -1186,20 +1293,148 @@ export default function RouterTab() {
       });
     }
 
-    // 4. Pueblos/Naciones en el Mundo
+    // 4. Pueblos/Naciones en el Mundo (usando replaceKeys)
     if (pueblosEnMundo.length > 0) {
       let pueblosListText = `Pueblos/Naciones en el mundo (${pueblosEnMundo.length}):\n`;
       pueblosEnMundo.forEach(pueblo => {
         const puebloName = pueblo.name || 'Sin nombre';
         const puebloType = pueblo.type || '';
         const puebloEstado = pueblo.lore?.estado_pueblo || '';
-        pueblosListText += `- ${puebloName}${puebloType ? ` [${puebloType}]` : ''}${puebloEstado ? `: ${puebloEstado.substring(0, 60)}` : ''}\n`;
+        // Procesar el estado para reemplazar variables
+        const processedEstado = puebloEstado ? replaceKeys(puebloEstado, { ...keyContext, pueblo }) : '';
+        pueblosListText += `- ${puebloName}${puebloType ? ` [${puebloType}]` : ''}${processedEstado ? `: ${processedEstado.substring(0, 60)}` : ''}\n`;
       });
       prompt += pueblosListText + '\n';
       sections.push({
         label: 'Pueblos/Naciones en el Mundo',
         content: pueblosListText,
         bgColor: 'bg-amber-50 dark:bg-amber-950'
+      });
+    }
+
+    return { text: prompt, sections };
+  };
+
+  const buildNuevoLorePreview = (payload: any): { text: string; sections: Array<{ label: string; content: string; bgColor: string }> } => {
+    if (!payload) return { text: '', sections: [] };
+
+    // Crear contexto basado en el scope
+    const mundo = worlds.find(w => w.id === nuevoLoreForm.mundoid);
+    const pueblo = pueblos.find(p => p.id === nuevoLoreForm.pueblid);
+    const edificio = edificios.find(e => e.id === nuevoLoreForm.edificioid);
+
+    // Contexto dinámico según el scope seleccionado
+    const keyContext: any = {
+      mundo,
+      mundo: mundo, // Alias para variables {{mundo.*}}
+      pueblo,
+      edificio,
+      scope: nuevoLoreForm.scope,
+      loreType: nuevoLoreForm.loreType
+    };
+
+    const sections: Array<{ label: string; content: string; bgColor: string }> = [];
+    let prompt = '';
+
+    // 1. System Prompt (solo de la plantilla del usuario para este tipo de trigger)
+    const userSystemPrompt = nuevoLoreForm.systemPrompt || '';
+    if (userSystemPrompt) {
+      const systemPromptText = replaceKeys(userSystemPrompt, keyContext);
+      prompt += systemPromptText + '\n\n';
+      sections.push({
+        label: 'System Prompt',
+        content: systemPromptText,
+        bgColor: 'bg-green-50 dark:bg-green-950'
+      });
+    }
+
+    // 2. Contexto de información según scope (usando replaceKeys para variables anidadas)
+    let contextInfoText = '';
+
+    if (nuevoLoreForm.scope === 'mundo' && mundo) {
+      const mundoTemplate = `CONTEXTO DEL MUNDO
+Mundo: {{mundo.name}}
+Estado del Mundo: {{mundo.estado}}
+Rumores:
+{{mundo.rumores}}`;
+
+      contextInfoText = replaceKeys(mundoTemplate, keyContext);
+      sections.push({
+        label: 'Contexto del Mundo',
+        content: contextInfoText,
+        bgColor: 'bg-blue-50 dark:bg-blue-950'
+      });
+    } else if (nuevoLoreForm.scope === 'pueblo' && pueblo && mundo) {
+      const puebloTemplate = `CONTEXTO DE LA REGIÓN
+Pueblo/Nación: {{pueblo.name}}
+Tipo: {{pueblo.tipo}}
+Descripción: {{pueblo.descripcion}}
+Estado: {{pueblo.estado}}
+Rumores:
+{{pueblo.rumores}}
+
+CONTEXTO DEL MUNDO
+Mundo: {{mundo.name}}
+Estado del Mundo: {{mundo.estado}}
+Rumores:
+{{mundo.rumores}}`;
+
+      contextInfoText = replaceKeys(puebloTemplate, keyContext);
+      sections.push({
+        label: 'Contexto del Pueblo/Nación',
+        content: contextInfoText,
+        bgColor: 'bg-amber-50 dark:bg-amber-950'
+      });
+    } else if (nuevoLoreForm.scope === 'edificio' && edificio && pueblo && mundo) {
+      const edificioTemplate = `CONTEXTO DEL EDIFICIO
+Edificio: {{edificio.name}}
+Descripción: {{edificio.descripcion}}
+Tipo: {{edificio.type}}
+Eventos recientes:
+{{edificio.eventos}}
+POIs disponibles:
+{{edificio.poislist}}
+
+CONTEXTO DE LA REGIÓN
+Pueblo/Nación: {{pueblo.name}}
+Tipo: {{pueblo.tipo}}
+Rumores:
+{{pueblo.rumores}}
+
+CONTEXTO DEL MUNDO
+Mundo: {{mundo.name}}
+Estado del Mundo: {{mundo.estado}}
+Rumores:
+{{mundo.rumores}}`;
+
+      contextInfoText = replaceKeys(edificioTemplate, keyContext);
+      sections.push({
+        label: 'Contexto del Edificio',
+        content: contextInfoText,
+        bgColor: 'bg-orange-50 dark:bg-orange-950'
+      });
+    }
+
+    prompt += contextInfoText + '\n';
+
+    // 3. Contexto del nuevo lore
+    if (nuevoLoreForm.context) {
+      const contextProcessed = replaceKeys(nuevoLoreForm.context, keyContext);
+      prompt += `CONTEXTO DEL NUEVO LORE:\n${contextProcessed}\n\n`;
+      sections.push({
+        label: 'Contexto del Nuevo Lore',
+        content: contextProcessed,
+        bgColor: 'bg-purple-50 dark:bg-purple-950'
+      });
+    }
+
+    // 4. Tipo de Lore
+    if (nuevoLoreForm.loreType) {
+      prompt += `TIPO DE LORE: ${nuevoLoreForm.loreType}\n\n`;
+      sections.push({
+        label: 'Tipo de Lore',
+        content: nuevoLoreForm.loreType,
+        bgColor: 'bg-teal-50 dark:bg-teal-950'
       });
     }
 
@@ -1232,6 +1467,9 @@ export default function RouterTab() {
   const resumenMundoPrompt = resumenMundoPromptData.text;
   const resumenMundoSections = resumenMundoPromptData.sections;
   const nuevoLorePayload = useMemo(() => buildNuevoLorePayload(), [nuevoLoreForm]);
+  const nuevoLorePromptData = useMemo(() => buildNuevoLorePreview(nuevoLorePayload), [nuevoLorePayload, nuevoLoreForm, worlds, pueblos, edificios]);
+  const nuevoLorePrompt = nuevoLorePromptData.text;
+  const nuevoLoreSections = nuevoLorePromptData.sections;
 
   return (
     <div className="space-y-4">
@@ -1768,6 +2006,33 @@ export default function RouterTab() {
                   />
                 </div>
 
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleSaveResumenSesionTemplate}
+                    className="flex-1"
+                  >
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                    Guardar Template
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      localStorage.removeItem('resumenSesionTemplate');
+                      setResumenSesionForm(prev => ({ ...prev, systemPrompt: '' }));
+                      setResumenSesionTemplateSaved(false);
+                      toast({
+                        title: 'Template Eliminado',
+                        description: 'El template de resumen de sesión ha sido eliminado'
+                      });
+                    }}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+
                 <div className="border rounded-lg p-4 bg-muted/50">
                   <h4 className="font-semibold text-sm mb-3 flex items-center gap-2">
                     <RefreshCw className="h-4 w-4" />
@@ -1870,19 +2135,6 @@ export default function RouterTab() {
                     <Trash2 className="h-4 w-4" />
                   </Button>
                 </div>
-
-                <Button
-                  className="w-full"
-                  onClick={() => {
-                    if (resumenSesionPayload && resumenSesionPayload.playersessionid) {
-                      sendRequest('resumen_sesion', resumenSesionPayload);
-                    }
-                  }}
-                  disabled={!resumenSesionPayload.npcid || !resumenSesionForm.sessionid}
-                >
-                  <Send className="h-4 w-4 mr-2" />
-                  Generar Resumen de Sesión
-                </Button>
               </CardContent>
             </Card>
 
@@ -1951,6 +2203,19 @@ export default function RouterTab() {
                     </div>
                   )}
                 </CardContent>
+
+                <Button
+                  className="w-full"
+                  onClick={() => {
+                    if (resumenSesionPayload && resumenSesionPayload.playersessionid) {
+                      sendRequest('resumen_sesion', resumenSesionPayload);
+                    }
+                  }}
+                  disabled={!resumenSesionPayload.npcid || !resumenSesionForm.sessionid}
+                >
+                  <Send className="h-4 w-4 mr-2" />
+                  Generar Resumen de Sesión
+                </Button>
               </Card>
 
               <Card>
@@ -2814,6 +3079,68 @@ export default function RouterTab() {
 
         {/* Nuevo Lore Trigger */}
         <TabsContent value="nuevo_lore" className="space-y-4">
+          {/* Preview del Prompt */}
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <FileText className="h-5 w-5" />
+                  Visualizador de Prompt
+                </CardTitle>
+                <CardDescription>
+                  Vista previa del prompt que se enviará al AI
+                </CardDescription>
+              </div>
+              <Badge variant="secondary">
+                {countTokens(nuevoLorePrompt)} tokens / {countWords(nuevoLorePrompt)} palabras
+              </Badge>
+            </CardHeader>
+            <CardContent>
+              <ScrollArea className="h-[500px] pr-4">
+                <div className="space-y-3">
+                  {nuevoLoreSections.length === 0 ? (
+                    <div className="text-center text-muted-foreground py-8">
+                      Selecciona el alcance y completa los campos para ver el prompt
+                    </div>
+                  ) : (
+                    nuevoLoreSections.map((section, index) => (
+                      <div key={index} className={`rounded-lg border ${section.bgColor}`}>
+                        <div className="border-b border-black/10 dark:border-white/10 bg-white/50 dark:bg-black/20 px-3 py-2">
+                          <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">
+                            {section.label}
+                          </span>
+                        </div>
+                        <pre className="text-sm p-4 whitespace-pre-wrap overflow-x-auto">
+                          {section.content}
+                        </pre>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </ScrollArea>
+              {nuevoLorePrompt && (
+                <div className="flex gap-2 mt-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => copyToClipboard(nuevoLorePrompt, 'Prompt copiado')}
+                  >
+                    <Copy className="h-4 w-4 mr-2" />
+                    Copiar
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => nuevoLorePayload && copyToClipboard(JSON.stringify(nuevoLorePayload, null, 2), 'JSON copiado')}
+                  >
+                    <Copy className="h-4 w-4 mr-2" />
+                    Copiar JSON
+                  </Button>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
           <Card>
             <CardHeader>
               <CardTitle>Nuevo Lore</CardTitle>
