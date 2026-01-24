@@ -338,6 +338,10 @@ export const npcManager = {
     });
   },
 
+  getByEdificioId(edificioId: string): NPC[] {
+    return this.getAll().filter(n => n.location.edificioId === edificioId);
+  },
+
   create(npc: Omit<NPC, 'id'>, id?: string): NPC {
     const npcId = id || `NPC_${Date.now()}`;
     const newNPC: NPC = { ...npc, id: npcId };
@@ -442,6 +446,18 @@ export const sessionManager = {
     } catch {
       return false;
     }
+  },
+
+  clearMessages(id: string): Session | null {
+    const existing = this.getById(id);
+    if (!existing) return null;
+    const updated = {
+      ...existing,
+      messages: [],
+      lastActivity: new Date().toISOString()
+    };
+    writeJSON(this.getFilePath(id), updated);
+    return updated;
   }
 };
 
@@ -474,5 +490,59 @@ export const summaryManager = {
 
   saveSummary(sessionId: string, summary: string): void {
     writeJSON(this.getFilePath(sessionId), { summary, timestamp: new Date().toISOString() });
+  }
+};
+
+// Edificio Memory/State operations
+export const edificioStateManager = {
+  getFilePath: (edificioId: string) => path.join(DATA_DIR, 'edificios', 'states', `edificio_${edificioId}_memory.json`),
+
+  getMemory(edificioId: string): Record<string, any> | null {
+    return readJSON<Record<string, any>>(this.getFilePath(edificioId));
+  },
+
+  saveMemory(edificioId: string, memory: Record<string, any>): void {
+    writeJSON(this.getFilePath(edificioId), memory);
+  },
+
+  updateMemory(edificioId: string, updates: Record<string, any>): void {
+    const existing = this.getMemory(edificioId) || {};
+    this.saveMemory(edificioId, { ...existing, ...updates });
+  }
+};
+
+// Pueblo Memory/State operations
+export const puebloStateManager = {
+  getFilePath: (puebloId: string) => path.join(DATA_DIR, 'pueblos', 'states', `pueblo_${puebloId}_memory.json`),
+
+  getMemory(puebloId: string): Record<string, any> | null {
+    return readJSON<Record<string, any>>(this.getFilePath(puebloId));
+  },
+
+  saveMemory(puebloId: string, memory: Record<string, any>): void {
+    writeJSON(this.getFilePath(puebloId), memory);
+  },
+
+  updateMemory(puebloId: string, updates: Record<string, any>): void {
+    const existing = this.getMemory(puebloId) || {};
+    this.saveMemory(puebloId, { ...existing, ...updates });
+  }
+};
+
+// World Memory/State operations
+export const worldStateManager = {
+  getFilePath: (worldId: string) => path.join(DATA_DIR, 'worlds', 'states', `world_${worldId}_memory.json`),
+
+  getMemory(worldId: string): Record<string, any> | null {
+    return readJSON<Record<string, any>>(this.getFilePath(worldId));
+  },
+
+  saveMemory(worldId: string, memory: Record<string, any>): void {
+    writeJSON(this.getFilePath(worldId), memory);
+  },
+
+  updateMemory(worldId: string, updates: Record<string, any>): void {
+    const existing = this.getMemory(worldId) || {};
+    this.saveMemory(worldId, { ...existing, ...updates });
   }
 };

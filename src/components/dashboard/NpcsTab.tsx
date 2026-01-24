@@ -19,6 +19,7 @@ export default function NpcsTab() {
   const [worlds, setWorlds] = useState<World[]>([]);
   const [pueblos, setPueblos] = useState<Pueblo[]>([]);
   const [edificios, setEdificios] = useState<Edificio[]>([]);
+  const [npcMemories, setNpcMemories] = useState<Record<string, any>>({});
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
@@ -59,7 +60,23 @@ export default function NpcsTab() {
       const pueblosResult = await pueblosRes.json();
       const edificiosResult = await edificiosRes.json();
 
-      if (npcsResult.success) setNpcs(npcsResult.data);
+      if (npcsResult.success) {
+        setNpcs(npcsResult.data);
+        
+        // Cargar memorias de los NPCs en paralelo
+        const memoryPromises = npcsResult.data.map((npc: NPC) => 
+          fetch(`/api/npcs/${npc.id}/memory`)
+        );
+        const memoryResponses = await Promise.all(memoryPromises);
+        const memories: Record<string, any> = {};
+        for (let i = 0; i < memoryResponses.length; i++) {
+          const memoryResult = await memoryResponses[i].json();
+          if (memoryResult.success && memoryResult.data.memory) {
+            memories[npcsResult.data[i].id] = memoryResult.data.memory;
+          }
+        }
+        setNpcMemories(memories);
+      }
       if (worldsResult.success) setWorlds(worldsResult.data);
       if (pueblosResult.success) setPueblos(pueblosResult.data);
       if (edificiosResult.success) setEdificios(edificiosResult.data);
@@ -399,6 +416,17 @@ export default function NpcsTab() {
                     <div className="text-xs text-muted-foreground">
                       Alcance: {npc.location.scope}
                     </div>
+                    {/* Mostrar resumen consolidado del NPC */}
+                    {npcMemories[npc.id]?.consolidatedSummary && (
+                      <div className="mt-3 p-3 rounded-lg bg-indigo-50 dark:bg-indigo-950 border border-indigo-200 dark:border-indigo-800">
+                        <p className="text-xs font-semibold text-indigo-900 dark:text-indigo-100 mb-1">
+                          Último Resumen General
+                        </p>
+                        <p className="text-sm text-indigo-800 dark:text-indigo-200 line-clamp-3">
+                          {npcMemories[npc.id].consolidatedSummary}
+                        </p>
+                      </div>
+                    )}
                   </div>
                 </CardContent>
               </Card>

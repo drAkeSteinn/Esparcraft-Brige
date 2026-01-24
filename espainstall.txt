@@ -1,0 +1,4 @@
+en el archivo: package.json
+remplazar: "dev": "next dev -p 3000 2>&1 | tee dev.log"
+por:
+"dev": "next dev -p 3000"

@@ -16,6 +16,7 @@ import { toast } from '@/hooks/use-toast';
 
 export default function SessionsTab() {
   const [sessions, setSessions] = useState<Session[]>([]);
+  const [summaries, setSummaries] = useState<Record<string, string>>({});
   const [npcs, setNpcs] = useState<NPC[]>([]);
   const [worlds, setWorlds] = useState<World[]>([]);
   const [pueblos, setPueblos] = useState<Pueblo[]>([]);
@@ -51,7 +52,24 @@ export default function SessionsTab() {
       const pueblosResult = await pueblosRes.json();
       const edificiosResult = await edificiosRes.json();
 
-      if (sessionsResult.success) setSessions(sessionsResult.data);
+      if (sessionsResult.success) {
+        setSessions(sessionsResult.data);
+        // Load summaries for all sessions
+        const summariesPromises = sessionsResult.data.map((session: Session) => 
+          fetch(`/api/sessions/${session.id}/summary`)
+            .then(res => res.json())
+            .then(result => ({ sessionId: session.id, summary: result.data?.summary }))
+            .catch(() => ({ sessionId: session.id, summary: null }))
+        );
+        const summariesData = await Promise.all(summariesPromises);
+        const summariesMap: Record<string, string> = {};
+        summariesData.forEach(({ sessionId, summary }) => {
+          if (summary) {
+            summariesMap[sessionId] = summary;
+          }
+        });
+        setSummaries(summariesMap);
+      }
       if (npcsResult.success) setNpcs(npcsResult.data);
       if (worldsResult.success) setWorlds(worldsResult.data);
       if (pueblosResult.success) setPueblos(pueblosResult.data);
@@ -277,6 +295,17 @@ export default function SessionsTab() {
                       <p className="text-sm font-medium mb-1">Último mensaje:</p>
                       <p className="text-sm text-muted-foreground line-clamp-2">
                         {session.messages[session.messages.length - 1].content}
+                      </p>
+                    </div>
+                  )}
+                  {summaries[session.id] && (
+                    <div className="mt-3 p-3 bg-indigo-50 dark:bg-indigo-950/30 rounded-lg border border-indigo-200 dark:border-indigo-800">
+                      <p className="text-xs font-semibold mb-1 flex items-center gap-1 text-indigo-700 dark:text-indigo-300">
+                        <MessageSquare className="h-3 w-3" />
+                        Último Resumen:
+                      </p>
+                      <p className="text-xs text-muted-foreground line-clamp-3">
+                        {summaries[session.id]}
                       </p>
                     </div>
                   )}

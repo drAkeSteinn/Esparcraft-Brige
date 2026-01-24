@@ -33,6 +33,18 @@ export default function RouterTab() {
   const [resumenPuebloTemplateSaved, setResumenPuebloTemplateSaved] = useState(false);
   const [resumenMundoTemplateSaved, setResumenMundoTemplateSaved] = useState(false);
 
+  // Estado para almacenar las sesiones con resúmenes del NPC seleccionado
+  const [npcSessionSummaries, setNpcSessionSummaries] = useState<any[]>([]);
+
+  // Estado para almacenar los resúmenes de NPCs del edificio seleccionado
+  const [edificioNPCSummaries, setEdificioNPCSummaries] = useState<any[]>([]);
+
+  // Estado para almacenar los resúmenes de edificios del pueblo seleccionado
+  const [puebloEdificioSummaries, setPuebloEdificioSummaries] = useState<any[]>([]);
+
+  // Estado para almacenar los resúmenes de pueblos del mundo seleccionado
+  const [mundoPuebloSummaries, setMundoPuebloSummaries] = useState<any[]>([]);
+
   // Chat trigger form
   const [chatForm, setChatForm] = useState({
     sessionType: 'new' as 'new' | 'exist',
@@ -52,7 +64,8 @@ export default function RouterTab() {
     },
     mensaje: '', // Mensaje del jugador (context por mensaje)
     templateUser: '', // Plantilla del usuario (reemplaza systemPrompt)
-    historyLimit: 10 // Número de mensajes del historial a enviar
+    historyLimit: 10, // Número de mensajes del historial a enviar
+    lastSummary: '' // Último resumen de la sesión (si existe)
   });
 
   // Resumen sesion trigger form
@@ -141,6 +154,30 @@ export default function RouterTab() {
     }
   }, [resumenSesionForm.systemPrompt]);
 
+  // Cargar resumen de sesión cuando se selecciona una sesión en Resumen Sesión
+  useEffect(() => {
+    const loadSessionSummary = async () => {
+      if (resumenSesionForm.sessionid) {
+        try {
+          const response = await fetch(`/api/sessions/${resumenSesionForm.sessionid}/summary`);
+          const result = await response.json();
+          if (result.success) {
+            setResumenSesionForm(prev => ({
+              ...prev,
+              lastSummary: result.data?.summary || ''
+            }));
+          }
+        } catch (error) {
+          console.error('Error loading session summary:', error);
+        }
+      } else {
+        // Limpiar resumen si no hay sesión seleccionada
+        setResumenSesionForm(prev => ({ ...prev, lastSummary: '' }));
+      }
+    };
+    loadSessionSummary();
+  }, [resumenSesionForm.sessionid]);
+
   useEffect(() => {
     // Cargar System Prompt de resumen NPC del localStorage
     const savedResumenNPCTemplate = localStorage.getItem('resumenNPCTemplate');
@@ -158,6 +195,50 @@ export default function RouterTab() {
     }
   }, [resumenNPCForm.systemPrompt]);
 
+  // Cargar resúmenes de sesiones del NPC automáticamente cuando se selecciona un NPC
+  useEffect(() => {
+    const loadNPCSessionSummaries = async () => {
+      if (resumenNPCForm.npcid) {
+        try {
+          const response = await fetch(`/api/npcs/${resumenNPCForm.npcid}/session-summaries`);
+          const result = await response.json();
+          if (result.success && result.data.sessions.length > 0) {
+            // Guardar las sesiones con resúmenes
+            setNpcSessionSummaries(result.data.sessions);
+            
+            // Construir string con todos los resúmenes numerados
+            const summariesText = result.data.sessions
+              .map((s: any, index: number) => 
+                `=== Sesión ${index + 1} (${s.sessionId}) ===\n${s.summary}`
+              )
+              .join('\n\n');
+            setResumenNPCForm(prev => ({
+              ...prev,
+              allSummaries: summariesText
+            }));
+          } else {
+            // Limpiar si no hay resúmenes
+            setNpcSessionSummaries([]);
+            setResumenNPCForm(prev => ({
+              ...prev,
+              allSummaries: ''
+            }));
+          }
+        } catch (error) {
+          console.error('Error loading NPC session summaries:', error);
+        }
+      } else {
+        // Limpiar si no hay NPC seleccionado
+        setNpcSessionSummaries([]);
+        setResumenNPCForm(prev => ({
+          ...prev,
+          allSummaries: ''
+        }));
+      }
+    };
+    loadNPCSessionSummaries();
+  }, [resumenNPCForm.npcid]);
+
   useEffect(() => {
     // Cargar System Prompt de resumen de edificio del localStorage
     const savedResumenEdificioTemplate = localStorage.getItem('resumenEdificioTemplate');
@@ -174,6 +255,51 @@ export default function RouterTab() {
       setResumenEdificioTemplateSaved(true);
     }
   }, [resumenEdificioForm.systemPrompt]);
+
+  // Cargar resúmenes de NPCs del edificio automáticamente cuando se selecciona un edificio
+  useEffect(() => {
+    const loadEdificioNPCSummaries = async () => {
+      if (resumenEdificioForm.edificioid) {
+        try {
+          const response = await fetch(`/api/edificios/${resumenEdificioForm.edificioid}/npc-summaries`);
+          const result = await response.json();
+          if (result.success && result.data.npcs.length > 0) {
+            // Guardar los NPCs con resúmenes
+            setEdificioNPCSummaries(result.data.npcs);
+            
+            // Construir string con todos los resúmenes numerados
+            const summariesText = result.data.npcs
+              .filter((n: any) => n.consolidatedSummary)
+              .map((n: any, index: number) =>
+                `=== NPC ${index + 1}: ${n.npcName} (ID: ${n.npcId}) ===\n${n.consolidatedSummary}`
+              )
+              .join('\n\n');
+            setResumenEdificioForm(prev => ({
+              ...prev,
+              allSummaries: summariesText
+            }));
+          } else {
+            // Limpiar si no hay resúmenes
+            setEdificioNPCSummaries([]);
+            setResumenEdificioForm(prev => ({
+              ...prev,
+              allSummaries: ''
+            }));
+          }
+        } catch (error) {
+          console.error('Error loading edificio NPC summaries:', error);
+        }
+      } else {
+        // Limpiar si no hay edificio seleccionado
+        setEdificioNPCSummaries([]);
+        setResumenEdificioForm(prev => ({
+          ...prev,
+          allSummaries: ''
+        }));
+      }
+    };
+    loadEdificioNPCSummaries();
+  }, [resumenEdificioForm.edificioid]);
 
   useEffect(() => {
     // Cargar System Prompt de resumen de pueblo del localStorage
@@ -201,6 +327,51 @@ export default function RouterTab() {
     }
   }, [resumenPuebloForm.systemPrompt]);
 
+  // Cargar resúmenes de edificios del pueblo automáticamente cuando se selecciona un pueblo
+  useEffect(() => {
+    const loadPuebloEdificioSummaries = async () => {
+      if (resumenPuebloForm.pueblid) {
+        try {
+          const response = await fetch(`/api/pueblos/${resumenPuebloForm.pueblid}/edificio-summaries`);
+          const result = await response.json();
+          if (result.success && result.data.edificios.length > 0) {
+            // Guardar los edificios con resúmenes
+            setPuebloEdificioSummaries(result.data.edificios);
+            
+            // Construir string con todos los resúmenes numerados
+            const summariesText = result.data.edificios
+              .filter((e: any) => e.consolidatedSummary)
+              .map((e: any, index: number) =>
+                `=== Edificio ${index + 1}: ${e.edificioName} (ID: ${e.edificioId}) ===\n${e.consolidatedSummary}`
+              )
+              .join('\n\n');
+            setResumenPuebloForm(prev => ({
+              ...prev,
+              allSummaries: summariesText
+            }));
+          } else {
+            // Limpiar si no hay resúmenes
+            setPuebloEdificioSummaries([]);
+            setResumenPuebloForm(prev => ({
+              ...prev,
+              allSummaries: ''
+            }));
+          }
+        } catch (error) {
+          console.error('Error loading pueblo edificio summaries:', error);
+        }
+      } else {
+        // Limpiar si no hay pueblo seleccionado
+        setPuebloEdificioSummaries([]);
+        setResumenPuebloForm(prev => ({
+          ...prev,
+          allSummaries: ''
+        }));
+      }
+    };
+    loadPuebloEdificioSummaries();
+  }, [resumenPuebloForm.pueblid]);
+
   useEffect(() => {
     // Guardar System Prompt de resumen de mundo en localStorage cuando cambie
     if (resumenMundoForm.systemPrompt) {
@@ -208,6 +379,75 @@ export default function RouterTab() {
       setResumenMundoTemplateSaved(true);
     }
   }, [resumenMundoForm.systemPrompt]);
+
+  // Cargar resúmenes de pueblos del mundo automáticamente cuando se selecciona un mundo
+  useEffect(() => {
+    const loadMundoPuebloSummaries = async () => {
+      if (resumenMundoForm.mundoid) {
+        try {
+          const response = await fetch(`/api/worlds/${resumenMundoForm.mundoid}/pueblo-summaries`);
+          const result = await response.json();
+          if (result.success && result.data.pueblos.length > 0) {
+            // Guardar los pueblos con resúmenes
+            setMundoPuebloSummaries(result.data.pueblos);
+            
+            // Construir string con todos los resúmenes numerados
+            const summariesText = result.data.pueblos
+              .filter((p: any) => p.consolidatedSummary)
+              .map((p: any, index: number) =>
+                `=== Pueblo/Nación ${index + 1}: ${p.puebloName} (ID: ${p.puebloId}) ===\n${p.consolidatedSummary}`
+              )
+              .join('\n\n');
+            setResumenMundoForm(prev => ({
+              ...prev,
+              allSummaries: summariesText
+            }));
+          } else {
+            // Limpiar si no hay resúmenes
+            setMundoPuebloSummaries([]);
+            setResumenMundoForm(prev => ({
+              ...prev,
+              allSummaries: ''
+            }));
+          }
+        } catch (error) {
+          console.error('Error loading mundo pueblo summaries:', error);
+        }
+      } else {
+        // Limpiar si no hay mundo seleccionado
+        setMundoPuebloSummaries([]);
+        setResumenMundoForm(prev => ({
+          ...prev,
+          allSummaries: ''
+        }));
+      }
+    };
+    loadMundoPuebloSummaries();
+  }, [resumenMundoForm.mundoid]);
+
+  // Cargar resumen de sesión cuando se selecciona una sesión existente
+  useEffect(() => {
+    const loadSessionSummary = async () => {
+      if (chatForm.playersessionid && chatForm.sessionType === 'exist') {
+        try {
+          const response = await fetch(`/api/sessions/${chatForm.playersessionid}/summary`);
+          const result = await response.json();
+          if (result.success) {
+            setChatForm(prev => ({
+              ...prev,
+              lastSummary: result.data?.summary || ''
+            }));
+          }
+        } catch (error) {
+          console.error('Error loading session summary:', error);
+        }
+      } else {
+        // Limpiar resumen si no hay sesión seleccionada o es nueva sesión
+        setChatForm(prev => ({ ...prev, lastSummary: '' }));
+      }
+    };
+    loadSessionSummary();
+  }, [chatForm.playersessionid, chatForm.sessionType]);
 
   const handleSaveTemplate = () => {
     localStorage.setItem('userTemplate', chatForm.templateUser);
@@ -335,6 +575,7 @@ export default function RouterTab() {
       playersessionid,
       jugador: chatForm.jugador,
       message: chatForm.mensaje, // Mensaje del jugador (message en lugar de mensaje)
+      lastSummary: chatForm.lastSummary, // Último resumen de la sesión
       context: {
         mundo: world,
         pueblo,
@@ -666,7 +907,8 @@ export default function RouterTab() {
       edificio,
       jugador: payload.jugador,
       session, // Para variable {{npc.historial}}
-      mensaje: payload.message // Para variable {{jugador.mensaje}}
+      mensaje: payload.message, // Para variable {{jugador.mensaje}}
+      lastSummary: payload.lastSummary // Para mostrar el último resumen
     };
 
     const sections: Array<{ label: string; content: string; bgColor: string }> = [];
@@ -838,6 +1080,16 @@ export default function RouterTab() {
     // 8. Historial y Último Mensaje
     let historyText = '';
 
+    // 8.0. Último Resumen (si existe)
+    if (payload.lastSummary) {
+      prompt += `Último Resumen:\n${payload.lastSummary}\n\n`;
+      sections.push({
+        label: 'Último Resumen',
+        content: `Último Resumen:\n${payload.lastSummary}`,
+        bgColor: 'bg-indigo-50 dark:bg-indigo-950'
+      });
+    }
+
     // 8.1. Chat History (historial de la sesión) - limitado por historyLimit
     const historyLimit = chatForm.historyLimit || 10;
     if (session && session.messages && session.messages.length > 0) {
@@ -916,17 +1168,7 @@ export default function RouterTab() {
       });
     }
 
-    // 2. Último Resumen (si es que lo hay)
-    if (payload.lastSummary) {
-      prompt += `Último Resumen:\n${payload.lastSummary}\n\n`;
-      sections.push({
-        label: 'Último Resumen',
-        content: `Último Resumen:\n${payload.lastSummary}`,
-        bgColor: 'bg-indigo-50 dark:bg-indigo-950'
-      });
-    }
-
-    // 3. Historial de la Sesión (mensajes completos)
+    // 2. Historial de la Sesión (mensajes completos)
     if (session && session.messages && session.messages.length > 0) {
       let chatHistoryText = 'Historial de la Sesión:\n';
       session.messages.forEach((msg: any) => {
@@ -938,6 +1180,16 @@ export default function RouterTab() {
         label: 'Historial de la Sesión',
         content: chatHistoryText,
         bgColor: 'bg-gray-50 dark:bg-gray-950'
+      });
+    }
+
+    // 3. Último Resumen (si es que lo hay)
+    if (payload.lastSummary) {
+      prompt += `Último Resumen:\n${payload.lastSummary}\n\n`;
+      sections.push({
+        label: 'Último Resumen',
+        content: `Último Resumen:\n${payload.lastSummary}`,
+        bgColor: 'bg-indigo-50 dark:bg-indigo-950'
       });
     }
 
@@ -988,54 +1240,6 @@ export default function RouterTab() {
       });
     }
 
-    // 3. Información del NPC (usando replaceKeys para variables anidadas)
-    if (npc) {
-      const npcInfoTemplate = `PERSONAJE ({{npc.name}})
-Descripción: {{npc.description}}
-Personalidad: {{npc.personality}}
-Escenario: {{npc.scenario}}`;
-
-      const npcInfoText = replaceKeys(npcInfoTemplate, keyContext);
-      prompt += npcInfoText + '\n';
-      sections.push({
-        label: 'Información del Personaje',
-        content: npcInfoText,
-        bgColor: 'bg-yellow-50 dark:bg-yellow-950'
-      });
-    }
-
-    // 4. World, Pueblo, Edificio - Contexto del entorno
-    if (world || pueblo || edificio) {
-      const contextTemplate = `CONTEXTO DEL ENTORNO
-
-CONTEXTO DEL MUNDO ({{mundo.name}})
-Estado: {{mundo.estado}}
-Rumores:
-{{mundo.rumores}}
-
-CONTEXTO DE REGIÓN
-Tipo: {{pueblo.tipo}}
-Nombre: {{pueblo.name}}
-Rumores:
-{{pueblo.rumores}}
-
-CONTEXTO DEL EDIFICIO ACTUAL
-Nombre: {{edificio.name}}
-Descripción: {{edificio.descripcion}}
-Eventos recientes:
-{{edificio.eventos}}
-POIs disponibles:
-{{edificio.poislist}}`;
-
-      const contextText = replaceKeys(contextTemplate, keyContext);
-      prompt += contextText + '\n';
-      sections.push({
-        label: 'Contexto del Entorno',
-        content: contextText,
-        bgColor: 'bg-purple-50 dark:bg-purple-950'
-      });
-    }
-
     return { text: prompt, sections };
   };
 
@@ -1081,44 +1285,7 @@ POIs disponibles:
       });
     }
 
-    // 3. Información del Edificio (usando replaceKeys para variables anidadas)
-    if (edificio) {
-      const edificioTemplate = `EDIFICIO ({{edificio.name}})
-Descripción: {{edificio.descripcion}}
-Tipo: {{edificio.type}}
-Eventos recientes:
-{{edificio.eventos}}
-POIs disponibles:
-{{edificio.poislist}}`;
-
-      const edificioInfoText = replaceKeys(edificioTemplate, keyContext);
-      prompt += edificioInfoText + '\n';
-      sections.push({
-        label: 'Información del Edificio',
-        content: edificioInfoText,
-        bgColor: 'bg-orange-50 dark:bg-orange-950'
-      });
-    }
-
-    // 4. NPCs en el Edificio (usando replaceKeys)
-    if (npcsEnEdificio.length > 0) {
-      let npcsListText = `NPCs en el edificio (${npcsEnEdificio.length}):\n`;
-      npcsEnEdificio.forEach(npc => {
-        const npcName = npc.card?.data?.name || npc.card?.name || 'Sin nombre';
-        const npcDesc = npc.card?.data?.description || npc.card?.description || '';
-        // Procesar la descripción para reemplazar variables
-        const processedDesc = npcDesc ? replaceKeys(npcDesc, { ...keyContext, npc }) : '';
-        npcsListText += `- ${npcName}${processedDesc ? `: ${processedDesc.substring(0, 100)}` : ''}\n`;
-      });
-      prompt += npcsListText + '\n';
-      sections.push({
-        label: 'NPCs en el Edificio',
-        content: npcsListText,
-        bgColor: 'bg-amber-50 dark:bg-amber-950'
-      });
-    }
-
-    // 5. Contexto del Pueblo/Mundo del Edificio
+    // 3. Contexto del Pueblo/Mundo del Edificio
     if (pueblo || mundo) {
       const contextTemplate = `CONTEXTO DE LA REGIÓN
 Tipo: {{pueblo.tipo}}
@@ -1184,43 +1351,7 @@ Rumores:
       });
     }
 
-    // 3. Información del Pueblo (usando replaceKeys para variables anidadas)
-    if (pueblo) {
-      const puebloTemplate = `PUEBLO/NACIÓN ({{pueblo.name}})
-Tipo: {{pueblo.tipo}}
-Descripción: {{pueblo.descripcion}}
-Estado: {{pueblo.estado}}
-Rumores:
-{{pueblo.rumores}}`;
-
-      const puebloInfoText = replaceKeys(puebloTemplate, keyContext);
-      prompt += puebloInfoText + '\n';
-      sections.push({
-        label: 'Información del Pueblo/Nación',
-        content: puebloInfoText,
-        bgColor: 'bg-orange-50 dark:bg-orange-950'
-      });
-    }
-
-    // 4. Edificios en el Pueblo (usando replaceKeys)
-    if (edificiosEnPueblo.length > 0) {
-      let edificiosListText = `Edificios en el pueblo/nación (${edificiosEnPueblo.length}):\n`;
-      edificiosEnPueblo.forEach(edificio => {
-        const edificioName = edificio.name || 'Sin nombre';
-        const edificioLore = edificio.lore || '';
-        // Procesar el lore para reemplazar variables
-        const processedLore = edificioLore ? replaceKeys(edificioLore, { ...keyContext, edificio }) : '';
-        edificiosListText += `- ${edificioName}${processedLore ? `: ${processedLore.substring(0, 80)}` : ''}\n`;
-      });
-      prompt += edificiosListText + '\n';
-      sections.push({
-        label: 'Edificios en el Pueblo/Nación',
-        content: edificiosListText,
-        bgColor: 'bg-amber-50 dark:bg-amber-950'
-      });
-    }
-
-    // 5. Contexto del Mundo del Pueblo
+    // 3. Contexto del Mundo del Pueblo
     if (mundo) {
       const contextTemplate = `CONTEXTO DEL MUNDO ({{mundo.name}})
 Estado: {{mundo.estado}}
@@ -1274,41 +1405,6 @@ Rumores:
         label: 'Resúmenes de los Pueblos/Naciones del Mundo',
         content: `Resúmenes de los pueblos/naciones del mundo:\n${payload.allSummaries}`,
         bgColor: 'bg-purple-50 dark:bg-purple-950'
-      });
-    }
-
-    // 3. Información del Mundo (usando replaceKeys para variables anidadas)
-    if (mundo) {
-      const mundoTemplate = `MUNDO ({{mundo.name}})
-Estado del Mundo: {{mundo.estado}}
-Rumores:
-{{mundo.rumores}}`;
-
-      const mundoInfoText = replaceKeys(mundoTemplate, keyContext);
-      prompt += mundoInfoText + '\n';
-      sections.push({
-        label: 'Información del Mundo',
-        content: mundoInfoText,
-        bgColor: 'bg-orange-50 dark:bg-orange-950'
-      });
-    }
-
-    // 4. Pueblos/Naciones en el Mundo (usando replaceKeys)
-    if (pueblosEnMundo.length > 0) {
-      let pueblosListText = `Pueblos/Naciones en el mundo (${pueblosEnMundo.length}):\n`;
-      pueblosEnMundo.forEach(pueblo => {
-        const puebloName = pueblo.name || 'Sin nombre';
-        const puebloType = pueblo.type || '';
-        const puebloEstado = pueblo.lore?.estado_pueblo || '';
-        // Procesar el estado para reemplazar variables
-        const processedEstado = puebloEstado ? replaceKeys(puebloEstado, { ...keyContext, pueblo }) : '';
-        pueblosListText += `- ${puebloName}${puebloType ? ` [${puebloType}]` : ''}${processedEstado ? `: ${processedEstado.substring(0, 60)}` : ''}\n`;
-      });
-      prompt += pueblosListText + '\n';
-      sections.push({
-        label: 'Pueblos/Naciones en el Mundo',
-        content: pueblosListText,
-        bgColor: 'bg-amber-50 dark:bg-amber-950'
       });
     }
 
@@ -2316,7 +2412,43 @@ Rumores:
 
                 <div>
                   <Label>Todos los Resúmenes del NPC</Label>
+                  {npcSessionSummaries.length > 0 ? (
+                    <div className="border rounded-lg p-4 bg-muted/50">
+                      <ScrollArea className="h-[300px] pr-4">
+                        <div className="space-y-3">
+                          {npcSessionSummaries.map((session, index) => (
+                            <div key={session.sessionId} className="border rounded-lg p-3 bg-background">
+                              <div className="flex items-start justify-between mb-2">
+                                <div className="flex items-center gap-2">
+                                  <Badge variant="secondary">Sesión {index + 1}</Badge>
+                                  <span className="text-xs text-muted-foreground">
+                                    ID: {session.sessionId}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                  <span>{session.messageCount} mensajes</span>
+                                </div>
+                              </div>
+                              <p className="text-sm text-foreground line-clamp-4">
+                                {session.summary}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      </ScrollArea>
+                    </div>
+                  ) : (
+                    <div className="border rounded-lg p-6 bg-muted/50 text-center">
+                      <p className="text-sm text-muted-foreground">
+                        {resumenNPCForm.npcid 
+                          ? "Este NPC no tiene sesiones con resúmenes generados aún."
+                          : "Selecciona un NPC para ver sus sesiones con resúmenes."
+                        }
+                      </p>
+                    </div>
+                  )}
                   <Textarea
+                    className="hidden"
                     value={resumenNPCForm.allSummaries}
                     onChange={(e) => setResumenNPCForm({ ...resumenNPCForm, allSummaries: e.target.value })}
                     placeholder="Pega aquí todos los resúmenes previos del NPC..."
@@ -2522,7 +2654,41 @@ Rumores:
 
                 <div>
                   <Label>Resúmenes de Todos los NPCs del Edificio</Label>
+                  {edificioNPCSummaries.length > 0 ? (
+                    <div className="border rounded-lg p-4 bg-muted/50">
+                      <ScrollArea className="h-[300px] pr-4">
+                        <div className="space-y-3">
+                          {edificioNPCSummaries.map((npc, index) => (
+                            <div key={npc.npcId} className="border rounded-lg p-3 bg-background">
+                              <div className="flex items-start justify-between mb-2">
+                                <div className="flex items-center gap-2">
+                                  <Badge variant="secondary">NPC {index + 1}</Badge>
+                                  <span className="text-sm font-medium">{npc.npcName}</span>
+                                </div>
+                                <span className="text-xs text-muted-foreground">
+                                  ID: {npc.npcId}
+                                </span>
+                              </div>
+                              <p className="text-sm text-foreground line-clamp-4">
+                                {npc.consolidatedSummary}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      </ScrollArea>
+                    </div>
+                  ) : (
+                    <div className="border rounded-lg p-6 bg-muted/50 text-center">
+                      <p className="text-sm text-muted-foreground">
+                        {resumenEdificioForm.edificioid
+                          ? "Este edificio no tiene NPCs con resúmenes generados aún."
+                          : "Selecciona un edificio para ver sus NPCs con resúmenes."
+                        }
+                      </p>
+                    </div>
+                  )}
                   <Textarea
+                    className="hidden"
                     value={resumenEdificioForm.allSummaries}
                     onChange={(e) => setResumenEdificioForm({ ...resumenEdificioForm, allSummaries: e.target.value })}
                     placeholder="Pega aquí los resúmenes de todos los NPCs en este edificio..."
@@ -2728,7 +2894,41 @@ Rumores:
 
                 <div>
                   <Label>Resúmenes de Todos los Edificios del Pueblo/Nación</Label>
+                  {puebloEdificioSummaries.length > 0 ? (
+                    <div className="border rounded-lg p-4 bg-muted/50">
+                      <ScrollArea className="h-[300px] pr-4">
+                        <div className="space-y-3">
+                          {puebloEdificioSummaries.map((edificio, index) => (
+                            <div key={edificio.edificioId} className="border rounded-lg p-3 bg-background">
+                              <div className="flex items-start justify-between mb-2">
+                                <div className="flex items-center gap-2">
+                                  <Badge variant="secondary">Edificio {index + 1}</Badge>
+                                  <span className="text-sm font-medium">{edificio.edificioName}</span>
+                                </div>
+                                <span className="text-xs text-muted-foreground">
+                                  ID: {edificio.edificioId}
+                                </span>
+                              </div>
+                              <p className="text-sm text-foreground line-clamp-4">
+                                {edificio.consolidatedSummary}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      </ScrollArea>
+                    </div>
+                  ) : (
+                    <div className="border rounded-lg p-6 bg-muted/50 text-center">
+                      <p className="text-sm text-muted-foreground">
+                        {resumenPuebloForm.pueblid
+                          ? "Este pueblo/nación no tiene edificios con resúmenes generados aún."
+                          : "Selecciona un pueblo/nación para ver sus edificios con resúmenes."
+                        }
+                      </p>
+                    </div>
+                  )}
                   <Textarea
+                    className="hidden"
                     value={resumenPuebloForm.allSummaries}
                     onChange={(e) => setResumenPuebloForm({ ...resumenPuebloForm, allSummaries: e.target.value })}
                     placeholder="Pega aquí los resúmenes de todos los edificios en este pueblo/nación..."
@@ -2934,7 +3134,41 @@ Rumores:
 
                 <div>
                   <Label>Resúmenes de Todos los Pueblos/Naciones del Mundo</Label>
+                  {mundoPuebloSummaries.length > 0 ? (
+                    <div className="border rounded-lg p-4 bg-muted/50">
+                      <ScrollArea className="h-[300px] pr-4">
+                        <div className="space-y-3">
+                          {mundoPuebloSummaries.map((pueblo, index) => (
+                            <div key={pueblo.puebloId} className="border rounded-lg p-3 bg-background">
+                              <div className="flex items-start justify-between mb-2">
+                                <div className="flex items-center gap-2">
+                                  <Badge variant="secondary">Pueblo/Nación {index + 1}</Badge>
+                                  <span className="text-sm font-medium">{pueblo.puebloName}</span>
+                                </div>
+                                <span className="text-xs text-muted-foreground">
+                                  ID: {pueblo.puebloId}
+                                </span>
+                              </div>
+                              <p className="text-sm text-foreground line-clamp-4">
+                                {pueblo.consolidatedSummary}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      </ScrollArea>
+                    </div>
+                  ) : (
+                    <div className="border rounded-lg p-6 bg-muted/50 text-center">
+                      <p className="text-sm text-muted-foreground">
+                        {resumenMundoForm.mundoid
+                          ? "Este mundo no tiene pueblos/naciones con resúmenes generados aún."
+                          : "Selecciona un mundo para ver sus pueblos/naciones con resúmenes."
+                        }
+                      </p>
+                    </div>
+                  )}
                   <Textarea
+                    className="hidden"
                     value={resumenMundoForm.allSummaries}
                     onChange={(e) => setResumenMundoForm({ ...resumenMundoForm, allSummaries: e.target.value })}
                     placeholder="Pega aquí los resúmenes de todos los pueblos/naciones del mundo..."

@@ -4,6 +4,9 @@ import {
   ChatTriggerPayload,
   ResumenSesionTriggerPayload,
   ResumenNPCTriggerPayload,
+  ResumenEdificioTriggerPayload,
+  ResumenPuebloTriggerPayload,
+  ResumenMundoTriggerPayload,
   NuevoLoreTriggerPayload,
   AnyTriggerPayload,
   ChatMessage
@@ -15,12 +18,18 @@ import {
   edificioManager,
   sessionManager,
   npcStateManager,
-  summaryManager
+  summaryManager,
+  edificioStateManager,
+  puebloStateManager,
+  worldStateManager
 } from './fileManager';
 import {
   buildChatMessages,
   buildSessionSummaryPrompt,
   buildNPCSummaryPrompt,
+  buildEdificioSummaryPrompt,
+  buildPuebloSummaryPrompt,
+  buildWorldSummaryPrompt,
   buildNuevoLorePrompt
 } from './promptBuilder';
 import { EmbeddingTriggers } from './embedding-triggers';
@@ -170,6 +179,9 @@ export async function handleResumenSesionTrigger(payload: ResumenSesionTriggerPa
   // Save summary
   summaryManager.saveSummary(session.id, summary);
 
+  // Clear messages from session after summary is generated
+  sessionManager.clearMessages(session.id);
+
   return {
     summary
   };
@@ -210,6 +222,156 @@ export async function handleResumenNPCTrigger(payload: ResumenNPCTriggerPayload)
   };
 
   npcStateManager.saveMemory(npcid, memory);
+
+  return {
+    success: true,
+    memory
+  };
+}
+
+// Resumen edificio trigger handler
+export async function handleResumenEdificioTrigger(payload: ResumenEdificioTriggerPayload): Promise<{ success: boolean; memory: Record<string, any> }> {
+  const { edificioid } = payload;
+
+  // Get edificio
+  const edificio = edificioManager.getById(edificioid);
+  if (!edificio) {
+    throw new Error(`Edificio with id ${edificioid} not found`);
+  }
+
+  // Get all NPCs for this edificio
+  const npcs = npcManager.getByEdificioId(edificioid);
+
+  // Get consolidated summaries from NPCs
+  const npcSummaries = npcs
+    .map(npc => {
+      const memory = npcStateManager.getMemory(npc.id);
+      return {
+        npcId: npc.id,
+        npcName: npc.card?.data?.name || npc.card?.name || 'Unknown',
+        consolidatedSummary: memory?.consolidatedSummary || ''
+      };
+    })
+    .filter(n => n.consolidatedSummary !== '');
+
+  // Get existing memory
+  const existingMemory = edificioStateManager.getMemory(edificioid) || {};
+
+  // Build prompt
+  const messages = buildEdificioSummaryPrompt(edificio, npcSummaries, existingMemory);
+
+  // Call LLM
+  const response = await callLLM(messages);
+
+  // Parse response and save memory
+  const memory: Record<string, any> = {
+    consolidatedSummary: response,
+    lastUpdated: new Date().toISOString(),
+    npcCount: npcs.length,
+    summaryCount: npcSummaries.length
+  };
+
+  edificioStateManager.saveMemory(edificioid, memory);
+
+  return {
+    success: true,
+    memory
+  };
+}
+
+// Resumen pueblo trigger handler
+export async function handleResumenPuebloTrigger(payload: ResumenPuebloTriggerPayload): Promise<{ success: boolean; memory: Record<string, any> }> {
+  const { pueblid } = payload;
+
+  // Get pueblo
+  const pueblo = puebloManager.getById(pueblid);
+  if (!pueblo) {
+    throw new Error(`Pueblo with id ${pueblid} not found`);
+  }
+
+  // Get all edificios for this pueblo
+  const edificios = edificioManager.getByPuebloId(pueblid);
+
+  // Get consolidated summaries from edificios
+  const edificioSummaries = edificios
+    .map(edificio => {
+      const memory = edificioStateManager.getMemory(edificio.id);
+      return {
+        edificioId: edificio.id,
+        edificioName: edificio.name,
+        consolidatedSummary: memory?.consolidatedSummary || ''
+      };
+    })
+    .filter(e => e.consolidatedSummary !== '');
+
+  // Get existing memory
+  const existingMemory = puebloStateManager.getMemory(pueblid) || {};
+
+  // Build prompt
+  const messages = buildPuebloSummaryPrompt(pueblo, edificioSummaries, existingMemory);
+
+  // Call LLM
+  const response = await callLLM(messages);
+
+  // Parse response and save memory
+  const memory: Record<string, any> = {
+    consolidatedSummary: response,
+    lastUpdated: new Date().toISOString(),
+    edificioCount: edificios.length,
+    summaryCount: edificioSummaries.length
+  };
+
+  puebloStateManager.saveMemory(pueblid, memory);
+
+  return {
+    success: true,
+    memory
+  };
+}
+
+// Resumen mundo trigger handler
+export async function handleResumenMundoTrigger(payload: ResumenMundoTriggerPayload): Promise<{ success: boolean; memory: Record<string, any> }> {
+  const { mundoid } = payload;
+
+  // Get world
+  const world = worldManager.getById(mundoid);
+  if (!world) {
+    throw new Error(`World with id ${mundoid} not found`);
+  }
+
+  // Get all pueblos for this world
+  const pueblos = puebloManager.getByWorldId(mundoid);
+
+  // Get consolidated summaries from pueblos
+  const puebloSummaries = pueblos
+    .map(pueblo => {
+      const memory = puebloStateManager.getMemory(pueblo.id);
+      return {
+        puebloId: pueblo.id,
+        puebloName: pueblo.name,
+        consolidatedSummary: memory?.consolidatedSummary || ''
+      };
+    })
+    .filter(p => p.consolidatedSummary !== '');
+
+  // Get existing memory
+  const existingMemory = worldStateManager.getMemory(mundoid) || {};
+
+  // Build prompt
+  const messages = buildWorldSummaryPrompt(world, puebloSummaries, existingMemory);
+
+  // Call LLM
+  const response = await callLLM(messages);
+
+  // Parse response and save memory
+  const memory: Record<string, any> = {
+    consolidatedSummary: response,
+    lastUpdated: new Date().toISOString(),
+    puebloCount: pueblos.length,
+    summaryCount: puebloSummaries.length
+  };
+
+  worldStateManager.saveMemory(mundoid, memory);
 
   return {
     success: true,
@@ -297,6 +459,12 @@ export async function handleTrigger(payload: AnyTriggerPayload): Promise<any> {
       return handleResumenSesionTrigger(payload as ResumenSesionTriggerPayload);
     case 'resumen_npc':
       return handleResumenNPCTrigger(payload as ResumenNPCTriggerPayload);
+    case 'resumen_edificio':
+      return handleResumenEdificioTrigger(payload as ResumenEdificioTriggerPayload);
+    case 'resumen_pueblo':
+      return handleResumenPuebloTrigger(payload as ResumenPuebloTriggerPayload);
+    case 'resumen_mundo':
+      return handleResumenMundoTrigger(payload as ResumenMundoTriggerPayload);
     case 'nuevo_lore':
       return handleNuevoLoreTrigger(payload as NuevoLoreTriggerPayload);
     default:
@@ -394,6 +562,87 @@ export async function previewTriggerPrompt(payload: AnyTriggerPayload): Promise<
         loreType: lorePayload.loreType,
         context: lorePayload.context
       });
+
+      return {
+        systemPrompt: messages[0]?.content || '',
+        messages,
+        estimatedTokens: 0
+      };
+    }
+
+    case 'resumen_edificio': {
+      const edificioPayload = payload as ResumenEdificioTriggerPayload;
+      const edificio = edificioManager.getById(edificioPayload.edificioid);
+      if (!edificio) throw new Error('Edificio not found');
+
+      const npcs = npcManager.getByEdificioId(edificioPayload.edificioid);
+      const npcSummaries = npcs
+        .map(npc => {
+          const memory = npcStateManager.getMemory(npc.id);
+          return {
+            npcId: npc.id,
+            npcName: npc.card?.data?.name || npc.card?.name || 'Unknown',
+            consolidatedSummary: memory?.consolidatedSummary || ''
+          };
+        })
+        .filter(n => n.consolidatedSummary !== '');
+      const existingMemory = edificioStateManager.getMemory(edificioPayload.edificioid);
+
+      const messages = buildEdificioSummaryPrompt(edificio, npcSummaries, existingMemory);
+
+      return {
+        systemPrompt: messages[0]?.content || '',
+        messages,
+        estimatedTokens: 0
+      };
+    }
+
+    case 'resumen_pueblo': {
+      const puebloPayload = payload as ResumenPuebloTriggerPayload;
+      const pueblo = puebloManager.getById(puebloPayload.pueblid);
+      if (!pueblo) throw new Error('Pueblo not found');
+
+      const edificios = edificioManager.getByPuebloId(puebloPayload.pueblid);
+      const edificioSummaries = edificios
+        .map(edificio => {
+          const memory = edificioStateManager.getMemory(edificio.id);
+          return {
+            edificioId: edificio.id,
+            edificioName: edificio.name,
+            consolidatedSummary: memory?.consolidatedSummary || ''
+          };
+        })
+        .filter(e => e.consolidatedSummary !== '');
+      const existingMemory = puebloStateManager.getMemory(puebloPayload.pueblid);
+
+      const messages = buildPuebloSummaryPrompt(pueblo, edificioSummaries, existingMemory);
+
+      return {
+        systemPrompt: messages[0]?.content || '',
+        messages,
+        estimatedTokens: 0
+      };
+    }
+
+    case 'resumen_mundo': {
+      const mundoPayload = payload as ResumenMundoTriggerPayload;
+      const world = worldManager.getById(mundoPayload.mundoid);
+      if (!world) throw new Error('World not found');
+
+      const pueblos = puebloManager.getByWorldId(mundoPayload.mundoid);
+      const puebloSummaries = pueblos
+        .map(pueblo => {
+          const memory = puebloStateManager.getMemory(pueblo.id);
+          return {
+            puebloId: pueblo.id,
+            puebloName: pueblo.name,
+            consolidatedSummary: memory?.consolidatedSummary || ''
+          };
+        })
+        .filter(p => p.consolidatedSummary !== '');
+      const existingMemory = worldStateManager.getMemory(mundoPayload.mundoid);
+
+      const messages = buildWorldSummaryPrompt(world, puebloSummaries, existingMemory);
 
       return {
         systemPrompt: messages[0]?.content || '',

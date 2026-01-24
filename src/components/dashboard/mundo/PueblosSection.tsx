@@ -1,38 +1,38 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, MapPin, Building2, RefreshCw } from 'lucide-react';
+import { Plus, Edit2, Trash2, MapPin } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Badge } from '@/components/ui/badge';
-import { Pueblo, World, Edificio, PlaceType, PointOfInterest } from '@/lib/types';
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
+import { Pueblo, World, Edificio } from '@/lib/types';
 import { toast } from '@/hooks/use-toast';
-import * as Icons from 'lucide-react';
 
-// Componente dinámico para renderizar iconos
-function IconComponent({ name, size = 12, className = '' }: { name: string; size?: number; className?: string }) {
-  const Icon = (Icons as any)[name] || Icons.MapPin;
-  return <Icon size={size} className={className} />;
+interface FormData {
+  worldId: string;
+  name: string;
+  type: 'pueblo' | 'nacion';
+  description: string;
+  estado_pueblo: string;
+  rumores: string;
 }
 
 export default function PueblosSection() {
   const [pueblos, setPueblos] = useState<Pueblo[]>([]);
   const [worlds, setWorlds] = useState<World[]>([]);
   const [edificios, setEdificios] = useState<Edificio[]>([]);
-  const [placeTypes, setPlaceTypes] = useState<PlaceType[]>([]);
+  const [puebloMemories, setPuebloMemories] = useState<Record<string, any>>({});
   const [loading, setLoading] = useState(true);
-  const [updatingAreas, setUpdatingAreas] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingPueblo, setEditingPueblo] = useState<Pueblo | null>(null);
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<FormData>({
     worldId: '',
     name: '',
-    type: 'pueblo' as 'pueblo' | 'nacion',
+    type: 'pueblo',
     description: '',
     estado_pueblo: '',
     rumores: ''
@@ -45,21 +45,38 @@ export default function PueblosSection() {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [pueblosRes, worldsRes, edificiosRes, placeTypesRes] = await Promise.all([
+      const [pueblosRes, worldsRes, edificiosRes] = await Promise.all([
         fetch('/api/pueblos'),
         fetch('/api/worlds'),
-        fetch('/api/edificios'),
-        fetch('/api/place-types')
+        fetch('/api/edificios')
       ]);
+
       const pueblosResult = await pueblosRes.json();
       const worldsResult = await worldsRes.json();
       const edificiosResult = await edificiosRes.json();
-      const placeTypesResult = await placeTypesRes.json();
 
       if (pueblosResult.success) setPueblos(pueblosResult.data);
       if (worldsResult.success) setWorlds(worldsResult.data);
       if (edificiosResult.success) setEdificios(edificiosResult.data);
-      if (placeTypesResult.success) setPlaceTypes(placeTypesResult.data);
+
+      // Cargar memorias de pueblos en paralelo
+      const memoriaPromises = pueblosResult.data.map(pueblo => 
+        fetch(`/api/pueblos/${pueblo.id}/memory`)
+      );
+
+      const memoriaResponses = await Promise.all(memoriaPromises);
+      const memories: Record<string, any> = {};
+      memoriaResponses.forEach((response, index) => {
+        if (response.ok) {
+          const result = response.json();
+          if (result.success && result.data.memory) {
+            memories[pueblosResult.data[index].id] = result.data.memory;
+          }
+        }
+      });
+
+      setPuebloMemories(memories);
+
     } catch (error) {
       console.error('Error fetching data:', error);
       toast({
@@ -72,20 +89,18 @@ export default function PueblosSection() {
     }
   };
 
-  const handleCreatePueblo = () => {
-    setEditingPueblo(null);
-    setFormData({ worldId: '', name: '', type: 'pueblo', description: '', estado_pueblo: '', rumores: '' });
-    setDialogOpen(true);
-  };
-
-  const handleCreateNacion = () => {
-    setEditingPueblo(null);
-    setFormData({ worldId: '', name: '', type: 'nacion', description: '', estado_pueblo: '', rumores: '' });
-    setDialogOpen(true);
+  const handleCreate = () => {
+    setFormData({
+      worldId: '',
+      name: '',
+      type: 'pueblo' as 'pueblo',
+      description: '',
+      estado_pueblo: '',
+      rumores: []
+    });
   };
 
   const handleEdit = (pueblo: Pueblo) => {
-    setEditingPueblo(pueblo);
     setFormData({
       worldId: pueblo.worldId,
       name: pueblo.name,
@@ -98,10 +113,7 @@ export default function PueblosSection() {
   };
 
   const handleDelete = async (id: string) => {
-    const pueblo = pueblos.find(p => p.id === id);
-    const tipo = pueblo?.type === 'nacion' ? 'nación' : 'pueblo';
-
-    if (!confirm(`¿Estás seguro de que deseas eliminar este ${tipo}?`)) return;
+    if (!confirm('¿Estás seguro de que deseas eliminar esta región?')) return;
 
     try {
       const response = await fetch(`/api/pueblos/${id}`, {
@@ -112,7 +124,7 @@ export default function PueblosSection() {
       if (result.success) {
         toast({
           title: 'Éxito',
-          description: `${tipo.charAt(0).toUpperCase() + tipo.slice(1)} eliminado correctamente`
+          description: 'Región eliminada correctamente'
         });
         fetchData();
       }
@@ -120,40 +132,9 @@ export default function PueblosSection() {
       console.error('Error deleting pueblo:', error);
       toast({
         title: 'Error',
-        description: `No se pudo eliminar el ${tipo}`,
+        description: 'No se pudo eliminar la región',
         variant: 'destructive'
       });
-    }
-  };
-
-  const handleUpdateAllAreas = async () => {
-    try {
-      setUpdatingAreas(true);
-      const response = await fetch('/api/boundingBox');
-      const result = await response.json();
-
-      if (result.success) {
-        toast({
-          title: 'Éxito',
-          description: result.message
-        });
-        fetchData();
-      } else {
-        toast({
-          title: 'Error',
-          description: result.message || 'No se pudieron actualizar las áreas',
-          variant: 'destructive'
-        });
-      }
-    } catch (error) {
-      console.error('Error updating areas:', error);
-      toast({
-        title: 'Error',
-        description: 'No se pudieron actualizar las áreas',
-        variant: 'destructive'
-      });
-    } finally {
-      setUpdatingAreas(false);
     }
   };
 
@@ -170,7 +151,7 @@ export default function PueblosSection() {
         }
       };
 
-      const url = editingPueblo ? `/api/pueblos/${editingPueblo.id}` : '/api/pueblos';
+      const url = editingPueblo ? `/api/pueblos/${editingPueblo.id}` : '/api/pificios';
       const method = editingPueblo ? 'PUT' : 'POST';
 
       const response = await fetch(url, {
@@ -182,10 +163,9 @@ export default function PueblosSection() {
       const result = await response.json();
 
       if (result.success) {
-        const tipo = formData.type === 'nacion' ? 'Nación' : 'Pueblo';
         toast({
           title: 'Éxito',
-          description: editingPueblo ? `${tipo} actualizada` : `${tipo} creada`
+          description: editingPueblo ? 'Región actualizada' : 'Región creada'
         });
         setDialogOpen(false);
         fetchData();
@@ -203,154 +183,188 @@ export default function PueblosSection() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-96">
-        <p className="text-muted-foreground">Cargando pueblos y naciones...</p>
+        <p className="text-muted-foreground">Cargando regiones...</p>
       </div>
     );
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h3 className="text-xl font-bold">Pueblos/Naciones</h3>
-          <p className="text-sm text-muted-foreground">Gestiona las regiones del mundo</p>
-        </div>
-        <div className="flex gap-2">
-          <Button onClick={handleUpdateAllAreas} variant="outline" disabled={updatingAreas}>
-            <RefreshCw className={`h-4 w-4 mr-2 ${updatingAreas ? 'animate-spin' : ''}`} />
-            {updatingAreas ? 'Actualizando...' : 'Actualizar Áreas'}
-          </Button>
-          <Button onClick={handleCreatePueblo}>
-            <MapPin className="h-4 w-4 mr-2" />
-            Crear Pueblo
-          </Button>
-          <Button onClick={handleCreateNacion} variant="secondary">
-            <Building2 className="h-4 w-4 mr-2" />
-            Crear Nación
+    <div>
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-2xl font-bold">Pueblos/Naciones</h2>
+            <p className="text-sm text-muted-foreground">Gestiona las regiones del mundo, sus edificios y resúmenes consolidados</p>
+          </div>
+          <Button onClick={handleCreate}>
+            <Plus className="h-4 w-4 mr-2" />
+            Crear Región
           </Button>
         </div>
-      </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {pueblos.map((pueblo) => {
-          const world = worlds.find(w => w.id === pueblo.worldId);
-          const isNacion = pueblo.type === 'nacion';
-          const tipoLabel = isNacion ? 'Nación' : 'Pueblo';
-          const tipoColor = isNacion ? 'bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300' : 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300';
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {pueblos.map((pueblo) => {
+            const world = worlds.find(w => w.id === pueblo.worldId);
+            const edificiosEnPueblo = edificios.filter(e => e.puebloId === pueblo.id);
 
-          return (
-            <Card key={pueblo.id}>
-              <CardHeader>
-                <CardTitle className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    {isNacion ? <Building2 className="h-4 w-4" /> : <MapPin className="h-4 w-4" />}
+            return (
+              <Card key={pueblo.id}>
+                <CardHeader>
+                  <CardTitle className="flex items-center justify-between">
                     {pueblo.name}
-                  </div>
-                  <div className="flex gap-2">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleEdit(pueblo)}
-                    >
-                      <Edit2 className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleDelete(pueblo.id)}
-                    >
-                      <Trash2 className="h-4 w-4 text-destructive" />
-                    </Button>
-                  </div>
-                </CardTitle>
-                <CardDescription className="flex items-center gap-2">
-                  {world?.name || 'Mundo desconocido'} • ID: {pueblo.id}
-                  <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${tipoColor}`}>
-                    {tipoLabel}
-                  </span>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleEdit(pueblo)}
+                      >
+                        <Edit2 className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleDelete(pueblo.id)}
+                      >
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
+                    </div>
+                  </CardTitle>
+                </CardHeader>
+                <CardDescription>
+                  {world?.name || 'Mundo desconocido'} • {pueblo.id}
                 </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2">
-                  {pueblo.description && (
-                    <div>
-                      <p className="text-sm font-medium">Descripción:</p>
-                      <p className="text-sm text-muted-foreground">{pueblo.description}</p>
+                <CardContent>
+                  <div className="space-y-3">
+                    <div className="text-sm font-medium">Descripción:</div>
+                    <div className="text-sm text-muted-foreground line-clamp-2">
+                      {pueblo.description || 'Sin descripción'}
                     </div>
-                  )}
-                  <div>
-                    <p className="text-sm font-medium">
-                      Estado {isNacion ? 'de la Nación' : 'del Pueblo'}:
-                    </p>
-                    <p className="text-sm text-muted-foreground">{pueblo.lore.estado_pueblo}</p>
-                  </div>
-                  {pueblo.lore.rumores.length > 0 && (
-                    <div>
-                      <p className="text-sm font-medium">Rumores:</p>
-                      <ul className="text-sm text-muted-foreground list-disc list-inside">
-                        {pueblo.lore.rumores.slice(0, 3).map((rumor, i) => (
-                          <li key={i}>{rumor}</li>
-                        ))}
-                        {pueblo.lore.rumores.length > 3 && (
-                          <li className="text-xs">...y {pueblo.lore.rumores.length - 3} más</li>
-                        )}
-                      </ul>
-                    </div>
-                  )}
-                  {(() => {
-                    const edificiosEnPueblo = edificios.filter(e => e.puebloId === pueblo.id);
-                    return (
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between">
-                          <p className="text-sm font-medium">Edificaciones en esta región:</p>
-                          <span className="text-xs text-muted-foreground">{edificiosEnPueblo.length} edificios</span>
-                        </div>
-                        {pueblo.area ? (
-                          <div className="text-xs bg-muted/50 p-2 rounded">
-                            <p className="font-medium text-primary mb-1">Área calculada:</p>
-                            <p>X: {pueblo.area.start.x} → {pueblo.area.end.x}</p>
-                            <p>Z: {pueblo.area.start.z} → {pueblo.area.end.z}</p>
-                            <p>Dimensiones: {Math.abs(pueblo.area.end.x - pueblo.area.start.x)} × {Math.abs(pueblo.area.end.z - pueblo.area.start.z)}</p>
-                          </div>
-                        ) : (
-                          <p className="text-xs text-muted-foreground">Sin área calculada (sin edificaciones)</p>
-                        )}
+
+                    {pueblo.lore.rumores.length > 0 && (
+                      <div>
+                        <p className="text-sm font-medium">Rumores:</p>
+                        <ul className="text-sm text-muted-foreground list-disc list-inside">
+                          {pueblo.lore.rumores.map((rumor, i) => (
+                            <li key={i}>{rumor}</li>
+                          ))}
+                        </ul>
                       </div>
-                    );
-                  })()}
-                </div>
-              </CardContent>
-            </Card>
-          );
-        })}
+                    )}
+
+                    <div className="mt-3">
+                      <p className="text-sm font-medium">Estado:</p>
+                      <div className="text-sm text-muted-foreground">
+                        {pueblo.lore.estado_pueblo || 'Sin estado'}
+                      </div>
+                    </div>
+
+                    {edificiosEnPueblo.length > 0 && (
+                      <div>
+                        <div className="border-t pt-3">
+                          <div className="flex items-center justify-between mb-2">
+                            <p className="text-sm font-medium">Edificaciones en esta región:</p>
+                            <span className="text-xs text-muted-foreground">({edificiosEnPueblo.length} edificios)</span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <MapPin className="h-3 w-3 text-blue-500" />
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                        {edificiosEnPueblo.map((edificio) => {
+                          const edificioMemory = puebloMemories[edificio.id];
+                          return (
+                            <div key={edificio.id} className="border rounded p-3">
+                              <div className="flex items-start justify-between">
+                                <span className="text-sm font-medium">{edificio.name}</span>
+                                <span className="text-xs text-muted-foreground">ID: {edificio.id}</span>
+                                <span className="text-xs text-muted-foreground">{edificios.length} NPCs</span>
+                              </div>
+                              {edificioMemory?.consolidatedSummary && (
+                                <div className="mt-2 p-3 rounded-lg bg-indigo-50 dark:bg-indigo-950 border border-indigo-200 dark:border-indigo-800">
+                                  <p className="text-xs font-semibold text-indigo-900 dark:text-indigo-100 mb-1">
+                                    Resumen General
+                                  </p>
+                                  <p className="text-sm text-indigo-800 dark:text-indigo-200 line-clamp-3">
+                                    {edificioMemory.consolidatedSummary}
+                                  </p>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                        </div>
+                      </div>
+                    )}
+
+                    {puebloMemories[pueblo.id]?.consolidatedSummary && (
+                      <div className="mt-3 p-3 rounded-lg bg-indigo-50 dark:bg-indigo-950 border border-indigo-200 dark:border-indigo-800">
+                        <p className="text-xs font-semibold text-indigo-900 dark:text-indigo-100 mb-1">
+                          Último Resumen General
+                        </p>
+                        <p className="text-sm text-indigo-800 dark:text-indigo-200 line-clamp-3">
+                          {puebloMemories[pueblo.id].consolidatedSummary}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
       </div>
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>
-              {editingPueblo
-                ? `Editar ${formData.type === 'nacion' ? 'Nación' : 'Pueblo'}`
-                : `Crear Nuevo ${formData.type === 'nacion' ? 'Nación' : 'Pueblo'}`
-              }
-            </DialogTitle>
-            <DialogDescription>
-              {editingPueblo
-                ? `Actualiza la información de la ${formData.type === 'nacion' ? 'nación' : 'región'}`
-                : `Completa la información del nuevo ${formData.type === 'nacion' ? 'nación' : 'pueblo'}`
-              }
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
+    <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>
+            {editingPueblo
+              ? `Editar ${formData.type === 'nacion' ? 'Nación' : 'Pueblo'}`
+              : `Crear Nuevo ${formData.type === 'nacion' ? 'Nación' : 'Pueblo'}`
+            }
+          </DialogTitle>
+          <DialogDescription>
+            {editingPueblo ? 'Edita la información de la región' : 'Completa la información de la nueva región'}
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4">
             <div>
-              <Label htmlFor="type">Tipo de Región</Label>
+              <Label htmlFor="worldId">Mundo *</Label>
               <Select
-                value={formData.type}
-                onValueChange={(value: 'pueblo' | 'nacion') => setFormData({ ...formData, type: value })}
+                value={formData.worldId}
+                onValueChange={(value) => setFormData({ ...formData, worldId: value, puebloId: '', type: 'pueblo' })}
                 disabled={!!editingPueblo}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Selecciona el tipo de región" />
+                  <SelectValue placeholder="Selecciona un mundo" />
+                </SelectTrigger>
+                <SelectContent>
+                  {worlds.map((world) => (
+                    <SelectItem key={world.id} value={world.id}>{world.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <Label htmlFor="name">Nombre *</Label>
+              <Input
+                id="name"
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                placeholder="Nombre de la región"
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="type">Tipo *</Label>
+              <Select
+                value={formData.type}
+                onValueChange={(value) => setFormData({ ...formData, type: value })}
+                disabled={!!editingPueblo}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecciona el tipo" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="pueblo">Pueblo</SelectItem>
@@ -358,79 +372,51 @@ export default function PueblosSection() {
                 </SelectContent>
               </Select>
             </div>
-            <div>
-              <Label htmlFor="worldId">Mundo</Label>
-              <Select
-                value={formData.worldId}
-                onValueChange={(value) => setFormData({ ...formData, worldId: value, puebloId: '' })}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecciona un mundo" />
-                </SelectTrigger>
-                <SelectContent>
-                  {worlds.map((world) => (
-                    <SelectItem key={world.id} value={world.id}>
-                      {world.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label htmlFor="name">Nombre</Label>
-              <Input
-                id="name"
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                placeholder={formData.type === 'nacion' ? "Ej: Imperio del Norte" : "Ej: Meslajho"}
-              />
-            </div>
+
             <div>
               <Label htmlFor="description">Descripción</Label>
               <Textarea
                 id="description"
                 value={formData.description}
                 onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                placeholder={
-                  formData.type === 'nacion'
-                    ? "Describe qué tipo de nación es (ej: una monarquía, una república, un imperio, etc.)"
-                    : "Describe qué tipo de pueblo es (ej: un pueblo pesquero, una ciudad comercial, un asentamiento agrícola, etc.)"
-                }
+                placeholder="Descripción de la región"
                 rows={3}
               />
             </div>
+
             <div>
-              <Label htmlFor="estado">
-                Estado {formData.type === 'nacion' ? 'de la Nación' : 'del Pueblo'}
-              </Label>
+              <Label htmlFor="estado_pueblo">Estado</Label>
               <Textarea
-                id="estado"
+                id="estado_pueblo"
                 value={formData.estado_pueblo}
                 onChange={(e) => setFormData({ ...formData, estado_pueblo: e.target.value })}
-                placeholder={
-                  formData.type === 'nacion'
-                    ? "Describe el estado actual de la nación"
-                    : "Describe el estado actual del pueblo"
-                }
+                placeholder="Estado de la región (ej: Prospero, En guerra, en desarrollo...)"
+                rows={3}
               />
             </div>
+
             <div>
               <Label htmlFor="rumores">Rumores (uno por línea)</Label>
               <Textarea
                 id="rumores"
                 value={formData.rumores}
                 onChange={(e) => setFormData({ ...formData, rumores: e.target.value })}
-                placeholder="Cada rumor en una línea nueva"
+                placeholder="Rumores de la región (uno por línea)"
+                rows={5}
               />
             </div>
           </div>
+
           <DialogFooter>
-            <Button onClick={handleSubmit}>
-              {editingPueblo ? 'Actualizar' : 'Crear'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </div>
+              <Button variant="outline" onClick={() => setDialogOpen(false)}>
+                Cancelar
+              </Button>
+              <Button onClick={handleSubmit}>
+                {editingPueblo ? 'Actualizar' : 'Crear'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+  </div>
   );
 }

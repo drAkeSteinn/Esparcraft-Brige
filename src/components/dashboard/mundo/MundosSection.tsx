@@ -14,6 +14,7 @@ import { toast } from '@/hooks/use-toast';
 export default function MundosSection() {
   const [worlds, setWorlds] = useState<World[]>([]);
   const [pueblos, setPueblos] = useState<Pueblo[]>([]);
+  const [worldMemories, setWorldMemories] = useState<Record<string, any>>({});
   const [loading, setLoading] = useState(true);
   const [updatingAreas, setUpdatingAreas] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -39,6 +40,24 @@ export default function MundosSection() {
       const pueblosResult = await pueblosRes.json();
       if (worldsResult.success) setWorlds(worldsResult.data);
       if (pueblosResult.success) setPueblos(pueblosResult.data);
+
+      // Cargar memorias de mundos en paralelo
+      const memoriaPromises = worldsResult.data.map(world =>
+        fetch(`/api/worlds/${world.id}/memory`)
+      );
+
+      const memoriaResponses = await Promise.all(memoriaPromises);
+      const memories: Record<string, any> = {};
+      memoriaResponses.forEach((response, index) => {
+        if (response.ok) {
+          const result = response.json();
+          if (result.success && result.data.memory) {
+            memories[worldsResult.data[index].id] = result.data.memory;
+          }
+        }
+      });
+
+      setWorldMemories(memories);
     } catch (error) {
       console.error('Error fetching data:', error);
       toast({
@@ -277,6 +296,17 @@ export default function MundosSection() {
                   }
                   return null;
                 })()}
+
+                {worldMemories[world.id]?.consolidatedSummary && (
+                  <div className="mt-3 p-3 rounded-lg bg-indigo-50 dark:bg-indigo-950 border border-indigo-200 dark:border-indigo-800">
+                    <p className="text-xs font-semibold text-indigo-900 dark:text-indigo-100 mb-1">
+                      Último Resumen General
+                    </p>
+                    <p className="text-sm text-indigo-800 dark:text-indigo-200 line-clamp-3">
+                      {worldMemories[world.id].consolidatedSummary}
+                    </p>
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>

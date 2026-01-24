@@ -161,7 +161,7 @@ export interface Session {
   summary?: string;
 }
 
-export type TriggerMode = 'chat' | 'resumen_sesion' | 'resumen_npc' | 'nuevo_lore';
+export type TriggerMode = 'chat' | 'resumen_sesion' | 'resumen_npc' | 'resumen_edificio' | 'resumen_pueblo' | 'resumen_mundo' | 'nuevo_lore';
 
 export interface TriggerPayload {
   mode: TriggerMode;
@@ -197,6 +197,21 @@ export interface ResumenNPCTriggerPayload extends TriggerPayload {
   npcid: string;
 }
 
+export interface ResumenEdificioTriggerPayload extends TriggerPayload {
+  mode: 'resumen_edificio';
+  edificioid: string;
+}
+
+export interface ResumenPuebloTriggerPayload extends TriggerPayload {
+  mode: 'resumen_pueblo';
+  pueblid: string;
+}
+
+export interface ResumenMundoTriggerPayload extends TriggerPayload {
+  mode: 'resumen_mundo';
+  mundoid: string;
+}
+
 export interface NuevoLoreTriggerPayload extends TriggerPayload {
   mode: 'nuevo_lore';
   scope: 'mundo' | 'pueblo';
@@ -209,6 +224,9 @@ export type AnyTriggerPayload =
   | ChatTriggerPayload
   | ResumenSesionTriggerPayload
   | ResumenNPCTriggerPayload
+  | ResumenEdificioTriggerPayload
+  | ResumenPuebloTriggerPayload
+  | ResumenMundoTriggerPayload
   | NuevoLoreTriggerPayload;
 
 export interface PromptBuildContext {
