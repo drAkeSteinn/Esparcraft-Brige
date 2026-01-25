@@ -44,7 +44,7 @@ export default function SettingsTab() {
 
       {/* Connection Status Overview */}
       <ConnectionStatus key={`status-${refreshKey}`} />
-
+      
       <Tabs defaultValue="postgres" className="w-full">
         <TabsList className="grid w-full grid-cols-2 md:grid-cols-4">
           <TabsTrigger value="postgres" className="flex items-center gap-2">

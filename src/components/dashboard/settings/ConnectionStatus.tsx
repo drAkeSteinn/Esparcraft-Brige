@@ -9,8 +9,10 @@ import { Button } from '@/components/ui/button';
 interface ConnectionStatus {
   postgres?: boolean;
   embeddings?: {
+    provider?: 'textgen' | 'ollama';
     db: boolean;
     textGen: boolean;
+    ollama: boolean;
   };
   llm?: boolean;
 }
@@ -48,7 +50,6 @@ export default function ConnectionStatus() {
   useEffect(() => {
     checkConnections();
 
-    // Actualizar cada 30 segundos
     const interval = setInterval(checkConnections, 30000);
     return () => clearInterval(interval);
   }, []);
@@ -71,6 +72,11 @@ export default function ConnectionStatus() {
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-semibold">Estado de Conexiones</h3>
           <div className="flex items-center gap-4">
+            {connections?.embeddings?.provider && (
+              <Badge variant="outline">
+                Embeddings: {connections.embeddings.provider === 'ollama' ? 'Ollama' : 'Text Gen WebUI'}
+              </Badge>
+            )}
             {lastChecked && (
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Clock className="h-3 w-3" />
@@ -117,24 +123,32 @@ export default function ConnectionStatus() {
             </div>
           </div>
 
-          {/* Text Generation WebUI */}
+          {/* Text Generation WebUI / Ollama */}
           <div className="flex items-start gap-3 p-4 bg-muted rounded-lg">
             <div className="flex-shrink-0 mt-1">
               {loading ? (
                 <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
               ) : (
-                getStatusIcon(connections?.embeddings?.textGen)
+                getStatusIcon(connections?.embeddings?.provider === 'ollama'
+                  ? connections?.embeddings?.ollama
+                  : connections?.embeddings?.textGen)
               )}
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 mb-1">
                 <Brain className="h-4 w-4 text-muted-foreground" />
-                <span className="font-medium text-sm">Text Gen WebUI</span>
+                <span className="font-medium text-sm">
+                  {connections?.embeddings?.provider === 'ollama' ? 'Ollama' : 'Text Gen WebUI'}
+                </span>
               </div>
               <p className="text-xs text-muted-foreground mb-2">
-                API de embeddings
+                {connections?.embeddings?.provider === 'ollama'
+                  ? 'API de embeddings Ollama'
+                  : 'API de embeddings'}
               </p>
-              {getStatusBadge(connections?.embeddings?.textGen)}
+              {getStatusBadge(connections?.embeddings?.provider === 'ollama'
+                ? connections?.embeddings?.ollama
+                : connections?.embeddings?.textGen)}
             </div>
           </div>
 
@@ -165,10 +179,18 @@ export default function ConnectionStatus() {
           <div className="mt-4 p-3 rounded-lg bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800">
             <p className="text-sm text-green-800 dark:text-green-200 flex items-center gap-2">
               <CheckCircle className="h-4 w-4" />
-              {connections.embeddings?.db && connections.embeddings?.textGen && connections.llm
-                ? 'Todos los servicios están conectados y funcionando correctamente'
-                : 'Algunos servicios no están disponibles. Revisa la configuración.'
-              }
+              {(() => {
+                const provider = connections.embeddings?.provider || 'textgen';
+                const embeddingProvider = provider === 'ollama' ? connections.embeddings?.ollama : connections.embeddings?.textGen;
+                const db = connections.embeddings?.db;
+                const llm = connections.llm;
+
+                if (db && embeddingProvider && llm) {
+                  return 'Todos los servicios están conectados y funcionando correctamente';
+                } else {
+                  return 'Algunos servicios no están disponibles. Revisa la configuración.';
+                }
+              })()}
             </p>
           </div>
         )}

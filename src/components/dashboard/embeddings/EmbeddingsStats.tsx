@@ -12,8 +12,10 @@ interface EmbeddingStats {
 }
 
 interface ConnectionStatus {
+  provider?: 'textgen' | 'ollama';
   db: boolean;
   textGen: boolean;
+  ollama: boolean;
 }
 
 export default function EmbeddingsStats() {
@@ -89,12 +91,19 @@ export default function EmbeddingsStats() {
                 <span className="text-sm font-medium">PostgreSQL</span>
               </div>
               <div className="flex items-center gap-2">
-                {connections.textGen ? (
-                  <CheckCircle className="h-5 w-5 text-green-500" />
-                ) : (
-                  <AlertCircle className="h-5 w-5 text-red-500" />
-                )}
-                <span className="text-sm font-medium">Text Generation WebUI</span>
+                {(() => {
+                  const isOllama = connections.provider === 'ollama';
+                  const status = isOllama ? connections.ollama : connections.textGen;
+
+                  return status ? (
+                    <CheckCircle className="h-5 w-5 text-green-500" />
+                  ) : (
+                    <AlertCircle className="h-5 w-5 text-red-500" />
+                  );
+                })()}
+                <span className="text-sm font-medium">
+                  {connections.provider === 'ollama' ? 'Ollama' : 'Text Generation WebUI'}
+                </span>
               </div>
             </div>
           </CardContent>

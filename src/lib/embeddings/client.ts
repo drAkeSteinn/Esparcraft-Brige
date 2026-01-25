@@ -1,11 +1,12 @@
 /**
  * Cliente Unificado de Embeddings
  *
- * Combina Text Generation WebUI (para generar embeddings)
+ * Combina Text Generation WebUI u Ollama (para generar embeddings)
  * con la base de datos PostgreSQL (para almacenar y buscar)
  */
 
 import { TextGenWebUIEmbeddingClient } from './text-gen-client';
+import { OllamaEmbeddingClient } from './ollama-client';
 import { EmbeddingsDB } from '../embeddings-db';
 import type {
   CreateEmbeddingParams,
@@ -16,15 +17,50 @@ import type {
   SourceType
 } from './types';
 
+type EmbeddingProvider = 'textgen' | 'ollama';
+
 /**
  * Cliente principal de embeddings que une generación y almacenamiento
  */
 export class EmbeddingClient {
   private textGenClient: TextGenWebUIEmbeddingClient;
+  private ollamaClient: OllamaEmbeddingClient;
   private db = EmbeddingsDB;
+  private provider: EmbeddingProvider;
 
-  constructor() {
-    this.textGenClient = new TextGenWebUIEmbeddingClient();
+  constructor(provider: EmbeddingProvider = 'textgen', config?: any) {
+    this.provider = provider;
+    this.textGenClient = new TextGenWebUIEmbeddingClient(config);
+    this.ollamaClient = new OllamaEmbeddingClient(config);
+  }
+
+  /**
+   * Obtiene el cliente activo según el proveedor
+   */
+  private getActiveClient() {
+    return this.provider === 'ollama' ? this.ollamaClient : this.textGenClient;
+  }
+
+  /**
+   * Cambia el proveedor de embeddings
+   */
+  setProvider(provider: EmbeddingProvider, config?: any): void {
+    this.provider = provider;
+
+    if (config) {
+      if (provider === 'textgen') {
+        this.textGenClient.updateConfig(config);
+      } else {
+        this.ollamaClient.updateConfig(config);
+      }
+    }
+  }
+
+  /**
+   * Obtiene el proveedor actual
+   */
+  getProvider(): EmbeddingProvider {
+    return this.provider;
   }
 
   /**
@@ -35,7 +71,7 @@ export class EmbeddingClient {
 
     try {
       // 1. Generar el embedding vectorial
-      const vector = await this.textGenClient.embedText(content);
+      const vector = await this.getActiveClient().embedText(content);
 
       // 2. Guardar en la base de datos
       const embeddingId = await this.db.insertEmbedding({
@@ -50,7 +86,7 @@ export class EmbeddingClient {
         namespace: namespace || 'default',
         source_type,
         source_id,
-        model_name: this.textGenClient.getConfig().model
+        model_name: this.getActiveClient().getConfig().model
       });
 
       console.log(`✅ Embedding creado: ${embeddingId}`);
@@ -77,7 +113,7 @@ export class EmbeddingClient {
     try {
       // 1. Extraer textos y generar embeddings vectoriales
       const texts = items.map(item => item.content);
-      const vectors = await this.textGenClient.embedBatch(texts);
+      const vectors = await this.getActiveClient().embedBatch(texts);
 
       // 2. Guardar todos los embeddings en la base de datos
       const embeddingIds: string[] = [];
@@ -98,7 +134,7 @@ export class EmbeddingClient {
           namespace: namespace || item.namespace || 'default',
           source_type: item.source_type,
           source_id: item.source_id,
-          model_name: this.textGenClient.getConfig().model
+          model_name: this.getActiveClient().getConfig().model
         });
 
         embeddingIds.push(embeddingId);
@@ -130,7 +166,7 @@ export class EmbeddingClient {
         vector = queryVector;
       } else if (query) {
         // Generar vector desde la query
-        vector = await this.textGenClient.embedText(query);
+        vector = await this.getActiveClient().embedText(query);
       } else {
         throw new Error('Debe proporcionar query o queryVector');
       }
@@ -232,7 +268,7 @@ export class EmbeddingClient {
   ): Promise<void> {
     try {
       // 1. Generar nuevo vector
-      const vector = await this.textGenClient.embedText(content);
+      const vector = await this.getActiveClient().embedText(content);
 
       // 2. Actualizar en la base de datos
       const client = this.db.getPool().connect();
@@ -296,7 +332,7 @@ export class EmbeddingClient {
     const { namespace, query, limit, threshold } = params;
 
     // Generar vector de la query
-    const vector = await this.textGenClient.embedText(query);
+    const vector = await this.getActiveClient().embedText(query);
 
     // Buscar en el namespace
     return this.db.searchInNamespace({
@@ -330,13 +366,15 @@ export class EmbeddingClient {
   async checkConnections(): Promise<{
     db: boolean;
     textGen: boolean;
+    ollama: boolean;
   }> {
-    const [db, textGen] = await Promise.all([
+    const [db, textGen, ollama] = await Promise.all([
       EmbeddingsDB.checkConnection(),
-      this.textGenClient.checkConnection()
+      this.textGenClient.checkConnection(),
+      this.ollamaClient.checkConnection()
     ]);
 
-    return { db, textGen };
+    return { db, textGen, ollama };
   }
 
   /**
@@ -357,10 +395,13 @@ export class EmbeddingClient {
 // Exportar instancia singleton
 let embeddingClientInstance: EmbeddingClient | null = null;
 
-export function getEmbeddingClient(): EmbeddingClient {
+export function getEmbeddingClient(provider?: EmbeddingProvider, config?: any): EmbeddingClient {
   if (!embeddingClientInstance) {
-    embeddingClientInstance = new EmbeddingClient();
+    embeddingClientInstance = new EmbeddingClient(provider || 'textgen', config);
+  } else if (provider) {
+    embeddingClientInstance.setProvider(provider, config);
   }
+
   return embeddingClientInstance;
 }
 
