@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { Trash2, Play, Eye, MessageSquare } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -17,6 +18,7 @@ import { toast } from '@/hooks/use-toast';
 export default function SessionsTab() {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [summaries, setSummaries] = useState<Record<string, string>>({});
+  const [lastPrompts, setLastPrompts] = useState<Record<string, string>>({});
   const [npcs, setNpcs] = useState<NPC[]>([]);
   const [worlds, setWorlds] = useState<World[]>([]);
   const [pueblos, setPueblos] = useState<Pueblo[]>([]);
@@ -55,7 +57,7 @@ export default function SessionsTab() {
       if (sessionsResult.success) {
         setSessions(sessionsResult.data);
         // Load summaries for all sessions
-        const summariesPromises = sessionsResult.data.map((session: Session) => 
+        const summariesPromises = sessionsResult.data.map((session: Session) =>
           fetch(`/api/sessions/${session.id}/summary`)
             .then(res => res.json())
             .then(result => ({ sessionId: session.id, summary: result.data?.summary }))
@@ -69,6 +71,15 @@ export default function SessionsTab() {
           }
         });
         setSummaries(summariesMap);
+
+        // Load last prompts for all sessions
+        const lastPromptsMap: Record<string, string> = {};
+        sessionsResult.data.forEach((session: Session) => {
+          if (session.lastPrompt) {
+            lastPromptsMap[session.id] = session.lastPrompt;
+          }
+        });
+        setLastPrompts(lastPromptsMap);
       }
       if (npcsResult.success) setNpcs(npcsResult.data);
       if (worldsResult.success) setWorlds(worldsResult.data);
@@ -112,8 +123,11 @@ export default function SessionsTab() {
     setTestDialogOpen(true);
   };
 
-  const handlePreviewPrompt = async () => {
-    if (!testForm.npcid) {
+  const handlePreviewPrompt = async (npcIdOverride?: string, sessionIdOverride?: string) => {
+    const npcid = npcIdOverride || testForm.npcid;
+    const playersessionid = sessionIdOverride || '';
+
+    if (!npcid) {
       toast({
         title: 'Error',
         description: 'Selecciona un NPC',
@@ -125,9 +139,9 @@ export default function SessionsTab() {
     try {
       const payload = {
         mode: testForm.mode,
-        npcid: testForm.npcid,
+        npcid: npcid,
         message: testForm.message,
-        playersessionid: ''
+        playersessionid: playersessionid
       };
 
       const response = await fetch(`/api/reroute?preview=true`, {
@@ -147,6 +161,7 @@ export default function SessionsTab() {
           description: result.error || 'No se pudo generar la vista previa',
           variant: 'destructive'
         });
+        return;
       }
     } catch (error) {
       console.error('Error previewing prompt:', error);
@@ -155,7 +170,23 @@ export default function SessionsTab() {
         description: 'No se pudo generar la vista previa',
         variant: 'destructive'
       });
+      return;
     }
+  };
+
+  const openPreviewDialog = async (npcIdOverride?: string, sessionIdOverride?: string) => {
+    await handlePreviewPrompt(npcIdOverride, sessionIdOverride);
+
+    // Solo abrir el diálogo si el preview data se cargó exitosamente
+    setTimeout(() => {
+      if (!previewData) {
+        toast({
+          title: 'Error',
+          description: 'No se pudo cargar el preview',
+          variant: 'destructive'
+        });
+      }
+    }, 100);
   };
 
   const handleSendChat = async () => {
@@ -263,7 +294,7 @@ export default function SessionsTab() {
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => handlePreviewPrompt()}
+                      onClick={() => openPreviewDialog(session.npcId, session.id)}
                     >
                       <Eye className="h-4 w-4" />
                     </Button>
@@ -276,8 +307,11 @@ export default function SessionsTab() {
                     </Button>
                   </div>
                 </CardTitle>
-                <CardDescription>
-                  {getNpcLocation(session.npcId)}
+                <CardDescription className="space-y-2">
+                  <Badge variant="secondary" className="text-xs font-mono">
+                    ID: {session.id}
+                  </Badge>
+                  <span>{getNpcLocation(session.npcId)}</span>
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -378,7 +412,7 @@ export default function SessionsTab() {
                 </Button>
                 <Button
                   variant="outline"
-                  onClick={handlePreviewPrompt}
+                  onClick={openPreviewDialog}
                 >
                   <Eye className="h-4 w-4 mr-2" />
                   Ver Prompt
@@ -432,34 +466,57 @@ export default function SessionsTab() {
               Vista previa del prompt que se enviará al LLM
             </DialogDescription>
           </DialogHeader>
-          <ScrollArea className="h-[600px]">
-            {previewData && (
-              <div className="space-y-4">
-                <div>
-                  <h3 className="font-semibold mb-2">System Prompt</h3>
-                  <div className="bg-muted p-4 rounded-lg">
-                    <pre className="text-sm whitespace-pre-wrap">{previewData.systemPrompt}</pre>
+          <div className="flex gap-4 h-[calc(90vh-100px)]">
+            <div className="flex-1 overflow-y-auto space-y-4">
+              {previewData ? (
+                <>
+                  <div>
+                    <h3 className="font-semibold mb-2">System Prompt</h3>
+                    <div className="bg-muted p-4 rounded-lg">
+                      <pre className="text-sm whitespace-pre-wrap">{previewData.systemPrompt}</pre>
+                    </div>
                   </div>
-                </div>
-                <div>
-                  <h3 className="font-semibold mb-2">Messages ({previewData.messages.length})</h3>
-                  <div className="space-y-2">
-                    {previewData.messages.map((msg: any, i: number) => (
-                      <div key={i} className="bg-muted p-3 rounded-lg">
-                        <div className="text-xs font-medium text-muted-foreground mb-1 capitalize">
-                          {msg.role}
+                  <div>
+                    <h3 className="font-semibold mb-2">Messages ({previewData.messages.length})</h3>
+                    <div className="space-y-2">
+                      {previewData.messages.map((msg: any, i: number) => (
+                        <div key={i} className="bg-muted p-3 rounded-lg">
+                          <div className="text-xs font-medium text-muted-foreground mb-1 capitalize">
+                            {msg.role}
+                          </div>
+                          <p className="text-sm">{msg.content}</p>
                         </div>
-                        <p className="text-sm">{msg.content}</p>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
+                  </div>
+                  <div className="text-sm text-muted-foreground">
+                    <p>Tokens estimados: {previewData.estimatedTokens}</p>
+                  </div>
+                </>
+              ) : (
+                <div className="flex items-center justify-center h-full text-muted-foreground">
+                  <div className="text-center space-y-2">
+                    <p className="text-lg">Cargando preview...</p>
+                    <p className="text-sm">Por favor espera</p>
                   </div>
                 </div>
-                <div className="text-sm text-muted-foreground">
-                  <p>Tokens estimados: {previewData.estimatedTokens}</p>
+              )}
+            </div>
+            <div className="w-1/2 overflow-y-auto border-l pl-4">
+              {selectedSession?.id && lastPrompts[selectedSession.id] ? (
+                <div className="space-y-4">
+                  <h3 className="font-semibold mb-2 text-lg">Último Prompt Guardado</h3>
+                  <div className="bg-muted p-4 rounded-lg">
+                    <pre className="text-xs whitespace-pre-wrap font-mono">{lastPrompts[selectedSession.id]}</pre>
+                  </div>
                 </div>
-              </div>
-            )}
-          </ScrollArea>
+              ) : (
+                <div className="flex items-center justify-center h-full text-muted-foreground">
+                  <p className="text-sm">No hay último prompt guardado para esta sesión</p>
+                </div>
+              )}
+            </div>
+          </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setPreviewDialogOpen(false)}>
               Cerrar

@@ -1,5 +1,6 @@
 import { World, Pueblo, Edificio, NPC, Session, ChatMessage, PromptBuildContext, getCardField } from './types';
 import { npcStateManager, sessionManager, edificioStateManager, puebloStateManager, worldStateManager } from './fileManager';
+import { replaceVariables, VariableContext } from './utils';
 
 // Token estimation (roughly 4 characters per token for English/Spanish)
 export function estimateTokens(text: string): number {
@@ -10,7 +11,234 @@ export function estimateMessagesTokens(messages: ChatMessage[]): number {
   return messages.reduce((sum, msg) => sum + estimateTokens(msg.content), 0);
 }
 
-// Build system prompt for chat (SillyTavern format)
+/**
+ * Formatea una lista de strings como líneas con guiones
+ */
+function formatAsList(items: string[]): string {
+  if (!items || items.length === 0) return '(Sin datos)';
+  return items.map(item => `- ${item}`).join('\n');
+}
+
+/**
+ * Formatea una lista de POIs como líneas con guiones
+ */
+function formatPOIsList(pois?: Array<{ name?: string; descripcion?: string; coordenadas?: { x: number; y: number; z: number } }>): string {
+  if (!pois || pois.length === 0) return '(Sin puntos de interés)';
+  return pois.map(poi => {
+    const nombre = poi.name || 'Sin nombre';
+    const descripcion = poi.descripcion || '';
+    const coords = poi.coordenadas || { x: 0, y: 0, z: 0 };
+    return `- ${nombre} (${descripcion}) {"coordenadas": {"x": ${coords.x},"y": ${coords.y},"z": ${coords.z}}}`;
+  }).join('\n');
+}
+
+/**
+ * Construye el prompt completo para el trigger de Chat siguiendo la estructura estándar:
+ *
+ * 1) Escribe ÚNICAMENTE la próxima respuesta de {{npc.name}} en reacción al último mensaje de {{jugador.nombre}}.
+ * 2) Main Prompt (DEL NPC)
+ * 3) Descripción (DEL NPC)
+ * 4) Personalidad (DEL NPC)
+ * 5) Scenario (DEL NPC)
+ * 6) Chat Examples (DEL NPC)
+ * 7) Template User (opcional, del payload)
+ * 8) Last User Message (incluye último resumen, chat history y mensaje del usuario)
+ * 9) POST-HISTORY (DEL NPC)
+ */
+export function buildCompleteChatPrompt(
+  message: string,
+  context: PromptBuildContext,
+  options?: {
+    jugador?: {
+      nombre?: string;
+      raza?: string;
+      nivel?: string;
+      almakos?: string;
+      deuda?: string;
+      piedras_del_alma?: string;
+      salud_actual?: string;
+      reputacion?: string;
+      hora?: string;
+      clima?: string;
+    };
+    templateUser?: string;
+    lastSummary?: string;
+  }
+): string {
+  const { world, pueblo, edificio, npc, session } = context;
+  const jugador = options?.jugador;
+
+  let prompt = '';
+
+  // 1. Instrucción inicial
+  prompt += `Escribe ÚNICAMENTE la próxima respuesta de {{npc.name}} en reacción al último mensaje de {{jugador.nombre}}.\n\n`;
+
+  // 2. Main Prompt (DEL NPC)
+  const mainPrompt = getCardField(npc?.card, 'system_prompt', '');
+  if (mainPrompt) {
+    prompt += `=== MAIN PROMPT ===\n{{npc.system_prompt}}\n\n`;
+  }
+
+  // 3. Descripción (DEL NPC)
+  const description = getCardField(npc?.card, 'description', '');
+  if (description) {
+    prompt += `=== DESCRIPCIÓN ===\n{{npc.description}}\n\n`;
+  }
+
+  // 4. Personalidad (DEL NPC)
+  const personality = getCardField(npc?.card, 'personality', '');
+  if (personality) {
+    prompt += `=== PERSONALIDAD ===\n{{npc.personality}}\n\n`;
+  }
+
+  // 5. Scenario (DEL NPC)
+  const scenario = getCardField(npc?.card, 'scenario', '');
+  if (scenario) {
+    prompt += `=== ESCENARIO ===\n{{npc.scenario}}\n\n`;
+  }
+
+  // 6. Chat Examples (DEL NPC)
+  const chatExamples = getCardField(npc?.card, 'mes_example', '');
+  if (chatExamples) {
+    prompt += `=== EJEMPLOS DE CHAT ===\n{{npc.chat_examples}}\n\n`;
+  }
+
+  // 7. Template User (SIEMPRE mostrar, aunque esté vacío - MUY IMPORTANTE)
+  prompt += `=== TEMPLATE DEL USUARIO ===\n{{templateUser}}\n\n`;
+
+  // 8. Last User Message
+  prompt += `=== LAST USER MESSAGE ===\n`;
+
+  // 8.1. Último resumen (si existe)
+  if (options?.lastSummary && options.lastSummary.trim()) {
+    prompt += `Último Resumen:\n{{lastSummary}}\n\n`;
+  }
+
+  // 8.2. Chat History (si existe)
+  if (session && session.messages && session.messages.length > 0) {
+    prompt += `Chat History:\n{{chatHistory}}\n\n`;
+  }
+
+  // 8.3. Mensaje del usuario
+  prompt += `Mensaje del Usuario:\n{{userMessage}}\n\n`;
+
+  // 9. POST-HISTORY (DEL NPC)
+  const postHistory = getCardField(npc?.card, 'post_history_instructions', '');
+  if (postHistory) {
+    prompt += `=== INSTRUCCIONES POST-HISTORIAL ===\n{{npc.post_history_instructions}}\n\n`;
+  }
+
+  // Construir contexto de variables para reemplazo
+  const varContext: VariableContext = {
+    npc,
+    world,
+    pueblo,
+    edificio,
+    jugador,
+    session,
+    char: getCardField(npc?.card, 'name', ''),
+    mensaje: message,
+    userMessage: message,
+    lastSummary: options?.lastSummary,
+    templateUser: options?.templateUser
+  };
+
+  // DEBUG: Log para verificar que las variables del jugador lleguen
+  console.log('[buildCompleteChatPrompt] DEBUG jugador:', jugador);
+  console.log('[buildCompleteChatPrompt] DEBUG templateUser:', options?.templateUser);
+  console.log('[buildCompleteChatPrompt] DEBUG message:', message);
+
+  // Para el contexto de historial, construimos el texto aquí
+  if (session && session.messages && session.messages.length > 0) {
+    const chatHistoryText = session.messages.map((msg) => {
+      const role = msg.role === 'user' ? 'Usuario' : 'NPC';
+      return `${role}: ${msg.content}`;
+    }).join('\n');
+    (varContext as any).chatHistory = chatHistoryText;
+  }
+
+  // NO agregamos variables extra para el NPC al contexto
+  // Las variables del NPC ya están en el objeto 'npc' y se resuelven correctamente
+  // Agregar variables extras aquí puede causar conflictos
+
+  // Reemplazar todas las variables en el prompt
+  const result = replaceVariables(prompt, varContext);
+
+  // DEBUG: Log para verificar el resultado
+  console.log('[buildCompleteChatPrompt] DEBUG result tiene jugador.nombre:', result.includes('drAke'));
+  console.log('[buildCompleteChatPrompt] DEBUG result tiene Template User:', result.includes('=== TEMPLATE DEL USUARIO ==='));
+
+  return result;
+}
+
+/**
+ * Construye los messages completos para el trigger de Chat usando la estructura estándar.
+ *
+ * Retorna un array de ChatMessage listo para enviar al LLM.
+ */
+export function buildChatMessages(
+  userMessage: string,
+  context: PromptBuildContext,
+  jugador?: {
+    nombre?: string;
+    raza?: string;
+    nivel?: string;
+    almakos?: string;
+    deuda?: string;
+    piedras_del_alma?: string;
+    salud_actual?: string;
+    reputacion?: string;
+    hora?: string;
+    clima?: string;
+  }
+): ChatMessage[] {
+  return buildChatMessagesWithOptions(userMessage, context, { jugador });
+}
+
+/**
+ * Construye los messages completos con opciones adicionales (templateUser, lastSummary).
+ *
+ * Retorna un array de ChatMessage listo para enviar al LLM.
+ */
+export function buildChatMessagesWithOptions(
+  userMessage: string,
+  context: PromptBuildContext,
+  options?: {
+    jugador?: {
+      nombre?: string;
+      raza?: string;
+      nivel?: string;
+      almakos?: string;
+      deuda?: string;
+      piedras_del_alma?: string;
+      salud_actual?: string;
+      reputacion?: string;
+      hora?: string;
+      clima?: string;
+    };
+    templateUser?: string;
+    lastSummary?: string;
+  }
+): ChatMessage[] {
+  const completePrompt = buildCompleteChatPrompt(userMessage, context, options);
+
+  const messages: ChatMessage[] = [
+    { role: 'system', content: completePrompt, timestamp: new Date().toISOString() }
+  ];
+
+  // Add current user message
+  messages.push({
+    role: 'user',
+    content: userMessage,
+    timestamp: new Date().toISOString()
+  });
+
+  return messages;
+}
+
+// Las siguientes funciones se mantienen para otros triggers (resumen, nuevo lore, etc.)
+
+// Build system prompt for chat (SillyTavern format - LEGACY, mantener por compatibilidad)
 export function buildChatSystemPrompt(
   context: PromptBuildContext,
   jugador?: {
@@ -42,30 +270,30 @@ export function buildChatSystemPrompt(
   // Contexto del mundo (DEBAJO de la card del NPC)
   if (world) {
     prompt += `=== CONTEXTO DEL MUNDO ===\n`;
-    prompt += `Mundo: ${world.name}\n`;
-    prompt += `Estado: ${world.lore.estado_mundo}\n`;
-    if (world.lore.rumores && world.lore.rumores.length > 0) {
-      prompt += `Rumores: ${world.lore.rumores.join(', ')}\n`;
+    prompt += `Mundo: {{mundo}}\n`;
+    prompt += `Estado: {{mundo.estado}}\n`;
+    if (world.lore.rumors && world.lore.rumors.length > 0) {
+      prompt += `Rumores: {{mundo.rumores}}\n`;
     }
     prompt += '\n';
   }
 
   if (pueblo) {
     prompt += `=== CONTEXTO DEL PUEBLO ===\n`;
-    prompt += `Pueblo: ${pueblo.name}\n`;
-    prompt += `Estado: ${pueblo.lore.estado_pueblo}\n`;
-    if (pueblo.lore.rumores && pueblo.lore.rumores.length > 0) {
-      prompt += `Rumores: ${pueblo.lore.rumores.join(', ')}\n`;
+    prompt += `Pueblo: {{pueblo}}\n`;
+    prompt += `Estado: {{pueblo.estado}}\n`;
+    if (pueblo.lore.rumors && pueblo.lore.rumors.length > 0) {
+      prompt += `Rumores: {{pueblo.rumores}}\n`;
     }
     prompt += '\n';
   }
 
   if (edificio) {
     prompt += `=== CONTEXTO DE LA UBICACIÓN ===\n`;
-    prompt += `Ubicación: ${edificio.name}\n`;
-    prompt += `Descripción: ${edificio.lore}\n`;
+    prompt += `Ubicación: {{edificio}}\n`;
+    prompt += `Descripción: {{edificio.descripcion}}\n`;
     if (edificio.eventos_recientes && edificio.eventos_recientes.length > 0) {
-      prompt += `Eventos recientes: ${edificio.eventos_recientes.join(', ')}\n`;
+      prompt += `Eventos recientes: {{edificio.eventos}}\n`;
     }
     prompt += '\n';
   }
@@ -82,19 +310,19 @@ export function buildChatSystemPrompt(
     // Descripción
     const description = getCardField(npc.card, 'description', '');
     if (description) {
-      prompt += `Descripción:\n${description}\n\n`;
+      prompt += `Descripción:\n{{npc.description}}\n\n`;
     }
 
     // Personalidad
     const personality = getCardField(npc.card, 'personality', '');
     if (personality) {
-      prompt += `Personalidad:\n${personality}\n\n`;
+      prompt += `Personalidad:\n{{npc.personality}}\n\n`;
     }
 
     // Escenario
     const scenario = getCardField(npc.card, 'scenario', '');
     if (scenario) {
-      prompt += `Escenario:\n${scenario}\n\n`;
+      prompt += `Escenario:\n{{npc.scenario}}\n\n`;
     }
 
     // Primer mensaje (ejemplo)
@@ -107,7 +335,7 @@ export function buildChatSystemPrompt(
     const postHistoryInstructions = getCardField(npc.card, 'post_history_instructions', '');
     if (postHistoryInstructions) {
       prompt += `=== INSTRUCCIONES POST-HISTORIAL ===\n`;
-      prompt += `${postHistoryInstructions}\n\n`;
+      prompt += `{{npc.post_history_instructions}}\n\n`;
     }
   }
 
@@ -132,58 +360,32 @@ export function buildChatSystemPrompt(
   // Información del jugador (si está disponible)
   if (jugador) {
     prompt += '=== JUGADOR ===\n';
-    if (jugador.nombre) prompt += `Nombre: ${jugador.nombre}\n`;
-    if (jugador.raza) prompt += `Raza: ${jugador.raza}\n`;
-    if (jugador.nivel) prompt += `Nivel: ${jugador.nivel}\n`;
-    if (jugador.almakos) prompt += `Almakos: ${jugador.almakos}\n`;
-    if (jugador.deuda) prompt += `Deuda: ${jugador.deuda}\n`;
-    if (jugador.piedras_del_alma) prompt += `Piedras del Alma: ${jugador.piedras_del_alma}\n`;
-    if (jugador.salud_actual) prompt += `Salud: ${jugador.salud_actual}\n`;
-    if (jugador.reputacion) prompt += `Reputación: ${jugador.reputacion}\n`;
-    if (jugador.hora) prompt += `Hora: ${jugador.hora}\n`;
-    if (jugador.clima) prompt += `Clima: ${jugador.clima}\n`;
+    if (jugador.nombre) prompt += `Nombre: {{jugador.nombre}}\n`;
+    if (jugador.raza) prompt += `Raza: {{jugador.raza}}\n`;
+    if (jugador.nivel) prompt += `Nivel: {{jugador.nivel}}\n`;
+    if (jugador.almakos) prompt += `Almakos: {{jugador.almakos}}\n`;
+    if (jugador.deuda) prompt += `Deuda: {{jugador.deuda}}\n`;
+    if (jugador.piedras_del_alma) prompt += `Piedras del Alma: {{jugador.piedras_del_alma}}\n`;
+    if (jugador.salud_actual) prompt += `Salud: {{jugador.salud_actual}}\n`;
+    if (jugador.reputacion) prompt += `Reputación: {{jugador.reputacion}}\n`;
+    if (jugador.hora) prompt += `Hora: {{jugador.hora}}\n`;
+    if (jugador.clima) prompt += `Clima: {{jugador.clima}}\n`;
     prompt += '\n';
   }
 
-  return prompt;
-}
+  // Construir contexto de variables para reemplazo
+  const varContext: VariableContext = {
+    npc,
+    world,
+    pueblo,
+    edificio,
+    jugador,
+    session,
+    char: getCardField(npc?.card, 'name', '')
+  };
 
-// Build messages for chat trigger (SillyTavern format)
-export function buildChatMessages(
-  userMessage: string,
-  context: PromptBuildContext,
-  jugador?: {
-    nombre?: string;
-    raza?: string;
-    nivel?: string;
-    almakos?: string;
-    deuda?: string;
-    piedras_del_alma?: string;
-    salud_actual?: string;
-    reputacion?: string;
-    hora?: string;
-    clima?: string;
-  }
-): ChatMessage[] {
-  const systemPrompt = buildChatSystemPrompt(context, jugador);
-  const messages: ChatMessage[] = [
-    { role: 'system', content: systemPrompt, timestamp: new Date().toISOString() }
-  ];
-
-  // Add recent session history (last 20 messages)
-  if (context.session && context.session.messages.length > 0) {
-    const recentHistory = context.session.messages.slice(-20);
-    messages.push(...recentHistory);
-  }
-
-  // Add current user message
-  messages.push({
-    role: 'user',
-    content: userMessage,
-    timestamp: new Date().toISOString()
-  });
-
-  return messages;
+  // Reemplazar todas las variables en el prompt
+  return replaceVariables(prompt, varContext);
 }
 
 // Build prompt for session summary
@@ -297,8 +499,8 @@ INSTRUCCIONES:
   if (context.world) {
     prompt += `Mundo: ${context.world.name}\n`;
     prompt += `Estado actual: ${context.world.lore.estado_mundo}\n`;
-    if (context.world.lore.rumores.length > 0) {
-      prompt += `Rumores: ${context.world.lore.rumores.join(', ')}\n`;
+    if (context.world.lore.rumors.length > 0) {
+      prompt += `Rumores: ${context.world.lore.rumors.join(', ')}\n`;
     }
     prompt += '\n';
   }
@@ -306,8 +508,8 @@ INSTRUCCIONES:
   if (context.pueblo) {
     prompt += `Pueblo: ${context.pueblo.name}\n`;
     prompt += `Estado actual: ${context.pueblo.lore.estado_pueblo}\n`;
-    if (context.pueblo.lore.rumores.length > 0) {
-      prompt += `Rumores: ${context.pueblo.lore.rumores.join(', ')}\n`;
+    if (context.pueblo.lore.rumors.length > 0) {
+      prompt += `Rumores: ${context.pueblo.lore.rumors.join(', ')}\n`;
     }
     prompt += '\n';
   }
@@ -419,9 +621,9 @@ ESTADO_ACTUAL: [Estado actual del pueblo/nación]`,
 
   let prompt = `Pueblo/Nación: ${pueblo.name}\n`;
   prompt += `Tipo: ${pueblo.tipo || 'Sin especificar'}\n`;
-  prompt += `Estado: ${pueblo.lore.estado_pueblo || 'Sin especificar'}\n`;
-  if (pueblo.lore.rumores && pueblo.lore.rumores.length > 0) {
-    prompt += `Rumores: ${pueblo.lore.rumores.join(', ')}\n`;
+  prompt += `Estado: ${pueblo.lore.estado_pueblo || 'Sin especificado'}\n`;
+  if (pueblo.lore.rumors && pueblo.lore.rumors.length > 0) {
+    prompt += `Rumores: ${pueblo.lore.rumors.join(', ')}\n`;
   }
   prompt += '\n';
 
@@ -469,16 +671,16 @@ INSTRUCCIONES:
 Formato esperado:
 RESUMEN_CONSOLIDADO: [Resumen completo del mundo y su evolución]
 EVENTOS_IMPORTANTES: [Lista de eventos globales]
-TENDENCIAS_MUNDO: [Patrones entre pueblos/naciones]
+TENDENCIAS_GLOBALES: [Patrones y tendencias entre pueblos/naciones]
 ESTADO_ACTUAL: [Estado actual del mundo]`,
       timestamp: new Date().toISOString()
     }
   ];
 
   let prompt = `Mundo: ${world.name}\n`;
-  prompt += `Estado actual: ${world.lore.estado_mundo || 'Sin especificar'}\n`;
-  if (world.lore.rumores && world.lore.rumores.length > 0) {
-    prompt += `Rumores: ${world.lore.rumores.join(', ')}\n`;
+  prompt += `Estado actual: ${world.lore.estado_mundo}\n`;
+  if (world.lore.rumors && world.lore.rumors.length > 0) {
+    prompt += `Rumores: ${world.lore.rumors.join(', ')}\n`;
   }
   prompt += '\n';
 
@@ -487,7 +689,7 @@ ESTADO_ACTUAL: [Estado actual del mundo]`,
   }
 
   if (puebloSummaries.length > 0) {
-    prompt += `Resúmenes consolidados de pueblos/naciones del mundo:\n`;
+    prompt += `Resúmenes consolidados de pueblos/naciones:\n`;
     puebloSummaries.forEach((pueblo, index) => {
       prompt += `${index + 1}. ${pueblo.puebloName}:\n${pueblo.consolidatedSummary}\n`;
     });
@@ -503,26 +705,4 @@ ESTADO_ACTUAL: [Estado actual del mundo]`,
   });
 
   return messages;
-}
-
-// Build prompt debug info
-export function buildPromptDebugInfo(
-  systemPrompt: string,
-  messages: ChatMessage[],
-  context: PromptBuildContext,
-  finalRequest: any
-): {
-  systemPrompt: string;
-  messages: ChatMessage[];
-  context: PromptBuildContext;
-  estimatedTokens: number;
-  finalRequest: any;
-} {
-  return {
-    systemPrompt,
-    messages,
-    context,
-    estimatedTokens: estimateTokens(systemPrompt) + estimateMessagesTokens(messages),
-    finalRequest
-  };
 }

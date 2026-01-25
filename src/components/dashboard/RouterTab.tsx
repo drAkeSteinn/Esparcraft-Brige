@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { Send, RefreshCw, Network, MessageSquare, Globe, MapPin, Building, User, Eye, MessageCircle, FileText, Copy, Trash2 } from 'lucide-react';
+import { Send, RefreshCw, Network, MessageSquare, Globe, MapPin, Building, User, Eye, MessageCircle, FileText, Copy, Trash2, Terminal } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -554,6 +554,45 @@ export default function RouterTab() {
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const generateDenizenScript = (payload: any): string => {
+    if (!payload) return '';
+
+    // Para Denizen corriendo localmente: usar puerto directo (3000)
+    // Para Denizen en otra máquina: usar la IP de red con puerto 81
+    const apiUrl = 'http://127.0.0.1:3000/api/v1';
+    // Alternativas:
+    // - http://localhost:81/api/v1 (si localhost resuelve a IPv6)
+    // - http://21.0.8.121:81/api/v1 (IP de red externa)
+
+    // Construir el script de Denizen
+    let script = `- definemap headers 'Content-Type:application/json accept:application/json'\n`;
+    script += `- definemap consulta:\n`;
+
+    // Agregar mode y npcid primero
+    if (payload.mode) script += `    "mode": "${payload.mode}"\n`;
+    if (payload.npcid) script += `    "npcid": "${payload.npcid}"\n`;
+    if (payload.playersessionid) script += `    "playersessionid": "${payload.playersessionid}"\n`;
+    if (payload.message) script += `    "message": "${payload.message}"\n`;
+
+    // Agregar jugador si existe
+    if (payload.jugador) {
+      script += `    "jugador":\n`;
+      const jugadorKeys = ['nombre', 'raza', 'nivel', 'almakos', 'deuda', 'piedras_del_alma', 'salud_actual', 'reputacion', 'hora', 'clima'];
+      jugadorKeys.forEach(key => {
+        if (payload.jugador[key] !== undefined) {
+          const value = typeof payload.jugador[key] === 'string'
+            ? `"${payload.jugador[key]}"`
+            : payload.jugador[key];
+          script += `      "${key}": ${value}\n`;
+        }
+      });
+    }
+
+    script += `- ~webget ${apiUrl} data:<[consulta].to_json> headers:<[headers]> save:response`;
+
+    return script;
+  };
+
   const filteredPueblos = pueblos.filter(p => p.worldId === chatForm.npcid);
   const filteredEdificios = edificios.filter(e => e.puebloId === chatForm.npcid);
 
@@ -575,6 +614,7 @@ export default function RouterTab() {
       playersessionid,
       jugador: chatForm.jugador,
       message: chatForm.mensaje, // Mensaje del jugador (message en lugar de mensaje)
+      templateUser: chatForm.templateUser, // Plantilla del usuario
       lastSummary: chatForm.lastSummary, // Último resumen de la sesión
       context: {
         mundo: world,
@@ -1066,16 +1106,15 @@ export default function RouterTab() {
       });
     }
 
-    // 7. Template User (plantilla del jugador)
-    if (chatForm.templateUser) {
-      const templateUserText = replaceKeys(chatForm.templateUser, keyContext);
-      prompt += `${templateUserText}\n\n`;
-      sections.push({
-        label: 'Template User',
-        content: templateUserText,
-        bgColor: 'bg-indigo-50 dark:bg-indigo-950'
-      });
-    }
+    // 7. Template User (plantilla del jugador) - SIEMPRE mostrar, incluso vacío
+    // Usar payload.templateUser en lugar de chatForm.templateUser para consistencia
+    const templateUserText = replaceKeys(payload.templateUser || '', keyContext);
+    prompt += `${templateUserText}\n\n`;
+    sections.push({
+      label: 'Template User',
+      content: templateUserText,
+      bgColor: 'bg-indigo-50 dark:bg-indigo-950'
+    });
 
     // 8. Historial y Último Mensaje
     let historyText = '';
@@ -1101,10 +1140,23 @@ export default function RouterTab() {
       historyText += '\n';
     }
 
-    // 8.2. Last User Message (solo el mensaje del jugador)
+    // 8.2. Last User Message (incluye último resumen, historial de la sesión y último mensaje)
     if (payload.message) {
       const mensajeReemplazado = replaceKeys(payload.message, keyContext);
-      historyText += `Mensaje: ${mensajeReemplazado}`;
+      
+      // Obtener el último resumen (prioridad al de la sesión guardado o payload.lastSummary)
+      const lastSummary = payload.lastSummary || session?.lastPrompt || '(Sin último resumen)';
+      
+      // Obtener el historial completo de la sesión
+      let sessionHistoryText = '(Sin historial)';
+      if (session && session.messages && session.messages.length > 0) {
+        sessionHistoryText = session.messages.map((msg: any) => {
+          const role = msg.role === 'user' ? 'Usuario' : 'NPC';
+          return `${role}: ${msg.content}`;
+        }).join('\n');
+      }
+      
+      historyText += `Último resumen:\n${lastSummary}\n\nHistorial de la sesión:\n${sessionHistoryText}\n\nMensaje: ${mensajeReemplazado}`;
     }
 
     // Siempre mostrar la sección, aunque esté vacía
@@ -2026,6 +2078,33 @@ Rumores:
                   <ScrollArea className="h-[200px] pr-4">
                     <pre className="text-xs bg-muted p-4 rounded-lg overflow-x-auto">
                       {JSON.stringify(chatPayload || {}, null, 2) || '{}'}
+                    </pre>
+                  </ScrollArea>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between">
+                  <div>
+                    <CardTitle className="flex items-center gap-2">
+                      <Terminal className="h-5 w-5" />
+                      Script de Denizen
+                    </CardTitle>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => copyToClipboard(generateDenizenScript(chatPayload), 'Script de Denizen copiado')}
+                    disabled={!chatPayload}
+                  >
+                    <Copy className="h-4 w-4 mr-2" />
+                    {copied ? 'Copiado' : 'Copiar'}
+                  </Button>
+                </CardHeader>
+                <CardContent>
+                  <ScrollArea className="h-[200px] pr-4">
+                    <pre className="text-xs bg-muted p-4 rounded-lg overflow-x-auto font-mono">
+                      {generateDenizenScript(chatPayload) || 'Selecciona un NPC y completa los campos para ver el script de Denizen'}
                     </pre>
                   </ScrollArea>
                 </CardContent>

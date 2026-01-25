@@ -24,7 +24,7 @@ import {
   worldStateManager
 } from './fileManager';
 import {
-  buildChatMessages,
+  buildChatMessagesWithOptions,
   buildSessionSummaryPrompt,
   buildNPCSummaryPrompt,
   buildEdificioSummaryPrompt,
@@ -69,7 +69,13 @@ async function callLLM(messages: ChatMessage[]): Promise<string> {
 
 // Chat trigger handler
 export async function handleChatTrigger(payload: ChatTriggerPayload): Promise<{ response: string; sessionId: string }> {
-  const { message, npcid, playersessionid, jugador } = payload;
+  const { message, npcid, playersessionid, jugador, templateUser, lastSummary: payloadLastSummary } = payload;
+
+  // DEBUG: Log para ver qué llega del request
+  console.log('[handleChatTrigger] DEBUG payload.npcid:', npcid);
+  console.log('[handleChatTrigger] DEBUG payload.jugador:', jugador);
+  console.log('[handleChatTrigger] DEBUG payload.templateUser:', templateUser);
+  console.log('[handleChatTrigger] DEBUG payload.message:', message);
 
   // Get NPC
   const npc = npcManager.getById(npcid);
@@ -98,13 +104,21 @@ export async function handleChatTrigger(payload: ChatTriggerPayload): Promise<{ 
     });
   }
 
-  // Build messages
-  const messages = buildChatMessages(message, {
+  // Obtener el último resumen (SOLO si viene en el payload, no usar session.lastPrompt)
+  // session.lastPrompt contiene el prompt completo, no debe usarse como resumen
+  const lastSummary = payloadLastSummary || undefined;
+
+  // Build messages con la nueva estructura estándar
+  const messages = buildChatMessagesWithOptions(message, {
     world,
     pueblo,
     edificio,
     npc,
     session
+  }, {
+    jugador,
+    templateUser,
+    lastSummary
   });
 
   // Buscar contexto relevante de embeddings (síncrono, no bloquear)
@@ -134,6 +148,12 @@ export async function handleChatTrigger(payload: ChatTriggerPayload): Promise<{ 
       ];
     }
   }
+
+  // Build complete prompt as text for storage (DESPUÉS de agregar embeddings)
+  const completePrompt = finalMessages.map(m => `[${m.role}]\n${m.content}`).join('\n\n');
+
+  // Save the complete prompt to session (ahora incluye embeddings si existían)
+  sessionManager.update(session.id, { lastPrompt: completePrompt });
 
   // Call LLM
   const response = await callLLM(finalMessages);
@@ -477,6 +497,7 @@ export async function previewTriggerPrompt(payload: AnyTriggerPayload): Promise<
   systemPrompt: string;
   messages: ChatMessage[];
   estimatedTokens: number;
+  lastPrompt?: string;
 }> {
   const { mode } = payload;
 
@@ -491,18 +512,29 @@ export async function previewTriggerPrompt(payload: AnyTriggerPayload): Promise<
       const edificio = npc.location.edificioId ? edificioManager.getById(npc.location.edificioId) : undefined;
       const session = chatPayload.playersessionid ? sessionManager.getById(chatPayload.playersessionid) : undefined;
 
-      const messages = buildChatMessages(chatPayload.message, {
+      // Obtener el último resumen (SOLO si viene en el payload, no usar session.lastPrompt)
+      // session.lastPrompt contiene el prompt completo, no debe usarse como resumen
+      const lastSummary = chatPayload.lastSummary || undefined;
+
+      const messages = buildChatMessagesWithOptions(chatPayload.message, {
         world,
         pueblo,
         edificio,
         npc,
         session
+      }, {
+        jugador: chatPayload.jugador,
+        templateUser: chatPayload.templateUser,
+        lastSummary
       });
+
+      const lastPrompt = messages.map(m => `[${m.role}]\n${m.content}`).join('\n\n');
 
       return {
         systemPrompt: messages.find(m => m.role === 'system')?.content || '',
         messages,
-        estimatedTokens: 0
+        estimatedTokens: 0,
+        lastPrompt
       };
     }
 

@@ -159,6 +159,7 @@ export interface Session {
   lastActivity: string;
   messages: ChatMessage[];
   summary?: string;
+  lastPrompt?: string;
 }
 
 export type TriggerMode = 'chat' | 'resumen_sesion' | 'resumen_npc' | 'resumen_edificio' | 'resumen_pueblo' | 'resumen_mundo' | 'nuevo_lore';
@@ -184,6 +185,8 @@ export interface ChatTriggerPayload extends TriggerPayload {
     hora?: string;
     clima?: string;
   };
+  templateUser?: string; // Plantilla del usuario opcional
+  lastSummary?: string; // Último resumen de la sesión (opcional)
 }
 
 export interface ResumenSesionTriggerPayload extends TriggerPayload {

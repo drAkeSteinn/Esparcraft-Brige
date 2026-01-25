@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, MapPin } from 'lucide-react';
+import { Plus, Edit2, Trash2, MapPin, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -9,17 +9,23 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Edificio } from '@/lib/types';
+import { Edificio, PointOfInterest, PlaceType, NPC } from '@/lib/types';
 import { toast } from '@/hooks/use-toast';
+import { Badge } from '@/components/ui/badge';
+import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 
 export default function EdificiosSection() {
   const [edificios, setEdificios] = useState<Edificio[]>([]);
   const [worlds, setWorlds] = useState<World[]>([]);
   const [pueblos, setPueblos] = useState<Pueblo[]>([]);
   const [edificioMemories, setEdificioMemories] = useState<Record<string, any>>({});
+  const [placeTypes, setPlaceTypes] = useState<PlaceType[]>([]);
+  const [npcs, setNpcs] = useState<NPC[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [poiDialogOpen, setPoiDialogOpen] = useState(false);
   const [editingEdificio, setEditingEdificio] = useState<Edificio | null>(null);
+  const [editingPoi, setEditingPoi] = useState<PointOfInterest | null>(null);
   const [formData, setFormData] = useState({
     name: '',
     lore: '',
@@ -33,6 +39,13 @@ export default function EdificiosSection() {
     endY: '',
     endZ: ''
   });
+  const [poiFormData, setPoiFormData] = useState({
+    name: '',
+    coordenadas: { x: '', y: '', z: '' },
+    descripcion: '',
+    tipo: '',
+    tags: ''
+  });
 
   useEffect(() => {
     fetchData();
@@ -41,19 +54,25 @@ export default function EdificiosSection() {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [edificiosRes, worldsRes, pueblosRes] = await Promise.all([
+      const [edificiosRes, worldsRes, pueblosRes, placeTypesRes, npcsRes] = await Promise.all([
         fetch('/api/edificios'),
         fetch('/api/worlds'),
-        fetch('/api/pueblos')
+        fetch('/api/pueblos'),
+        fetch('/api/place-types'),
+        fetch('/api/npcs')
       ]);
 
       const edificiosResult = await edificiosRes.json();
       const worldsResult = await worldsRes.json();
       const pueblosResult = await pueblosRes.json();
+      const placeTypesResult = await placeTypesRes.json();
+      const npcsResult = await npcsRes.json();
 
       if (edificiosResult.success) setEdificios(edificiosResult.data);
       if (worldsResult.success) setWorlds(worldsResult.data);
       if (pueblosResult.success) setPueblos(pueblosResult.data);
+      if (placeTypesResult.success) setPlaceTypes(placeTypesResult.data);
+      if (npcsResult.success) setNpcs(npcsResult.data);
 
       // Cargar memorias de edificios en paralelo
       const memoriaPromises = edificiosResult.data.map(edificio =>
@@ -104,6 +123,81 @@ export default function EdificiosSection() {
     setDialogOpen(true);
   };
 
+  const handleCreatePoi = () => {
+    setEditingPoi(null);
+    setPoiFormData({
+      name: '',
+      coordenadas: { x: '', y: '', z: '' },
+      descripcion: '',
+      tipo: placeTypes[0]?.id || '',
+      tags: ''
+    });
+    setPoiDialogOpen(true);
+  };
+
+  const handleEditPoi = (poi: PointOfInterest) => {
+    setEditingPoi(poi);
+    setPoiFormData({
+      name: poi.name,
+      coordenadas: {
+        x: poi.coordenadas.x.toString(),
+        y: poi.coordenadas.y.toString(),
+        z: poi.coordenadas.z.toString()
+      },
+      descripcion: poi.descripcion,
+      tipo: poi.tipo,
+      tags: poi.tags?.join(', ') || ''
+    });
+    setPoiDialogOpen(true);
+  };
+
+  const handleDeletePoi = (poiId: string) => {
+    if (!confirm('¿Estás seguro de que deseas eliminar este punto de interés?')) return;
+
+    if (editingEdificio) {
+      const updatedEdificio = {
+        ...editingEdificio,
+        puntosDeInteres: (editingEdificio.puntosDeInteres || []).filter(poi => poi.id !== poiId)
+      };
+      setEditingEdificio(updatedEdificio);
+    }
+  };
+
+  const handleSavePoi = () => {
+    if (!editingEdificio) return;
+
+    const newPoi: PointOfInterest = {
+      id: editingPoi?.id || `POI_${Date.now()}`,
+      name: poiFormData.name,
+      coordenadas: {
+        x: parseInt(poiFormData.coordenadas.x) || 0,
+        y: parseInt(poiFormData.coordenadas.y) || 0,
+        z: parseInt(poiFormData.coordenadas.z) || 0
+      },
+      descripcion: poiFormData.descripcion,
+      tipo: poiFormData.tipo,
+      tags: poiFormData.tags.split(',').map(t => t.trim()).filter(t => t)
+    };
+
+    let updatedPois;
+    if (editingPoi) {
+      // Editar POI existente
+      updatedPois = (editingEdificio.puntosDeInteres || []).map(poi =>
+        poi.id === editingPoi.id ? newPoi : poi
+      );
+    } else {
+      // Agregar nuevo POI
+      updatedPois = [...(editingEdificio.puntosDeInteres || []), newPoi];
+    }
+
+    setEditingEdificio({
+      ...editingEdificio,
+      puntosDeInteres: updatedPois
+    });
+
+    setPoiDialogOpen(false);
+  };
+
   const handleEdit = (edificio: Edificio) => {
     setEditingEdificio(edificio);
     setFormData({
@@ -150,7 +244,7 @@ export default function EdificiosSection() {
 
   const handleSubmit = async () => {
     try {
-      const payload = {
+      const payload: any = {
         name: formData.name,
         lore: formData.lore,
         eventos_recientes: formData.eventos_recientes.split('\n').filter(e => e.trim()),
@@ -169,6 +263,11 @@ export default function EdificiosSection() {
           }
         }
       };
+
+      // Incluir puntos de interés si existen
+      if (editingEdificio && editingEdificio.puntosDeInteres) {
+        payload.puntosDeInteres = editingEdificio.puntosDeInteres;
+      }
 
       const url = editingEdificio ? `/api/edificios/${editingEdificio.id}` : '/api/edificios';
       const method = editingEdificio ? 'PUT' : 'POST';
@@ -230,6 +329,10 @@ export default function EdificiosSection() {
         {edificios.map((edificio) => {
           const world = worlds.find(w => w.id === edificio.worldId);
           const pueblo = pueblos.find(p => p.id === edificio.puebloId);
+          // Filtrar NPCs asignados a este edificio
+          const edificioNpcs = npcs.filter(npc => 
+            npc.location.scope === 'edificio' && npc.location.edificioId === edificio.id
+          );
 
           return (
             <Card key={edificio.id}>
@@ -294,6 +397,58 @@ export default function EdificiosSection() {
                       <p className="text-sm text-indigo-800 dark:text-indigo-200 line-clamp-3">
                         {edificioMemories[edificio.id].consolidatedSummary}
                       </p>
+                    </div>
+                  )}
+
+                  {edificio.puntosDeInteres && edificio.puntosDeInteres.length > 0 && (
+                    <div className="mt-3">
+                      <p className="text-sm font-medium mb-2">Tipos de lugar ({edificio.puntosDeInteres.length}):</p>
+                      <div className="flex flex-wrap gap-1">
+                        {edificio.puntosDeInteres.map((poi, i) => {
+                          const placeType = placeTypes.find(pt => pt.id === poi.tipo);
+                          return (
+                            <Badge key={i} variant="secondary" className="text-xs">
+                              <MapPin className="h-3 w-3 mr-1" />
+                              {placeType?.name || poi.tipo}
+                            </Badge>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {edificioNpcs.length > 0 && (
+                    <div className="mt-3">
+                      <p className="text-sm font-medium mb-2">NPCs asignados ({edificioNpcs.length}):</p>
+                      <div className="flex flex-wrap gap-2">
+                        {edificioNpcs.map((npc) => {
+                          const npcName = npc.card?.data?.name || npc.card?.name || 'NPC sin nombre';
+                          const npcAvatar = npc.card?.data?.avatar || npc.card?.avatar;
+                          const npcInitial = typeof npcName === 'string' && npcName.length > 0 
+                            ? npcName.charAt(0).toUpperCase() 
+                            : 'N';
+                          return (
+                            <div
+                              key={npc.id}
+                              className="flex items-center gap-2 bg-secondary/50 px-2 py-1 rounded-md"
+                              title={npcName}
+                            >
+                              <Avatar className="h-5 w-5">
+                                {npcAvatar ? (
+                                  <AvatarImage src={npcAvatar} alt={npcName} />
+                                ) : (
+                                  <AvatarFallback className="text-[10px]">
+                                    {npcInitial}
+                                  </AvatarFallback>
+                                )}
+                              </Avatar>
+                              <span className="text-xs font-medium">
+                                {npcName}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
                   )}
                 </div>
@@ -449,10 +604,175 @@ export default function EdificiosSection() {
                 </div>
               </div>
             </div>
+
+            {/* Sección de Tipos de lugar (Puntos de interés) */}
+            <div className="border-t pt-4">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-lg font-semibold">Tipos de lugar</h3>
+                <Button size="sm" onClick={handleCreatePoi}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Agregar Tipo de lugar
+                </Button>
+              </div>
+
+              {editingEdificio && editingEdificio.puntosDeInteres && editingEdificio.puntosDeInteres.length > 0 ? (
+                <div className="space-y-2 max-h-64 overflow-y-auto">
+                  {editingEdificio.puntosDeInteres.map((poi) => {
+                    const placeType = placeTypes.find(pt => pt.id === poi.tipo);
+                    return (
+                      <div key={poi.id} className="flex items-center justify-between p-3 border rounded-lg">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <Badge variant="outline">{placeType?.name || poi.tipo}</Badge>
+                            <span className="font-medium">{poi.name}</span>
+                          </div>
+                          <p className="text-sm text-muted-foreground mt-1">{poi.descripcion}</p>
+                          <p className="text-xs text-muted-foreground">
+                            Coordenadas: X:{poi.coordenadas.x}, Y:{poi.coordenadas.y}, Z:{poi.coordenadas.z}
+                          </p>
+                        </div>
+                        <div className="flex gap-2">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleEditPoi(poi)}
+                          >
+                            <Edit2 className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleDeletePoi(poi.id)}
+                          >
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground text-center py-4">
+                  No hay tipos de lugar agregados. Haz clic en "Agregar Tipo de lugar" para comenzar.
+                </p>
+              )}
+            </div>
           </div>
           <DialogFooter>
             <Button onClick={handleSubmit}>
               {editingEdificio ? 'Actualizar' : 'Crear'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog para agregar/editar Puntos de Interés */}
+      <Dialog open={poiDialogOpen} onOpenChange={setPoiDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {editingPoi ? 'Editar Tipo de lugar' : 'Nuevo Tipo de lugar'}
+            </DialogTitle>
+            <DialogDescription>
+              {editingPoi ? 'Actualiza la información del punto de interés' : 'Agrega un nuevo punto de interés al edificio'}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="poiTipo">Tipo de lugar</Label>
+              <Select
+                value={poiFormData.tipo}
+                onValueChange={(value) => setPoiFormData({ ...poiFormData, tipo: value })}
+              >
+                <SelectTrigger id="poiTipo">
+                  <SelectValue placeholder="Selecciona un tipo" />
+                </SelectTrigger>
+                <SelectContent>
+                  {placeTypes.map(pt => (
+                    <SelectItem key={pt.id} value={pt.id}>
+                      {pt.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <Label htmlFor="poiName">Nombre</Label>
+              <Input
+                id="poiName"
+                value={poiFormData.name}
+                onChange={(e) => setPoiFormData({ ...poiFormData, name: e.target.value })}
+                placeholder="Ej: Mesa 1, Silla de la barra..."
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="poiDescripcion">Descripción</Label>
+              <Textarea
+                id="poiDescripcion"
+                value={poiFormData.descripcion}
+                onChange={(e) => setPoiFormData({ ...poiFormData, descripcion: e.target.value })}
+                placeholder="Describe qué se hace en este punto..."
+                rows={3}
+              />
+            </div>
+
+            <div>
+              <Label>Coordenadas</Label>
+              <div className="grid grid-cols-3 gap-2">
+                <div>
+                  <Label htmlFor="poiX" className="text-xs">X</Label>
+                  <Input
+                    id="poiX"
+                    type="number"
+                    value={poiFormData.coordenadas.x}
+                    onChange={(e) => setPoiFormData({ 
+                      ...poiFormData, 
+                      coordenadas: { ...poiFormData.coordenadas, x: e.target.value } 
+                    })}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="poiY" className="text-xs">Y</Label>
+                  <Input
+                    id="poiY"
+                    type="number"
+                    value={poiFormData.coordenadas.y}
+                    onChange={(e) => setPoiFormData({ 
+                      ...poiFormData, 
+                      coordenadas: { ...poiFormData.coordenadas, y: e.target.value } 
+                    })}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="poiZ" className="text-xs">Z</Label>
+                  <Input
+                    id="poiZ"
+                    type="number"
+                    value={poiFormData.coordenadas.z}
+                    onChange={(e) => setPoiFormData({ 
+                      ...poiFormData, 
+                      coordenadas: { ...poiFormData.coordenadas, z: e.target.value } 
+                    })}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <Label htmlFor="poiTags">Tags (separados por coma)</Label>
+              <Input
+                id="poiTags"
+                value={poiFormData.tags}
+                onChange={(e) => setPoiFormData({ ...poiFormData, tags: e.target.value })}
+                placeholder="Ej: comercio, descanso, social"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button onClick={handleSavePoi}>
+              {editingPoi ? 'Actualizar' : 'Agregar'}
             </Button>
           </DialogFooter>
         </DialogContent>
