@@ -121,12 +121,37 @@ export default function RouterTab() {
   }, []);
 
   useEffect(() => {
-    // Cargar Template User del localStorage
-    const savedTemplate = localStorage.getItem('userTemplate');
-    if (savedTemplate) {
-      setChatForm(prev => ({ ...prev, templateUser: savedTemplate }));
-      setTemplateSaved(true);
-    }
+    // Cargar Template User del servidor primero
+    const loadTemplateFromServer = async () => {
+      try {
+        const response = await fetch('/api/settings/template');
+        const result = await response.json();
+
+        if (result.success && result.data.template) {
+          setChatForm(prev => ({ ...prev, templateUser: result.data.template }));
+          setTemplateSaved(true);
+          console.log('Template User cargado del servidor:', result.data.template.substring(0, 100) + '...');
+        } else {
+          // Si no hay template en el servidor, intentar cargar del localStorage
+          const savedTemplate = localStorage.getItem('userTemplate');
+          if (savedTemplate) {
+            setChatForm(prev => ({ ...prev, templateUser: savedTemplate }));
+            setTemplateSaved(true);
+            console.log('Template User cargado del localStorage (servidor vacío)');
+          }
+        }
+      } catch (error) {
+        console.error('Error cargando template del servidor:', error);
+        // Fallback a localStorage
+        const savedTemplate = localStorage.getItem('userTemplate');
+        if (savedTemplate) {
+          setChatForm(prev => ({ ...prev, templateUser: savedTemplate }));
+          setTemplateSaved(true);
+        }
+      }
+    };
+
+    loadTemplateFromServer();
   }, []);
 
   useEffect(() => {
@@ -449,13 +474,41 @@ export default function RouterTab() {
     loadSessionSummary();
   }, [chatForm.playersessionid, chatForm.sessionType]);
 
-  const handleSaveTemplate = () => {
+  const handleSaveTemplate = async () => {
+    // Guardar en localStorage (para el preview)
     localStorage.setItem('userTemplate', chatForm.templateUser);
     setTemplateSaved(true);
-    toast({
-      title: 'Template Guardado',
-      description: 'El template del usuario se ha guardado correctamente'
-    });
+
+    // ✅ También guardar en el servidor
+    try {
+      const response = await fetch('/api/settings/template', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ template: chatForm.templateUser })
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        toast({
+          title: 'Template Guardado',
+          description: 'El template del usuario se ha guardado correctamente en el servidor'
+        });
+      } else {
+        toast({
+          title: 'Advertencia',
+          description: 'Template guardado en localStorage pero con error en el servidor',
+          variant: 'destructive'
+        });
+      }
+    } catch (error) {
+      console.error('Error guardando template en servidor:', error);
+      toast({
+        title: 'Error',
+        description: 'No se pudo guardar el template en el servidor',
+        variant: 'destructive'
+      });
+    }
   };
 
   const handleSaveResumenSesionTemplate = () => {

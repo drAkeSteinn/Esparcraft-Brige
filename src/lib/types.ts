@@ -280,3 +280,53 @@ export interface PromptDebugInfo {
   estimatedTokens: number;
   finalRequest: LLMRequest;
 }
+
+// GrimorioCard: Plantilla reutilizable con variables
+export interface GrimorioCard {
+  id: string;                          // ID único de la card
+  key: string;                        // Key para la variable (ej: "datos_jugador", "estado_jugador")
+  nombre: string;                     // Nombre descriptivo de la plantilla
+  plantilla: string;                  // Texto con variables (ej: "DATOS DEL AVENTURERO\nNombre: {{jugador.nombre}}...")
+  categoria: string;                   // Categoría: general, jugador, npc, ubicacion, mundo
+  timestamp: string;                  // Timestamp de creación/modificación
+  descripcion?: string;                 // Descripción opcional de la plantilla
+}
+
+// Tipos para requests de API de Grimorio
+export interface CreateGrimorioCardRequest {
+  key: string;
+  nombre: string;
+  plantilla: string;
+  categoria: string;
+  descripcion?: string;
+}
+
+export interface UpdateGrimorioCardRequest {
+  nombre: string;
+  plantilla: string;
+  categoria: string;
+  descripcion?: string;
+}
+
+export interface ApplyGrimorioCardRequest {
+  context: {
+    world?: World;
+    pueblo?: Pueblo;
+    edificio?: Edificio;
+    npc?: NPC;
+    jugador?: {
+      nombre?: string;
+      raza?: string;
+      nivel?: string;
+      almakos?: string;
+      deuda?: string;
+      piedras_del_alma?: string;
+      salud_actual?: string;
+      reputacion?: string;
+      hora?: string;
+      clima?: string;
+    };
+    session?: Session;
+    mensaje?: string;
+  };
+}

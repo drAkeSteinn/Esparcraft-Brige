@@ -546,3 +546,74 @@ export const worldStateManager = {
     this.saveMemory(worldId, { ...existing, ...updates });
   }
 };
+
+// Template User operations (configuración global)
+export const templateUserManager = {
+  getFilePath: () => path.join(DATA_DIR, 'settings', 'templateUser.json'),
+
+  getTemplate(): string {
+    const data = readJSON<{ template: string; timestamp: string }>(this.getFilePath());
+    return data?.template || '';
+  },
+
+  saveTemplate(template: string): void {
+    writeJSON(this.getFilePath(), {
+      template,
+      timestamp: new Date().toISOString()
+    });
+  }
+};
+
+// Grimorio operations (plantillas reutilizables)
+export const grimorioManager = {
+  getFilePath: (id: string) => path.join(DATA_DIR, 'grimorio', `${id}.json`),
+
+  getAll(): GrimorioCard[] {
+    const files = listFiles(path.join(DATA_DIR, 'grimorio'));
+    return files
+      .map(f => readJSON<GrimorioCard>(path.join(DATA_DIR, 'grimorio', f)))
+      .filter((c): c is GrimorioCard => c !== null);
+  },
+
+  getById(id: string): GrimorioCard | null {
+    return readJSON<GrimorioCard>(this.getFilePath(id));
+  },
+
+  getByCategory(categoria: string): GrimorioCard[] {
+    const allCards = this.getAll();
+    return allCards.filter(card => card.categoria === categoria);
+  },
+
+  create(card: Omit<GrimorioCard, 'id' | 'timestamp'>): GrimorioCard {
+    const cardId = `GRIMORIO_${Date.now()}`;
+    const newCard: GrimorioCard = { ...card, id: cardId, timestamp: new Date().toISOString() };
+    writeJSON(this.getFilePath(cardId), newCard);
+    return newCard;
+  },
+
+  update(id: string, updates: Partial<Omit<GrimorioCard, 'id'>>): GrimorioCard | null {
+    const existing = this.getById(id);
+    if (!existing) return null;
+
+    const updated = { ...existing, ...updates, timestamp: new Date().toISOString() };
+    writeJSON(this.getFilePath(id), updated);
+    return updated;
+  },
+
+  delete(id: string): boolean {
+    try {
+      deleteFile(this.getFilePath(id));
+      return true;
+    } catch {
+      return false;
+    }
+  },
+
+  // Valida que la key sea única
+  isKeyUnique(key: string, excludeId?: string): boolean {
+    const allCards = this.getAll();
+    return allCards
+      .filter(card => card.key === key && card.id !== excludeId)
+      .length === 0;
+  }
+};

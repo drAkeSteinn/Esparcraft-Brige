@@ -1,0 +1,9 @@
+{
+  "key": "context",
+  "nombre": "Nombre",
+  "plantilla": "aqui se pone lo bueno {{jugador.nombre}}",
+  "categoria": "general",
+  "descripcion": "{{mundo}}",
+  "id": "GRIMORIO_1769384128014",
+  "timestamp": "2026-01-25T23:35:28.014Z"
+}

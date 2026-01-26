@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Globe, MapPin, Building, Users, MessageSquare, Eye, Network, Database, Settings } from 'lucide-react';
+import { Globe, MapPin, Building, Users, MessageSquare, Eye, Network, Database, Settings, Book } from 'lucide-react';
 import MundoTab from '@/components/dashboard/MundoTab';
 import NpcsTab from '@/components/dashboard/NpcsTab';
 import MapTab from '@/components/dashboard/MapTab';
@@ -11,6 +11,7 @@ import SessionsTab from '@/components/dashboard/SessionsTab';
 import RouterTab from '@/components/dashboard/RouterTab';
 import EmbeddingsTab from '@/components/dashboard/EmbeddingsTab';
 import SettingsTab from '@/components/dashboard/SettingsTab';
+import GrimorioTab from '@/components/dashboard/GrimorioTab';
 
 export default function Dashboard() {
   const [activeTab, setActiveTab] = useState('mundo');
@@ -41,7 +42,7 @@ export default function Dashboard() {
       {/* Main Content */}
       <main className="flex-1 container mx-auto px-4 py-6">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-4 md:grid-cols-7 lg:w-auto lg:inline-grid">
+          <TabsList className="grid w-full grid-cols-4 md:grid-cols-8 lg:w-auto lg:inline-grid">
             <TabsTrigger value="mundo" className="flex items-center gap-2">
               <Globe className="h-4 w-4" />
               <span className="hidden sm:inline">Universo</span>
@@ -61,6 +62,10 @@ export default function Dashboard() {
             <TabsTrigger value="router" className="flex items-center gap-2">
               <Network className="h-4 w-4" />
               <span className="hidden sm:inline">Router</span>
+            </TabsTrigger>
+            <TabsTrigger value="grimorio" className="flex items-center gap-2">
+              <Book className="h-4 w-4" />
+              <span className="hidden sm:inline">Grimorio</span>
             </TabsTrigger>
             <TabsTrigger value="embeddings" className="flex items-center gap-2">
               <Database className="h-4 w-4" />
@@ -90,6 +95,10 @@ export default function Dashboard() {
 
           <TabsContent value="router">
             <RouterTab />
+          </TabsContent>
+
+          <TabsContent value="grimorio">
+            <GrimorioTab />
           </TabsContent>
 
           <TabsContent value="embeddings">

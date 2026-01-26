@@ -9,7 +9,8 @@ import {
   ResumenMundoTriggerPayload,
   NuevoLoreTriggerPayload,
   AnyTriggerPayload,
-  ChatMessage
+  ChatMessage,
+  getCardField
 } from './types';
 import {
   npcManager,
@@ -21,7 +22,8 @@ import {
   summaryManager,
   edificioStateManager,
   puebloStateManager,
-  worldStateManager
+  worldStateManager,
+  templateUserManager
 } from './fileManager';
 import {
   buildChatMessagesWithOptions,
@@ -33,6 +35,7 @@ import {
   buildNuevoLorePrompt
 } from './promptBuilder';
 import { EmbeddingTriggers } from './embedding-triggers';
+import { replaceVariables, VariableContext } from './utils';
 
 // LLM Configuration
 const LLM_API_URL = process.env.LLM_API_URL || 'http://127.0.0.1:5000/v1/chat/completions';
@@ -69,12 +72,11 @@ async function callLLM(messages: ChatMessage[]): Promise<string> {
 
 // Chat trigger handler
 export async function handleChatTrigger(payload: ChatTriggerPayload): Promise<{ response: string; sessionId: string }> {
-  const { message, npcid, playersessionid, jugador, templateUser, lastSummary: payloadLastSummary } = payload;
+  const { message, npcid, playersessionid, jugador, lastSummary: payloadLastSummary } = payload;
 
   // DEBUG: Log para ver qué llega del request
   console.log('[handleChatTrigger] DEBUG payload.npcid:', npcid);
   console.log('[handleChatTrigger] DEBUG payload.jugador:', jugador);
-  console.log('[handleChatTrigger] DEBUG payload.templateUser:', templateUser);
   console.log('[handleChatTrigger] DEBUG payload.message:', message);
 
   // Get NPC
@@ -108,6 +110,28 @@ export async function handleChatTrigger(payload: ChatTriggerPayload): Promise<{ 
   // session.lastPrompt contiene el prompt completo, no debe usarse como resumen
   const lastSummary = payloadLastSummary || undefined;
 
+  // ✅ CARGAR EL TEMPLATE USER DEL SERVIDOR
+  const templateUserTemplate = templateUserManager.getTemplate();
+  console.log('[handleChatTrigger] DEBUG templateUser del servidor cargado:', templateUserTemplate ? templateUserTemplate.substring(0, 100) + '...' : '(vacío)');
+
+  // ✅ CONSTRUIR CONTEXTO DE VARIABLES PARA REEMPLAZO
+  const varContext: VariableContext = {
+    npc,
+    world,
+    pueblo,
+    edificio,
+    jugador,
+    session,
+    char: getCardField(npc?.card, 'name', ''),
+    mensaje: message,
+    userMessage: message,
+    lastSummary: lastSummary
+  };
+
+  // ✅ REEMPLAZAR VARIABLES EN EL TEMPLATE
+  const templateUserReemplazado = templateUserTemplate ? replaceVariables(templateUserTemplate, varContext) : '';
+  console.log('[handleChatTrigger] DEBUG templateUser después de reemplazo:', templateUserReemplazado ? templateUserReemplazado.substring(0, 100) + '...' : '(vacío)');
+
   // Build messages con la nueva estructura estándar
   const messages = buildChatMessagesWithOptions(message, {
     world,
@@ -117,7 +141,7 @@ export async function handleChatTrigger(payload: ChatTriggerPayload): Promise<{ 
     session
   }, {
     jugador,
-    templateUser,
+    templateUser: templateUserReemplazado, // ✅ Template YA con variables reemplazadas
     lastSummary
   });
 
@@ -513,8 +537,27 @@ export async function previewTriggerPrompt(payload: AnyTriggerPayload): Promise<
       const session = chatPayload.playersessionid ? sessionManager.getById(chatPayload.playersessionid) : undefined;
 
       // Obtener el último resumen (SOLO si viene en el payload, no usar session.lastPrompt)
-      // session.lastPrompt contiene el prompt completo, no debe usarse como resumen
       const lastSummary = chatPayload.lastSummary || undefined;
+
+      // ✅ CARGAR EL TEMPLATE USER DEL SERVIDOR
+      const templateUserTemplate = templateUserManager.getTemplate();
+
+      // ✅ CONSTRUIR CONTEXTO DE VARIABLES PARA REEMPLAZO
+      const varContext: VariableContext = {
+        npc,
+        world,
+        pueblo,
+        edificio,
+        jugador: chatPayload.jugador,
+        session,
+        char: getCardField(npc?.card, 'name', ''),
+        mensaje: chatPayload.message,
+        userMessage: chatPayload.message,
+        lastSummary: lastSummary
+      };
+
+      // ✅ REEMPLAZAR VARIABLES EN EL TEMPLATE
+      const templateUserReemplazado = templateUserTemplate ? replaceVariables(templateUserTemplate, varContext) : '';
 
       const messages = buildChatMessagesWithOptions(chatPayload.message, {
         world,
@@ -524,7 +567,7 @@ export async function previewTriggerPrompt(payload: AnyTriggerPayload): Promise<
         session
       }, {
         jugador: chatPayload.jugador,
-        templateUser: chatPayload.templateUser,
+        templateUser: templateUserReemplazado, // ✅ Template YA con variables reemplazadas
         lastSummary
       });
 
