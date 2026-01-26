@@ -13,7 +13,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { World, Pueblo, Edificio, NPC, Session } from '@/lib/types';
+import { Switch } from '@/components/ui/switch';
+import { World, Pueblo, Edificio, NPC, Session, GrimorioCard } from '@/lib/types';
 import { toast } from '@/hooks/use-toast';
 
 export default function RouterTab() {
@@ -26,12 +27,32 @@ export default function RouterTab() {
   const [responseDialogOpen, setResponseDialogOpen] = useState(false);
   const [response, setResponse] = useState<any>(null);
   const [copied, setCopied] = useState(false);
-  const [templateSaved, setTemplateSaved] = useState(false);
   const [resumenSesionTemplateSaved, setResumenSesionTemplateSaved] = useState(false);
   const [resumenNPCTemplateSaved, setResumenNPCTemplateSaved] = useState(false);
   const [resumenEdificioTemplateSaved, setResumenEdificioTemplateSaved] = useState(false);
   const [resumenPuebloTemplateSaved, setResumenPuebloTemplateSaved] = useState(false);
   const [resumenMundoTemplateSaved, setResumenMundoTemplateSaved] = useState(false);
+
+  // Plantillas de Grimorio
+  const [grimorioCards, setGrimorioCards] = useState<GrimorioCard[]>([]);
+  const [plantillaRows, setPlantillaRows] = useState<Array<{
+    enabled: boolean;
+    templateKey?: string;
+    section: string;
+  }>>([]);
+  const [plantillaConfigSaved, setPlantillaConfigSaved] = useState(false);
+
+  // Secciones disponibles del prompt
+  const PROMPT_SECTIONS = [
+    { id: '1', name: 'Instrucción Inicial' },
+    { id: '2', name: 'MAIN PROMPT' },
+    { id: '3', name: 'DESCRIPCIÓN' },
+    { id: '4', name: 'PERSONALIDAD' },
+    { id: '5', name: 'ESCENARIO' },
+    { id: '6', name: 'EJEMPLOS DE CHAT' },
+    { id: '7', name: 'LAST USER MESSAGE' },
+    { id: '8', name: 'INSTRUCCIONES POST-HISTORY' }
+  ];
 
   // Estado para almacenar las sesiones con resúmenes del NPC seleccionado
   const [npcSessionSummaries, setNpcSessionSummaries] = useState<any[]>([]);
@@ -63,7 +84,6 @@ export default function RouterTab() {
       clima: ''
     },
     mensaje: '', // Mensaje del jugador (context por mensaje)
-    templateUser: '', // Plantilla del usuario (reemplaza systemPrompt)
     historyLimit: 10, // Número de mensajes del historial a enviar
     lastSummary: '' // Último resumen de la sesión (si existe)
   });
@@ -120,47 +140,69 @@ export default function RouterTab() {
     fetchData();
   }, []);
 
+  // Cargar plantillas de Grimorio de tipo 'plantilla' y configuración guardada
   useEffect(() => {
-    // Cargar Template User del servidor primero
-    const loadTemplateFromServer = async () => {
+    const loadGrimorioCards = async () => {
       try {
-        const response = await fetch('/api/settings/template');
+        const response = await fetch('/api/grimorio');
         const result = await response.json();
 
-        if (result.success && result.data.template) {
-          setChatForm(prev => ({ ...prev, templateUser: result.data.template }));
-          setTemplateSaved(true);
-          console.log('Template User cargado del servidor:', result.data.template.substring(0, 100) + '...');
-        } else {
-          // Si no hay template en el servidor, intentar cargar del localStorage
-          const savedTemplate = localStorage.getItem('userTemplate');
-          if (savedTemplate) {
-            setChatForm(prev => ({ ...prev, templateUser: savedTemplate }));
-            setTemplateSaved(true);
-            console.log('Template User cargado del localStorage (servidor vacío)');
+        if (result.success && result.data.cards) {
+          // Filtrar solo plantillas de tipo 'plantilla'
+          const plantillaCards = result.data.cards.filter((card: GrimorioCard) => card.tipo === 'plantilla');
+          setGrimorioCards(plantillaCards);
+
+          // Siempre inicializar filas por defecto para todas las secciones
+          const defaultRows: Array<{ enabled: boolean; templateKey: string | undefined; section: string }> = [];
+          PROMPT_SECTIONS.forEach(section => {
+            defaultRows.push({
+              enabled: false,
+              templateKey: undefined,
+              section: section.id
+            });
+          });
+
+          console.log('[loadGrimorioCards] defaultRows creadas:', defaultRows.length);
+          console.log('[loadGrimorioCards] plantillaCards cargadas:', plantillaCards.length);
+
+          // Cargar configuración guardada y merge con filas por defecto
+          try {
+            const configResponse = await fetch('/api/chat-trigger-config');
+            const configResult = await configResponse.json();
+
+            console.log('[loadGrimorioCards] ConfigResponse:', configResult);
+
+            if (configResult.success && configResult.data.grimorioTemplates && configResult.data.grimorioTemplates.length > 0) {
+              // Merge: actualizar las filas por defecto con la configuración guardada
+              const mergedRows = defaultRows.map(defaultRow => {
+                const savedRow = configResult.data.grimorioTemplates.find((r: any) => r.section === defaultRow.section);
+                if (savedRow) {
+                  return savedRow;
+                }
+                return defaultRow;
+              });
+              console.log('[loadGrimorioCards] mergedRows:', mergedRows);
+              setPlantillaRows(mergedRows);
+              setPlantillaConfigSaved(true);
+            } else {
+              // Si no hay configuración guardada, usar filas por defecto
+              console.log('[loadGrimorioCards] Usando defaultRows');
+              setPlantillaRows(defaultRows);
+            }
+          } catch (configError) {
+            console.error('Error cargando configuración de plantillas:', configError);
+            // Inicializar con valores por defecto
+            console.log('[loadGrimorioCards] Error, usando defaultRows');
+            setPlantillaRows(defaultRows);
           }
         }
       } catch (error) {
-        console.error('Error cargando template del servidor:', error);
-        // Fallback a localStorage
-        const savedTemplate = localStorage.getItem('userTemplate');
-        if (savedTemplate) {
-          setChatForm(prev => ({ ...prev, templateUser: savedTemplate }));
-          setTemplateSaved(true);
-        }
+        console.error('Error cargando plantillas de Grimorio:', error);
       }
     };
 
-    loadTemplateFromServer();
+    loadGrimorioCards();
   }, []);
-
-  useEffect(() => {
-    // Guardar Template User en localStorage cuando cambie
-    if (chatForm.templateUser) {
-      localStorage.setItem('userTemplate', chatForm.templateUser);
-      setTemplateSaved(true);
-    }
-  }, [chatForm.templateUser]);
 
   useEffect(() => {
     // Cargar System Prompt de resumen de sesión del localStorage
@@ -474,43 +516,6 @@ export default function RouterTab() {
     loadSessionSummary();
   }, [chatForm.playersessionid, chatForm.sessionType]);
 
-  const handleSaveTemplate = async () => {
-    // Guardar en localStorage (para el preview)
-    localStorage.setItem('userTemplate', chatForm.templateUser);
-    setTemplateSaved(true);
-
-    // ✅ También guardar en el servidor
-    try {
-      const response = await fetch('/api/settings/template', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ template: chatForm.templateUser })
-      });
-
-      const result = await response.json();
-
-      if (result.success) {
-        toast({
-          title: 'Template Guardado',
-          description: 'El template del usuario se ha guardado correctamente en el servidor'
-        });
-      } else {
-        toast({
-          title: 'Advertencia',
-          description: 'Template guardado en localStorage pero con error en el servidor',
-          variant: 'destructive'
-        });
-      }
-    } catch (error) {
-      console.error('Error guardando template en servidor:', error);
-      toast({
-        title: 'Error',
-        description: 'No se pudo guardar el template en el servidor',
-        variant: 'destructive'
-      });
-    }
-  };
-
   const handleSaveResumenSesionTemplate = () => {
     localStorage.setItem('resumenSesionTemplate', resumenSesionForm.systemPrompt);
     setResumenSesionTemplateSaved(true);
@@ -554,6 +559,39 @@ export default function RouterTab() {
       title: 'Template de Resumen Mundo Guardado',
       description: 'El system prompt de resumen de mundo se ha guardado correctamente'
     });
+  };
+
+  const handleSavePlantillaConfig = async () => {
+    try {
+      const response = await fetch('/api/chat-trigger-config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ grimorioTemplates: plantillaRows })
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        setPlantillaConfigSaved(true);
+        toast({
+          title: 'Configuración de Plantillas Guardada',
+          description: 'La configuración de plantillas Grimorio se ha guardado correctamente y se usará para todos los triggers de chat'
+        });
+      } else {
+        toast({
+          title: 'Error',
+          description: result.error || 'Error al guardar la configuración',
+          variant: 'destructive'
+        });
+      }
+    } catch (error) {
+      console.error('Error saving plantilla config:', error);
+      toast({
+        title: 'Error',
+        description: 'No se pudo guardar la configuración de plantillas',
+        variant: 'destructive'
+      });
+    }
   };
 
   const fetchData = async () => {
@@ -667,8 +705,8 @@ export default function RouterTab() {
       playersessionid,
       jugador: chatForm.jugador,
       message: chatForm.mensaje, // Mensaje del jugador (message en lugar de mensaje)
-      templateUser: chatForm.templateUser, // Plantilla del usuario
       lastSummary: chatForm.lastSummary, // Último resumen de la sesión
+      grimorioTemplates: plantillaRows, // Plantillas de Grimorio activas
       context: {
         mundo: world,
         pueblo,
@@ -938,6 +976,54 @@ export default function RouterTab() {
     return result;
   };
 
+  // Función para procesar plantillas de Grimorio y expandir sus variables
+  const processGrimorioTemplates = (
+    templates: Array<{ enabled: boolean; templateKey?: string; section: string }> | undefined,
+    keyContext: any,
+    grimorioCards: GrimorioCard[]
+  ): Array<{ sectionName: string; content: string; bgColor: string; templateKey: string }> => {
+    if (!templates || templates.length === 0) return [];
+
+    const processedTemplates: Array<{ sectionName: string; content: string; bgColor: string; templateKey: string }> = [];
+
+    // Mapeo de secciones a sus nombres y colores
+    const sectionMap: Record<string, { name: string; bgColor: string }> = {
+      '1': { name: 'Instrucción Inicial', bgColor: 'bg-blue-50 dark:bg-blue-950' },
+      '2': { name: 'MAIN PROMPT', bgColor: 'bg-green-50 dark:bg-green-950' },
+      '3': { name: 'DESCRIPCIÓN', bgColor: 'bg-emerald-50 dark:bg-emerald-950' },
+      '4': { name: 'PERSONALIDAD', bgColor: 'bg-teal-50 dark:bg-teal-950' },
+      '5': { name: 'ESCENARIO', bgColor: 'bg-purple-50 dark:bg-purple-950' },
+      '6': { name: 'EJEMPLOS DE CHAT', bgColor: 'bg-pink-50 dark:bg-pink-950' },
+      '7': { name: 'LAST USER MESSAGE', bgColor: 'bg-slate-50 dark:bg-slate-950' },
+      '8': { name: 'INSTRUCCIONES POST-HISTORY', bgColor: 'bg-red-50 dark:bg-red-950' }
+    };
+
+    // Filtrar plantillas activas y procesarlas
+    templates.forEach(template => {
+      if (template.enabled && template.templateKey) {
+        const templateCard = grimorioCards.find(card => card.key === template.templateKey);
+
+        if (templateCard && templateCard.tipo === 'plantilla') {
+          const sectionInfo = sectionMap[template.section];
+
+          if (sectionInfo) {
+            // Expandir la plantilla con variables primarias usando replaceKeys
+            const expandedTemplate = replaceKeys(templateCard.plantilla || '', keyContext);
+
+            processedTemplates.push({
+              sectionName: sectionInfo.name,
+              content: expandedTemplate,
+              bgColor: sectionInfo.bgColor,
+              templateKey: template.templateKey
+            });
+          }
+        }
+      }
+    });
+
+    return processedTemplates;
+  };
+
   const sendRequest = async (triggerType: string, payload: any) => {
     try {
       const res = await fetch('/api/reroute', {
@@ -1167,6 +1253,27 @@ export default function RouterTab() {
       label: 'Template User',
       content: templateUserText,
       bgColor: 'bg-indigo-50 dark:bg-indigo-950'
+    });
+
+    // 7. Plantillas de Grimorio (si hay activas)
+    const grimorioTemplates = processGrimorioTemplates(
+      payload.grimorioTemplates,
+      keyContext,
+      grimorioCards
+    );
+
+    // Insertar plantillas de Grimorio en sus secciones correspondientes
+    grimorioTemplates.forEach(template => {
+      // Buscar el nombre de la plantilla para mostrar en el label
+      const templateCard = grimorioCards.find(card => card.key === template.templateKey);
+      const templateName = templateCard?.name || template.templateKey || 'Plantilla';
+
+      prompt += `${template.content}\n\n`;
+      sections.push({
+        label: `📝 ${templateName} (${template.sectionName})`,
+        content: template.content,
+        bgColor: template.bgColor
+      });
     });
 
     // 8. Historial y Último Mensaje
@@ -1644,7 +1751,7 @@ Rumores:
 
   // Construir payloads y previews con useMemo para actualizar automáticamente
   const chatPayload = useMemo(() => buildChatPayload(), [chatForm, npcs, worlds, pueblos, edificios, sessions]);
-  const chatPromptData = useMemo(() => buildChatPreview(chatPayload), [chatPayload, chatForm, npcs, worlds, pueblos, edificios, sessions]);
+  const chatPromptData = useMemo(() => buildChatPreview(chatPayload), [chatPayload, chatForm, npcs, worlds, pueblos, edificios, sessions, grimorioCards]);
   const chatPrompt = chatPromptData.text;
   const chatPromptSections = chatPromptData.sections;
   const resumenSesionPayload = useMemo(() => buildResumenSesionPayload(), [resumenSesionForm]);
@@ -1890,66 +1997,130 @@ Rumores:
                 <CardHeader>
                   <div className="flex items-center justify-between">
                     <div>
-                      <CardTitle>Template User</CardTitle>
-                      <CardDescription>Plantilla estándar del usuario (se usa en todas las interacciones con NPCs). Usa las variables disponibles en el glosario.</CardDescription>
+                      <CardTitle>Plantillas Grimorio</CardTitle>
+                      <CardDescription>Selecciona plantillas del Grimorio para insertar en las secciones del prompt. Las plantillas pueden contener variables primarias.</CardDescription>
                     </div>
-                    {templateSaved && (
-                      <div className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400">
-                        <RefreshCw className="h-3 w-3" />
-                        Guardado
-                      </div>
-                    )}
+                    <div className="flex items-center gap-2">
+                      {plantillaConfigSaved && (
+                        <div className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400">
+                          <RefreshCw className="h-3 w-3" />
+                          Guardado
+                        </div>
+                      )}
+                      <Badge variant="outline">
+                        {plantillaRows.filter(r => r.enabled).length} activas
+                      </Badge>
+                    </div>
                   </div>
                 </CardHeader>
-                <CardContent className="space-y-4">
-                  <Textarea
-                    value={chatForm.templateUser}
-                    onChange={(e) => setChatForm({ ...chatForm, templateUser: e.target.value })}
-                    placeholder="Ej: Eres un guerrero de nivel {{jugador.nivel}} de raza {{jugador.raza}} llamado {{jugador.nombre}}. Tu salud actual es {{jugador.salud_actual}} y estás en {{edificio}}.&#10;&#10;El mundo donde estás: {{mundo.estado}}&#10;Rumores del mundo: {{mundo.rumores}}&#10;Rumores del pueblo: {{pueblo.rumores}}&#10;Eventos en el edificio: {{edificio.eventos}}&#10;Puntos de interés: {{edificio.poislist}}&#10;&#10;Variables disponibles:&#10;- {{npc.historial}} - Historial de la sesión&#10;- {{jugador.mensaje}} - Mensaje actual del jugador&#10;- {{mundo.estado}}, {{mundo.rumores}} - Datos del mundo&#10;- {{pueblo.tipo}}, {{pueblo.descripcion}}, {{pueblo.estado}}, {{pueblo.rumores}} - Datos del pueblo&#10;- {{edificio.descripcion}}, {{edificio.eventos}}, {{edificio.poislist}} - Datos del edificio&#10;- {{npc.name}}, {{jugador.nombre}}, etc."
-                    rows={6}
-                  />
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2">
-                      <Label className="min-w-fit">Límite del Historial:</Label>
-                      <Input
-                        type="number"
-                        min="1"
-                        max="100"
-                        value={chatForm.historyLimit}
-                        onChange={(e) => setChatForm({ ...chatForm, historyLimit: parseInt(e.target.value) || 10 })}
-                        className="w-32"
-                      />
-                      <span className="text-xs text-muted-foreground">mensajes a incluir</span>
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      Define cuántos mensajes del historial de la sesión se enviarán al LLM. Usa los últimos N mensajes.
-                    </p>
+                <CardContent>
+                  {/* Header de columnas */}
+                  <div className="grid grid-cols-12 gap-2 text-xs font-semibold text-muted-foreground mb-2">
+                    <div className="col-span-1">Habilitar</div>
+                    <div className="col-span-5">Plantilla</div>
+                    <div className="col-span-6">Sección del Prompt</div>
                   </div>
-                  <div className="flex gap-2">
+
+                  {/* Filas para cada sección */}
+                  <div className="space-y-2">
+                    {PROMPT_SECTIONS.map((section, index) => {
+                      const row = plantillaRows[index];
+                      // Si no hay fila, crear una por defecto
+                      const safeRow = row || { enabled: false, templateKey: undefined, section: section.id };
+
+                      return (
+                        <div key={section.id} className="grid grid-cols-12 gap-2 items-center py-2">
+                          {/* Switch para habilitar */}
+                          <div className="col-span-1 flex justify-center">
+                            <Switch
+                              id={`switch-${section.id}`}
+                              checked={safeRow.enabled ?? false}
+                              onCheckedChange={(checked) => {
+                                const newRows = [...plantillaRows];
+                                while (newRows.length <= index) {
+                                  newRows.push({ enabled: false, templateKey: undefined, section: PROMPT_SECTIONS[newRows.length].id });
+                                }
+                                newRows[index] = { ...newRows[index], enabled: checked };
+                                setPlantillaRows(newRows);
+                                setPlantillaConfigSaved(false);
+                              }}
+                            />
+                          </div>
+
+                          {/* Dropdown de plantillas */}
+                          <div className="col-span-5">
+                            <Select
+                              value={safeRow.templateKey === undefined ? "none" : safeRow.templateKey}
+                              onValueChange={(value) => {
+                                const newRows = [...plantillaRows];
+                                while (newRows.length <= index) {
+                                  newRows.push({ enabled: false, templateKey: undefined, section: PROMPT_SECTIONS[newRows.length].id });
+                                }
+                                newRows[index] = { ...newRows[index], templateKey: value === "none" ? undefined : value };
+                                setPlantillaRows(newRows);
+                                setPlantillaConfigSaved(false);
+                              }}
+                              disabled={!safeRow.enabled}
+                            >
+                              <SelectTrigger id={`plantilla-select-${section.id}`}>
+                                <SelectValue placeholder="Seleccionar plantilla..." />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="none">-- Ninguna --</SelectItem>
+                                {grimorioCards.map((card) => (
+                                  <SelectItem key={card.id} value={card.key}>
+                                    {card.nombre} ({card.key})
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+
+                          {/* Dropdown de secciones */}
+                          <div className="col-span-6">
+                            <Select
+                              value={safeRow.section || section.id}
+                              onValueChange={(value) => {
+                                const newRows = [...plantillaRows];
+                                while (newRows.length <= index) {
+                                  newRows.push({ enabled: false, templateKey: undefined, section: PROMPT_SECTIONS[newRows.length].id });
+                                }
+                                newRows[index] = { ...newRows[index], section: value };
+                                setPlantillaRows(newRows);
+                                setPlantillaConfigSaved(false);
+                              }}
+                              disabled={!safeRow.enabled}
+                            >
+                              <SelectTrigger id={`section-select-${section.id}`}>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {PROMPT_SECTIONS.map((s) => (
+                                  <SelectItem key={s.id} value={s.id}>
+                                    {s.name}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Botón de guardar configuración */}
+                  <div className="pt-4 border-t">
                     <Button
+                      onClick={handleSavePlantillaConfig}
+                      className="w-full"
                       variant="outline"
-                      size="sm"
-                      onClick={handleSaveTemplate}
-                      className="flex-1"
                     >
                       <RefreshCw className="h-4 w-4 mr-2" />
-                      Guardar Template
+                      Guardar Configuración
                     </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        localStorage.removeItem('userTemplate');
-                        setChatForm(prev => ({ ...prev, templateUser: '' }));
-                        setTemplateSaved(false);
-                        toast({
-                          title: 'Template Eliminado',
-                          description: 'El template del usuario ha sido eliminado'
-                        });
-                      }}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
+                    <p className="text-xs text-muted-foreground mt-2 text-center">
+                      Esta configuración se usará para todos los triggers de chat
+                    </p>
                   </div>
                 </CardContent>
               </Card>

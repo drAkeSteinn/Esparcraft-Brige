@@ -1,0 +1,10 @@
+{
+  "key": "dataplayer",
+  "nombre": "Payload data",
+  "plantilla": "DATOS DEL AVENTURERO\nNombre: {{jugador.nombre}}\nRaza: {{jugador.raza}}\nNivel: {{jugador.nivel}}\nSalud actual: {{jugador.salud_actual}}%\nReputacion: {{jugador.reputacion}}\nAlmakos: {{jugador.almakos}}\nDeuda actual: {{jugador.deuda}}\nPiedras del Alma: {{jugador.piedras_del_alma}}",
+  "categoria": "jugador",
+  "tipo": "plantilla",
+  "descripcion": "datos de payload",
+  "id": "GRIMORIO_1769410543476",
+  "timestamp": "2026-01-26T06:55:49.084Z"
+}

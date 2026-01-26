@@ -1,0 +1,10 @@
+{
+  "id": "VAR_1769400588702_lim1cnlv5",
+  "key": "salud",
+  "nombre": "Salud (Abreviado)",
+  "plantilla": "",
+  "categoria": "variables",
+  "tipo": "variable",
+  "descripcion": "Alias corto para jugador.salud_actual",
+  "timestamp": "2026-01-26T04:09:48.702Z"
+}

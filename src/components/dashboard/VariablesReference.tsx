@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { FileText, User, Bot, MapPin, Globe, Copy, Check, Info, ChevronDown, ChevronUp } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { FileText, User, Bot, MapPin, Globe, Copy, Check, Info, ChevronDown, ChevronUp, Database } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { toast } from '@/hooks/use-toast';
+import { GrimorioCard, GrimorioCardType } from '@/lib/types';
 
 interface VariableItem {
   key: string;
@@ -126,9 +127,42 @@ interface VariablesReferenceProps {
   defaultTab?: string;
 }
 
-export default function VariablesReference({ open, onClose, defaultTab = 'jugador' }: VariablesReferenceProps) {
-  const [activeTab, setActiveTab] = useState(defaultTab);
+export default function VariablesReference({ open, onClose, defaultTab = 'primarias' }: VariablesReferenceProps) {
+  const [mainTab, setMainTab] = useState(defaultTab === 'plantillas' ? 'plantillas' : 'primarias');
+  const [activeCategory, setActiveCategory] = useState('jugador');
   const [copiedVariable, setCopiedVariable] = useState<string | null>(null);
+  const [templates, setTemplates] = useState<GrimorioCard[]>([]);
+  const [loadingTemplates, setLoadingTemplates] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  useEffect(() => {
+    if (mainTab === 'plantillas') {
+      fetchTemplates();
+    }
+  }, [mainTab]);
+
+  const fetchTemplates = async () => {
+    try {
+      setLoadingTemplates(true);
+      const response = await fetch('/api/grimorio');
+      const result = await response.json();
+
+      if (result.success) {
+        // Filtrar solo plantillas (tipo 'plantilla')
+        const templatesOnly = result.data.cards.filter((card: GrimorioCard) => card.tipo === 'plantilla');
+        setTemplates(templatesOnly);
+      }
+    } catch (error) {
+      console.error('Error fetching templates:', error);
+      toast({
+        title: 'Error',
+        description: 'No se pudieron cargar las plantillas',
+        variant: 'destructive'
+      });
+    } finally {
+      setLoadingTemplates(false);
+    }
+  };
 
   const handleCopy = async (variable: string) => {
     try {
@@ -209,49 +243,164 @@ export default function VariablesReference({ open, onClose, defaultTab = 'jugado
     );
   };
 
+  const TemplateItem = ({ template }: { template: GrimorioCard }) => {
+    const [isExpanded, setIsExpanded] = useState(false);
+    const templateKey = `{{${template.key}}}`;
+    const isCopied = copiedVariable === templateKey;
+
+    return (
+      <Card className="border">
+        <CardContent className="p-3">
+          <div className="flex items-center justify-between gap-2">
+            <code className="text-sm font-mono bg-muted px-2 py-1 rounded flex-1 break-all">
+              {templateKey}
+            </code>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => handleCopy(templateKey)}
+              className="shrink-0"
+            >
+              {isCopied ? (
+                <Check className="h-4 w-4 text-green-600" />
+              ) : (
+                <Copy className="h-4 w-4" />
+              )}
+            </Button>
+          </div>
+          <Collapsible open={isExpanded} onOpenChange={setIsExpanded}>
+            <CollapsibleTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="w-full mt-2 justify-between h-8 text-xs"
+              >
+                <div className="flex items-center gap-1">
+                  <FileText className="h-3 w-3" />
+                  {template.nombre}
+                </div>
+                {isExpanded ? (
+                  <ChevronUp className="h-3 w-3" />
+                ) : (
+                  <ChevronDown className="h-3 w-3" />
+                )}
+              </Button>
+            </CollapsibleTrigger>
+            <CollapsibleContent className="mt-2">
+              <div className="text-xs text-muted-foreground space-y-2 bg-muted/50 p-2 rounded">
+                {template.descripcion && (
+                  <p>
+                    <strong>Descripción:</strong> {template.descripcion}
+                  </p>
+                )}
+                <p>
+                  <strong>Contenido:</strong>
+                </p>
+                <pre className="whitespace-pre-wrap break-words bg-background p-2 rounded border">
+                  {template.plantilla}
+                </pre>
+              </div>
+            </CollapsibleContent>
+          </Collapsible>
+        </CardContent>
+      </Card>
+    );
+  };
+
   const content = (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold">Referencia de Variables</h2>
           <p className="text-sm text-muted-foreground">
-            Variables disponibles para usar en plantillas del Grimorio
+            Variables y plantillas disponibles para usar en el Grimorio
           </p>
         </div>
       </div>
 
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-3 md:grid-cols-4 lg:grid-cols-7">
-          {VARIABLE_CATEGORIES.map((cat) => (
-            <TabsTrigger key={cat.id} value={cat.id} className="flex items-center gap-1 text-xs">
-              <cat.icon className="h-3 w-3" />
-              <span className="hidden sm:inline">{cat.label}</span>
-            </TabsTrigger>
-          ))}
+      <Tabs value={mainTab} onValueChange={(value) => setMainTab(value as 'primarias' | 'plantillas')} className="w-full">
+        <TabsList className="grid w-full grid-cols-2">
+          <TabsTrigger value="primarias" className="flex items-center gap-2">
+            <Database className="h-4 w-4" />
+            <span>Variables Primarias</span>
+          </TabsTrigger>
+          <TabsTrigger value="plantillas" className="flex items-center gap-2">
+            <FileText className="h-4 w-4" />
+            <span>Mis Plantillas</span>
+          </TabsTrigger>
         </TabsList>
 
-        {VARIABLE_CATEGORIES.map((category) => (
-          <TabsContent key={category.id} value={category.id} className="mt-4">
-            <Card>
-              <CardHeader>
-                <div className="flex items-center gap-2">
-                  <category.icon className={`h-5 w-5 ${category.color.split(' ')[1]}`} />
-                  <CardTitle>Variables de {category.label}</CardTitle>
+        {/* Pestaña de Variables Primarias */}
+        <TabsContent value="primarias" className="mt-4">
+          <Tabs value={activeCategory} onValueChange={setActiveCategory} className="w-full">
+            <TabsList className="grid w-full grid-cols-3 md:grid-cols-4 lg:grid-cols-7">
+              {VARIABLE_CATEGORIES.map((cat) => (
+                <TabsTrigger key={cat.id} value={cat.id} className="flex items-center gap-1 text-xs">
+                  <cat.icon className="h-3 w-3" />
+                  <span className="hidden sm:inline">{cat.label}</span>
+                </TabsTrigger>
+              ))}
+            </TabsList>
+
+            {VARIABLE_CATEGORIES.map((category) => (
+              <TabsContent key={category.id} value={category.id} className="mt-4">
+                <Card>
+                  <CardHeader>
+                    <div className="flex items-center gap-2">
+                      <category.icon className={`h-5 w-5 ${category.color.split(' ')[1]}`} />
+                      <CardTitle>Variables de {category.label}</CardTitle>
+                    </div>
+                    <CardDescription>
+                      {category.variables.length} variables disponibles en esta categoría
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {category.variables.map((item) => (
+                        <VariableItem key={item.key} item={item} />
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+            ))}
+          </Tabs>
+        </TabsContent>
+
+        {/* Pestaña de Mis Plantillas */}
+        <TabsContent value="plantillas" className="mt-4">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <FileText className="h-5 w-5 text-emerald-600" />
+                <CardTitle>Mis Plantillas del Grimorio</CardTitle>
+              </div>
+              <CardDescription>
+                {loadingTemplates ? 'Cargando...' : `${templates.length} plantillas disponibles`}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {loadingTemplates ? (
+                <div className="text-center py-12 text-muted-foreground">
+                  Cargando plantillas...
                 </div>
-                <CardDescription>
-                  {category.variables.length} variables disponibles en esta categoría
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
+              ) : templates.length === 0 ? (
+                <div className="text-center py-12 text-muted-foreground">
+                  <p>No hay plantillas creadas aún</p>
+                  <p className="text-sm mt-2">
+                    Crea tu primera plantilla en el Grimorio
+                  </p>
+                </div>
+              ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {category.variables.map((item) => (
-                    <VariableItem key={item.key} item={item} />
+                  {templates.map((template) => (
+                    <TemplateItem key={template.id} template={template} />
                   ))}
                 </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-        ))}
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
       </Tabs>
 
       <Card className="bg-blue-50 dark:bg-blue-950 border-blue-200 dark:border-blue-800">
@@ -260,17 +409,20 @@ export default function VariablesReference({ open, onClose, defaultTab = 'jugado
             <Info className="h-5 w-5 text-blue-600 dark:text-blue-400 mt-0.5" />
             <div className="space-y-2">
               <h3 className="font-semibold text-blue-900 dark:text-blue-100">
-                Cómo usar las variables
+                Cómo usar las variables y plantillas
               </h3>
               <p className="text-sm text-blue-800 dark:text-blue-200">
-                Usa las variables en tus plantillas del Grimorio envolviéndolas en llaves dobles. Las variables serán reemplazadas automáticamente por los valores reales al generar el contenido.
+                <strong>Variables Primarias:</strong> Datos directos del contexto (jugador.*, npc.*, mundo.*, etc.). Son reemplazadas automáticamente por sus valores.
+              </p>
+              <p className="text-sm text-blue-800 dark:text-blue-200">
+                <strong>Plantillas:</strong> Plantillas reutilizables que puedes crear en el Grimorio. Se expanden y reemplazan sus variables internas al usarlas.
               </p>
               <div className="bg-blue-100 dark:bg-blue-900 rounded p-3 mt-2">
                 <p className="text-xs font-mono text-blue-900 dark:text-blue-100">
-                  Ejemplo: {"{{jugador.nombre}}"} está en {"{{pueblo}}"}
+                  Ejemplo: {"{{user_data}}"} está en {"{{pueblo}}"}
                 </p>
                 <p className="text-xs text-blue-700 dark:text-blue-300 mt-1">
-                  Resultado: drAke está en Esparcraft Village
+                  Resultado: Se expande la plantilla y se reemplazan las variables internas
                 </p>
               </div>
             </div>

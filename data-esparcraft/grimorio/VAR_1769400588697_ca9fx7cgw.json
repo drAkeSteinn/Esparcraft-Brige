@@ -1,0 +1,10 @@
+{
+  "id": "VAR_1769400588697_ca9fx7cgw",
+  "key": "edificio",
+  "nombre": "Edificio",
+  "plantilla": "",
+  "categoria": "variables",
+  "tipo": "variable",
+  "descripcion": "Nombre del edificio actual (alias de edificio.name)",
+  "timestamp": "2026-01-26T04:09:48.697Z"
+}

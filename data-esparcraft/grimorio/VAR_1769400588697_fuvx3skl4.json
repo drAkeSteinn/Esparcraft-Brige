@@ -1,0 +1,10 @@
+{
+  "id": "VAR_1769400588697_fuvx3skl4",
+  "key": "pueblo",
+  "nombre": "Pueblo",
+  "plantilla": "",
+  "categoria": "variables",
+  "tipo": "variable",
+  "descripcion": "Nombre del pueblo actual (alias de pueblo.name)",
+  "timestamp": "2026-01-26T04:09:48.697Z"
+}

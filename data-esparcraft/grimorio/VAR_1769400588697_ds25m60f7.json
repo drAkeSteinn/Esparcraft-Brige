@@ -1,0 +1,10 @@
+{
+  "id": "VAR_1769400588697_ds25m60f7",
+  "key": "mundo",
+  "nombre": "Mundo",
+  "plantilla": "",
+  "categoria": "variables",
+  "tipo": "variable",
+  "descripcion": "Nombre del mundo actual (alias de mundo.name)",
+  "timestamp": "2026-01-26T04:09:48.697Z"
+}

@@ -23,7 +23,7 @@ import {
   edificioStateManager,
   puebloStateManager,
   worldStateManager,
-  templateUserManager
+  grimorioManager
 } from './fileManager';
 import {
   buildChatMessagesWithOptions,
@@ -35,7 +35,8 @@ import {
   buildNuevoLorePrompt
 } from './promptBuilder';
 import { EmbeddingTriggers } from './embedding-triggers';
-import { replaceVariables, VariableContext } from './utils';
+import { replaceVariables, replaceVariablesWithCache, VariableContext } from './utils';
+import { resolveAllVariables, resolveAllVariablesWithCache } from './grimorioUtils';
 
 // LLM Configuration
 const LLM_API_URL = process.env.LLM_API_URL || 'http://127.0.0.1:5000/v1/chat/completions';
@@ -72,12 +73,13 @@ async function callLLM(messages: ChatMessage[]): Promise<string> {
 
 // Chat trigger handler
 export async function handleChatTrigger(payload: ChatTriggerPayload): Promise<{ response: string; sessionId: string }> {
-  const { message, npcid, playersessionid, jugador, lastSummary: payloadLastSummary } = payload;
+  const { message, npcid, playersessionid, jugador, lastSummary: payloadLastSummary, grimorioTemplates: payloadGrimorioTemplates } = payload;
 
   // DEBUG: Log para ver qué llega del request
   console.log('[handleChatTrigger] DEBUG payload.npcid:', npcid);
   console.log('[handleChatTrigger] DEBUG payload.jugador:', jugador);
   console.log('[handleChatTrigger] DEBUG payload.message:', message);
+  console.log('[handleChatTrigger] DEBUG payload.grimorioTemplates:', payloadGrimorioTemplates);
 
   // Get NPC
   const npc = npcManager.getById(npcid);
@@ -110,9 +112,35 @@ export async function handleChatTrigger(payload: ChatTriggerPayload): Promise<{ 
   // session.lastPrompt contiene el prompt completo, no debe usarse como resumen
   const lastSummary = payloadLastSummary || undefined;
 
-  // ✅ CARGAR EL TEMPLATE USER DEL SERVIDOR
-  const templateUserTemplate = templateUserManager.getTemplate();
-  console.log('[handleChatTrigger] DEBUG templateUser del servidor cargado:', templateUserTemplate ? templateUserTemplate.substring(0, 100) + '...' : '(vacío)');
+  // ✅ OBTENER PLANTILLAS DE GRIMORIO DEL PAYLOAD O CARGAR DEL ARCHIVO
+  let grimorioTemplates = payloadGrimorioTemplates;
+
+  // Si no vienen plantillas en el payload, cargar configuración guardada
+  if (!grimorioTemplates || grimorioTemplates.length === 0) {
+    try {
+      const fs = await import('fs/promises');
+      const path = await import('path');
+      const configPath = path.join(process.cwd(), 'db', 'chat-trigger-config.json');
+
+      try {
+        const configContent = await fs.readFile(configPath, 'utf-8');
+        const config = JSON.parse(configContent);
+        grimorioTemplates = config.grimorioTemplates || [];
+        console.log('[handleChatTrigger] Configuración de plantillas cargada del archivo:', grimorioTemplates.length, 'plantillas');
+      } catch (error) {
+        // El archivo no existe o hay error al leerlo, usar array vacío
+        console.log('[handleChatTrigger] No hay configuración de plantillas guardada, usando array vacío');
+        grimorioTemplates = [];
+      }
+    } catch (error) {
+      console.error('[handleChatTrigger] Error cargando configuración de plantillas:', error);
+      grimorioTemplates = [];
+    }
+  }
+
+  // ✅ OBTENER TODAS LAS CARDS DEL GRIMORIO
+  const allGrimorioCards = grimorioManager.getAll();
+  console.log('[handleChatTrigger] Cards del Grimorio cargadas:', allGrimorioCards.length);
 
   // ✅ CONSTRUIR CONTEXTO DE VARIABLES PARA REEMPLAZO
   const varContext: VariableContext = {
@@ -128,12 +156,9 @@ export async function handleChatTrigger(payload: ChatTriggerPayload): Promise<{ 
     lastSummary: lastSummary
   };
 
-  // ✅ REEMPLAZAR VARIABLES EN EL TEMPLATE
-  const templateUserReemplazado = templateUserTemplate ? replaceVariables(templateUserTemplate, varContext) : '';
-  console.log('[handleChatTrigger] DEBUG templateUser después de reemplazo:', templateUserReemplazado ? templateUserReemplazado.substring(0, 100) + '...' : '(vacío)');
-
-  // Build messages con la nueva estructura estándar
-  const messages = buildChatMessagesWithOptions(message, {
+  // ✅ CONSTRUIR EL PROMPT COMPLETO CON VARIABLES DE GRIMORIO
+  // El prompt se construye primero y luego se resuelven las variables de Grimorio
+  const basePrompt = buildCompleteChatPrompt(message, {
     world,
     pueblo,
     edificio,
@@ -141,8 +166,37 @@ export async function handleChatTrigger(payload: ChatTriggerPayload): Promise<{ 
     session
   }, {
     jugador,
-    templateUser: templateUserReemplazado, // ✅ Template YA con variables reemplazadas
-    lastSummary
+    lastSummary,
+    grimorioTemplates // Pasar las plantillas de Grimorio
+  });
+
+  console.log('[handleChatTrigger] DEBUG basePrompt antes de Grimorio:', basePrompt.substring(0, 200) + '...');
+
+  // ✅ REEMPLAZAR TODAS LAS VARIABLES (PRIMARIAS + PLANTILLAS DE GRIMORIO)
+  const resolvedPrompt = resolveAllVariablesWithCache(
+    basePrompt,
+    varContext,
+    allGrimorioCards,
+    'chat-prompt-base', // Template ID para el cache
+    { verbose: false, useCache: true }
+  ).result;
+
+  console.log('[handleChatTrigger] DEBUG prompt después de Grimorio:', resolvedPrompt.substring(0, 300) + '...');
+
+  // ✅ CONSTRUIR MENSAJES DIRECTAMENTE CON EL PROMPT RESUELTO
+  const messages: ChatMessage[] = [
+    {
+      role: 'system',
+      content: resolvedPrompt,
+      timestamp: new Date().toISOString()
+    }
+  ];
+
+  // Add current user message
+  messages.push({
+    role: 'user',
+    content: message,
+    timestamp: new Date().toISOString()
   });
 
   // Buscar contexto relevante de embeddings (síncrono, no bloquear)
@@ -539,8 +593,8 @@ export async function previewTriggerPrompt(payload: AnyTriggerPayload): Promise<
       // Obtener el último resumen (SOLO si viene en el payload, no usar session.lastPrompt)
       const lastSummary = chatPayload.lastSummary || undefined;
 
-      // ✅ CARGAR EL TEMPLATE USER DEL SERVIDOR
-      const templateUserTemplate = templateUserManager.getTemplate();
+      // ✅ OBTENER TODAS LAS CARDS DEL GRIMORIO
+      const allGrimorioCards = grimorioManager.getAll();
 
       // ✅ CONSTRUIR CONTEXTO DE VARIABLES PARA REEMPLAZO
       const varContext: VariableContext = {
@@ -556,10 +610,8 @@ export async function previewTriggerPrompt(payload: AnyTriggerPayload): Promise<
         lastSummary: lastSummary
       };
 
-      // ✅ REEMPLAZAR VARIABLES EN EL TEMPLATE
-      const templateUserReemplazado = templateUserTemplate ? replaceVariables(templateUserTemplate, varContext) : '';
-
-      const messages = buildChatMessagesWithOptions(chatPayload.message, {
+      // ✅ CONSTRUIR EL PROMPT COMPLETO CON VARIABLES DE GRIMORIO
+      const basePrompt = buildCompleteChatPrompt(chatPayload.message, {
         world,
         pueblo,
         edificio,
@@ -567,8 +619,33 @@ export async function previewTriggerPrompt(payload: AnyTriggerPayload): Promise<
         session
       }, {
         jugador: chatPayload.jugador,
-        templateUser: templateUserReemplazado, // ✅ Template YA con variables reemplazadas
         lastSummary
+        // No pasamos templateUser, será reemplazado por variables de Grimorio
+      });
+
+      // ✅ REEMPLAZAR TODAS LAS VARIABLES (PRIMARIAS + PLANTILLAS DE GRIMORIO)
+      const resolvedPrompt = resolveAllVariablesWithCache(
+        basePrompt,
+        varContext,
+        allGrimorioCards,
+        'chat-prompt-preview', // Template ID para el cache
+        { verbose: false, useCache: true }
+      ).result;
+
+      // ✅ CONSTRUIR MENSAJES DIRECTAMENTE CON EL PROMPT RESUELTO
+      const messages: ChatMessage[] = [
+        {
+          role: 'system',
+          content: resolvedPrompt,
+          timestamp: new Date().toISOString()
+        }
+      ];
+
+      // Add current user message
+      messages.push({
+        role: 'user',
+        content: chatPayload.message,
+        timestamp: new Date().toISOString()
       });
 
       const lastPrompt = messages.map(m => `[${m.role}]\n${m.content}`).join('\n\n');

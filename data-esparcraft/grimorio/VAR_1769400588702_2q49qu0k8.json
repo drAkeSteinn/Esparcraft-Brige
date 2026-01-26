@@ -1,0 +1,10 @@
+{
+  "id": "VAR_1769400588702_2q49qu0k8",
+  "key": "npc",
+  "nombre": "NPC (Abreviado)",
+  "plantilla": "",
+  "categoria": "variables",
+  "tipo": "variable",
+  "descripcion": "Alias corto para npc.name",
+  "timestamp": "2026-01-26T04:09:48.702Z"
+}

@@ -1,0 +1,9 @@
+{
+  "key": "templateuser",
+  "nombre": "Plantilla de Usuario",
+  "plantilla": "DATOS DEL AVENTURERO\nNombre: {{jugador.nombre}}\nRaza: {{jugador.raza}}\nNivel: {{jugador.nivel}}\nSalud actual: {{jugador.salud_actual}}%\nReputacion: {{jugador.reputacion}}\nAlmakos: {{jugador.almakos}}\nDeuda actual: {{jugador.deuda}}\nPiedras del Alma: {{jugador.piedras_del_alma}}",
+  "categoria": "general",
+  "descripcion": "Datos de payload",
+  "id": "GRIMORIO_1769386721685",
+  "timestamp": "2026-01-26T00:18:50.091Z"
+}

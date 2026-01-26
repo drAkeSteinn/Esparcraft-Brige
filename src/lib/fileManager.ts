@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { World, Pueblo, Edificio, NPC, Session, SillyTavernCard, PlaceType, PointOfInterest } from './types';
+import { World, Pueblo, Edificio, NPC, Session, SillyTavernCard, PlaceType, PointOfInterest, GrimorioCard, GrimorioCardType, GrimorioCardCategory } from './types';
 
 const DATA_DIR = path.join(process.cwd(), 'data-esparcraft');
 
@@ -579,9 +579,19 @@ export const grimorioManager = {
     return readJSON<GrimorioCard>(this.getFilePath(id));
   },
 
-  getByCategory(categoria: string): GrimorioCard[] {
+  getByKey(key: string): GrimorioCard | null {
+    const allCards = this.getAll();
+    return allCards.find(card => card.key === key) || null;
+  },
+
+  getByCategory(categoria: GrimorioCardCategory): GrimorioCard[] {
     const allCards = this.getAll();
     return allCards.filter(card => card.categoria === categoria);
+  },
+
+  getByType(tipo: GrimorioCardType): GrimorioCard[] {
+    const allCards = this.getAll();
+    return allCards.filter(card => card.tipo === tipo);
   },
 
   create(card: Omit<GrimorioCard, 'id' | 'timestamp'>): GrimorioCard {

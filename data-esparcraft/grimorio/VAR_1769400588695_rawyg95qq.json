@@ -1,0 +1,10 @@
+{
+  "id": "VAR_1769400588695_rawyg95qq",
+  "key": "jugador.hora",
+  "nombre": "Hora Actual",
+  "plantilla": "",
+  "categoria": "variables",
+  "tipo": "variable",
+  "descripcion": "Hora actual del juego",
+  "timestamp": "2026-01-26T04:09:48.695Z"
+}

@@ -1,0 +1,10 @@
+{
+  "id": "VAR_1769400588701_wzr5vgank",
+  "key": "raza",
+  "nombre": "Raza (Abreviado)",
+  "plantilla": "",
+  "categoria": "variables",
+  "tipo": "variable",
+  "descripcion": "Alias corto para jugador.raza",
+  "timestamp": "2026-01-26T04:09:48.701Z"
+}

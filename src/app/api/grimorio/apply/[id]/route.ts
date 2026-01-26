@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { grimorioManager } from '@/lib/fileManager';
 import { ApplyGrimorioCardRequest } from '@/lib/types';
-import { replaceVariables, VariableContext } from '@/lib/utils';
+import { resolveAllVariablesWithCache, VariableContext } from '@/lib/grimorioUtils';
 import { npcManager, worldManager, puebloManager, edificioManager, sessionManager } from '@/lib/fileManager';
 
 export async function POST(
@@ -10,7 +10,8 @@ export async function POST(
 ) {
   const { id } = await params;
   try {
-    const { context } = await request.json() as ApplyGrimorioCardRequest;
+    const body = await request.json() as ApplyGrimorioCardRequest & { useCache?: boolean };
+    const { context, useCache = true } = body;
 
     if (!context) {
       return NextResponse.json({ success: false, error: 'Contexto requerido' }, { status: 400 });
@@ -45,10 +46,38 @@ export async function POST(
       lastSummary: undefined
     };
 
-    const templateReemplazado = replaceVariables(card.plantilla, varContext);
-    console.log(\`[Grimorio] Card "\${card.nombre}" (\${card.key}) aplicada\`);
+    // Obtener todas las cards del Grimorio para resolución de plantillas
+    const allGrimorioCards = grimorioManager.getAll();
 
-    return NextResponse.json({ success: true, data: { template: templateReemplazado, cardId: id }, message: 'Aplicada correctamente' });
+    // Resolver todas las variables (primarias y plantillas) con cache
+    const startTime = Date.now();
+    const { result: templateReemplazado, stats } = resolveAllVariablesWithCache(
+      card.plantilla,
+      varContext,
+      allGrimorioCards,
+      card.id, // Usar el ID de la card como templateId
+      { verbose: false, useCache }
+    );
+    const executionTime = Date.now() - startTime;
+
+    console.log(`[Grimorio] Card "${card.nombre}" (${card.key}) aplicada (tipo: ${card.tipo})`);
+    console.log(`[Grimorio] Cache: ${stats.fromCache ? 'HIT' : 'MISS'}`);
+    console.log(`[Grimorio] Stats: ${stats.resolved} resueltas, ${stats.emptyReturned} vacías, ${stats.errors} errores, ${executionTime}ms`);
+
+    return NextResponse.json({
+      success: true,
+      data: {
+        template: templateReemplazado,
+        cardId: id,
+        cardType: card.tipo,
+        fromCache: stats.fromCache,
+        stats: {
+          ...stats,
+          executionTime
+        }
+      },
+      message: 'Aplicada correctamente'
+    });
   } catch (error) {
     console.error('Error aplicando card:', error);
     return NextResponse.json({ success: false, error: 'Error al aplicar' }, { status: 500 });

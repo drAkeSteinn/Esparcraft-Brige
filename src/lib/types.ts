@@ -187,6 +187,11 @@ export interface ChatTriggerPayload extends TriggerPayload {
   };
   templateUser?: string; // Plantilla del usuario opcional
   lastSummary?: string; // Último resumen de la sesión (opcional)
+  grimorioTemplates?: Array<{
+    enabled: boolean;
+    templateKey: string;
+    section: string;
+  }>; // Plantillas de Grimorio activas para insertar en el prompt
 }
 
 export interface ResumenSesionTriggerPayload extends TriggerPayload {
@@ -281,13 +286,27 @@ export interface PromptDebugInfo {
   finalRequest: LLMRequest;
 }
 
+// Tipos de cards del Grimorio
+export type GrimorioCardType = 'variable' | 'plantilla';
+
+// Categorías de cards del Grimorio
+export type GrimorioCardCategory = 
+  | 'general'          // Plantillas genéricas
+  | 'variables'        // Variables primarias (solo informativas)
+  | 'jugador'          // Plantillas de jugador
+  | 'npc'              // Plantillas de NPC
+  | 'ubicacion'        // Plantillas de ubicación
+  | 'mundo';           // Plantillas de mundo
+
 // GrimorioCard: Plantilla reutilizable con variables
 export interface GrimorioCard {
   id: string;                          // ID único de la card
   key: string;                        // Key para la variable (ej: "datos_jugador", "estado_jugador")
   nombre: string;                     // Nombre descriptivo de la plantilla
   plantilla: string;                  // Texto con variables (ej: "DATOS DEL AVENTURERO\nNombre: {{jugador.nombre}}...")
-  categoria: string;                   // Categoría: general, jugador, npc, ubicacion, mundo
+                                      // Para tipo 'variable': puede estar vacío o con documentación
+  categoria: GrimorioCardCategory;    // Categoría de la card
+  tipo: GrimorioCardType;            // Tipo: 'variable' (solo informativa) o 'plantilla' (reutilizable)
   timestamp: string;                  // Timestamp de creación/modificación
   descripcion?: string;                 // Descripción opcional de la plantilla
 }
@@ -297,15 +316,28 @@ export interface CreateGrimorioCardRequest {
   key: string;
   nombre: string;
   plantilla: string;
-  categoria: string;
+  categoria: GrimorioCardCategory;
+  tipo: GrimorioCardType;      // Nuevo campo requerido
   descripcion?: string;
 }
 
 export interface UpdateGrimorioCardRequest {
   nombre: string;
   plantilla: string;
-  categoria: string;
+  categoria: GrimorioCardCategory;
+  tipo?: GrimorioCardType;   // Campo opcional en actualización
   descripcion?: string;
+}
+
+// Resultado de validación de una plantilla del Grimorio
+export interface ValidateGrimorioCardResult {
+  valid: boolean;
+  tipo: GrimorioCardType;
+  variablesUsed: string[];          // Variables primarias usadas
+  nestedTemplates: string[];         // Plantillas anidadas detectadas
+  missingVariables: string[];         // Variables no existen en el glosario
+  warnings: string[];
+  preview?: string;                   // Preview con contexto de prueba
 }
 
 export interface ApplyGrimorioCardRequest {

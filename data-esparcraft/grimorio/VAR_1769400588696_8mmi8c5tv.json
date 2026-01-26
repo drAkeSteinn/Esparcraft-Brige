@@ -1,0 +1,10 @@
+{
+  "id": "VAR_1769400588696_8mmi8c5tv",
+  "key": "npc.name",
+  "nombre": "Nombre del NPC",
+  "plantilla": "",
+  "categoria": "variables",
+  "tipo": "variable",
+  "descripcion": "Nombre del NPC interactuando",
+  "timestamp": "2026-01-26T04:09:48.696Z"
+}

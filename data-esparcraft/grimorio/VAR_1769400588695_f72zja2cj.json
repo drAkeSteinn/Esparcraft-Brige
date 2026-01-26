@@ -1,0 +1,10 @@
+{
+  "id": "VAR_1769400588695_f72zja2cj",
+  "key": "jugador.deuda",
+  "nombre": "Deuda",
+  "plantilla": "",
+  "categoria": "variables",
+  "tipo": "variable",
+  "descripcion": "Deuda actual del jugador",
+  "timestamp": "2026-01-26T04:09:48.695Z"
+}

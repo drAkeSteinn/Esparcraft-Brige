@@ -1,6 +1,7 @@
 import { World, Pueblo, Edificio, NPC, Session, ChatMessage, PromptBuildContext, getCardField } from './types';
-import { npcStateManager, sessionManager, edificioStateManager, puebloStateManager, worldStateManager } from './fileManager';
+import { npcStateManager, sessionManager, edificioStateManager, puebloStateManager, worldStateManager, grimorioManager } from './fileManager';
 import { replaceVariables, VariableContext } from './utils';
+import { resolveGrimorioVariable } from './grimorioUtils';
 
 // Token estimation (roughly 4 characters per token for English/Spanish)
 export function estimateTokens(text: string): number {
@@ -63,10 +64,16 @@ export function buildCompleteChatPrompt(
     };
     templateUser?: string;
     lastSummary?: string;
+    grimorioTemplates?: Array<{
+      enabled: boolean;
+      templateKey: string;
+      section: string;
+    }>;
   }
 ): string {
   const { world, pueblo, edificio, npc, session } = context;
   const jugador = options?.jugador;
+  const templates = options?.grimorioTemplates || [];
 
   let prompt = '';
 
@@ -103,26 +110,88 @@ export function buildCompleteChatPrompt(
     prompt += `=== EJEMPLOS DE CHAT ===\n{{npc.chat_examples}}\n\n`;
   }
 
-  // 7. Template User (SIEMPRE mostrar, aunque esté vacío - MUY IMPORTANTE)
-  prompt += `=== TEMPLATE DEL USUARIO ===\n{{templateUser}}\n\n`;
+  // 7. Procesar plantillas de Grimorio activas e insertarlas en sus secciones
+  if (templates && templates.length > 0) {
+    // Cargar todas las plantillas de Grimorio
+    const allGrimorioCards = grimorioManager.getAll();
 
-  // 8. Last User Message
+    // Agrupar plantillas activas por sección
+    const templatesBySection: Record<string, string[]> = {};
+    templates.filter(t => t.enabled && t.templateKey).forEach(template => {
+      if (!templatesBySection[template.section]) {
+        templatesBySection[template.section] = [];
+      }
+      templatesBySection[template.section].push(template.templateKey);
+    });
+
+    // Mapeo de secciones a sus secciones del prompt
+    const sectionMap: Record<string, string> = {
+      '1': 'Instrucción Inicial',
+      '2': 'MAIN PROMPT',
+      '3': 'DESCRIPCIÓN',
+      '4': 'PERSONALIDAD',
+      '5': 'ESCENARIO',
+      '6': 'EJEMPLOS DE CHAT',
+      '7': 'LAST USER MESSAGE',
+      '8': 'INSTRUCCIONES POST-HISTORY'
+    };
+
+    // Construir contexto de variables
+    const varContext: VariableContext = {
+      npc,
+      world,
+      pueblo,
+      edificio,
+      jugador,
+      session,
+      char: getCardField(npc?.card, 'name', ''),
+      mensaje: message,
+      userMessage: message,
+      lastSummary: options?.lastSummary
+    };
+
+    // Procesar cada sección y sus plantillas
+    Object.keys(templatesBySection).forEach(sectionId => {
+      const sectionName = sectionMap[sectionId];
+      if (sectionName) {
+        const templateKeys = templatesBySection[sectionId];
+
+        templateKeys.forEach(templateKey => {
+          // Buscar y expandir la plantilla de Grimorio
+          const templateCard = allGrimorioCards.find(card => card.key === templateKey);
+
+          if (templateCard && templateCard.tipo === 'plantilla') {
+            // Expandir la plantilla con variables primarias
+            const expanded = (templateCard.plantilla || '').replace(/\{\{(\s*[\w.]+\s*)\}\}/g, (match, variableKey) => {
+              // Reemplazar variables primarias en la plantilla
+              return replaceVariables(match, varContext);
+            });
+
+            // Insertar la plantilla expandida en la sección
+            prompt += `=== ${sectionName.toUpperCase()} ===\n${expanded}\n\n`;
+          }
+        });
+      }
+    });
+  }
+
+  // 7. Last User Message (se eliminó la sección Template del Usuario, ahora se usan variables de Grimorio directamente)
   prompt += `=== LAST USER MESSAGE ===\n`;
 
-  // 8.1. Último resumen (si existe)
+  // 7.1. Último resumen (si existe)
   if (options?.lastSummary && options.lastSummary.trim()) {
     prompt += `Último Resumen:\n{{lastSummary}}\n\n`;
   }
 
-  // 8.2. Chat History (si existe)
+  // 7.2. Chat History (si existe)
   if (session && session.messages && session.messages.length > 0) {
     prompt += `Chat History:\n{{chatHistory}}\n\n`;
   }
 
-  // 8.3. Mensaje del usuario
+  // 7.3. Mensaje del usuario
   prompt += `Mensaje del Usuario:\n{{userMessage}}\n\n`;
 
-  // 9. POST-HISTORY (DEL NPC)
+  // 8. POST-HISTORY (DEL NPC)
   const postHistory = getCardField(npc?.card, 'post_history_instructions', '');
   if (postHistory) {
     prompt += `=== INSTRUCCIONES POST-HISTORIAL ===\n{{npc.post_history_instructions}}\n\n`;
@@ -145,28 +214,10 @@ export function buildCompleteChatPrompt(
 
   // DEBUG: Log para verificar que las variables del jugador lleguen
   console.log('[buildCompleteChatPrompt] DEBUG jugador:', jugador);
-  console.log('[buildCompleteChatPrompt] DEBUG templateUser:', options?.templateUser);
-  console.log('[buildCompleteChatPrompt] DEBUG message:', message);
+  console.log('[buildCompleteChatPrompt] DEBUG grimorioTemplates:', templates);
 
-  // Para el contexto de historial, construimos el texto aquí
-  if (session && session.messages && session.messages.length > 0) {
-    const chatHistoryText = session.messages.map((msg) => {
-      const role = msg.role === 'user' ? 'Usuario' : 'NPC';
-      return `${role}: ${msg.content}`;
-    }).join('\n');
-    (varContext as any).chatHistory = chatHistoryText;
-  }
-
-  // NO agregamos variables extra para el NPC al contexto
-  // Las variables del NPC ya están en el objeto 'npc' y se resuelven correctamente
-  // Agregar variables extras aquí puede causar conflictos
-
-  // Reemplazar todas las variables en el prompt
+  // Reemplazar todas las variables en el prompt (primarias y plantillas de Grimorio ya expandidas)
   const result = replaceVariables(prompt, varContext);
-
-  // DEBUG: Log para verificar el resultado
-  console.log('[buildCompleteChatPrompt] DEBUG result tiene jugador.nombre:', result.includes('drAke'));
-  console.log('[buildCompleteChatPrompt] DEBUG result tiene Template User:', result.includes('=== TEMPLATE DEL USUARIO ==='));
 
   return result;
 }

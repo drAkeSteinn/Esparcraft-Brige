@@ -1,5 +1,6 @@
 import { clsx, type ClassValue } from "clsx"
 import { twMerge } from "tailwind-merge"
+import { templateCache } from './templateCache';
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
@@ -293,6 +294,48 @@ export function replaceVariables(text: string, context: VariableContext): string
 
     iterations++;
   }
+
+  return result;
+}
+
+/**
+ * Reemplaza variables en el formato {{variable}} con sus valores reales del contexto
+ * utilizando el cache inteligente para mejorar el rendimiento
+ * 
+ * Esta función es equivalente a replaceVariables() pero con cache integrado
+ * 
+ * @param text - Texto con variables a reemplazar
+ * @param context - Contexto con los valores de las variables
+ * @param templateId - ID opcional de la plantilla para el cache
+ * @param useCache - ¿Usar cache? (default: true)
+ * @returns Texto con variables reemplazadas
+ */
+export function replaceVariablesWithCache(
+  text: string,
+  context: VariableContext,
+  templateId?: string,
+  useCache: boolean = true
+): string {
+  if (!text) return '';
+
+  // Si no hay templateId o no se usa cache, usar la función estándar
+  if (!templateId || !useCache) {
+    return replaceVariables(text, context);
+  }
+
+  // Intentar obtener del cache
+  const cached = templateCache.get(templateId, context);
+  if (cached !== null) {
+    console.log('[replaceVariablesWithCache] Cache HIT for template:', templateId);
+    return cached;
+  }
+
+  // No está en cache, procesar normalmente
+  console.log('[replaceVariablesWithCache] Cache MISS for template:', templateId);
+  const result = replaceVariables(text, context);
+
+  // Guardar en cache
+  templateCache.set(templateId, context, result);
 
   return result;
 }

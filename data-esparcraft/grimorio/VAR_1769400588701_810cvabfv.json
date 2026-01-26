@@ -1,0 +1,10 @@
+{
+  "id": "VAR_1769400588701_810cvabfv",
+  "key": "nombre",
+  "nombre": "Nombre (Abreviado)",
+  "plantilla": "",
+  "categoria": "variables",
+  "tipo": "variable",
+  "descripcion": "Alias corto para jugador.nombre",
+  "timestamp": "2026-01-26T04:47:41.651Z"
+}

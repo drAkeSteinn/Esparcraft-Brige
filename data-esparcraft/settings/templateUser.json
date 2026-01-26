@@ -1,0 +1,4 @@
+{
+  "template": "{{dataplayer}}\n----\nDATOS DEL AVENTURERO\nNombre: {{jugador.nombre}}\nRaza: {{jugador.raza}}\nNivel: {{jugador.nivel}}\nSalud actual: {{jugador.salud_actual}}%\nReputacion: {{jugador.reputacion}}\nAlmakos: {{jugador.almakos}}\nDeuda actual: {{jugador.deuda}}\nPiedras del Alma: {{jugador.piedras_del_alma}}\n",
+  "timestamp": "2026-01-26T07:09:02.379Z"
+}

@@ -1,0 +1,10 @@
+{
+  "id": "VAR_1769400588696_7zol1vd1h",
+  "key": "npc.personality",
+  "nombre": "Personalidad del NPC",
+  "plantilla": "",
+  "categoria": "variables",
+  "tipo": "variable",
+  "descripcion": "Rasgos de personalidad del NPC",
+  "timestamp": "2026-01-26T04:09:48.696Z"
+}

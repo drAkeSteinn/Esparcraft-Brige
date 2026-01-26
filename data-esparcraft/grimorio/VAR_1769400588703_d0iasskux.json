@@ -1,0 +1,10 @@
+{
+  "id": "VAR_1769400588703_d0iasskux",
+  "key": "playername",
+  "nombre": "PlayerName (Abreviado)",
+  "plantilla": "",
+  "categoria": "variables",
+  "tipo": "variable",
+  "descripcion": "Alias corto para jugador.nombre (formato API)",
+  "timestamp": "2026-01-26T04:43:22.632Z"
+}

@@ -1,0 +1,10 @@
+{
+  "id": "VAR_1769400588696_28d48jdhl",
+  "key": "npc.historial",
+  "nombre": "Historial del NPC",
+  "plantilla": "",
+  "categoria": "variables",
+  "tipo": "variable",
+  "descripcion": "Historial de interacciones con el NPC",
+  "timestamp": "2026-01-26T04:09:48.696Z"
+}
