@@ -29,6 +29,7 @@ import {
 } from './fileManager';
 import {
   buildChatMessagesWithOptions,
+  buildCompleteChatPrompt,
   buildSessionSummaryPrompt,
   buildNPCSummaryPrompt,
   buildEdificioSummaryPrompt,
