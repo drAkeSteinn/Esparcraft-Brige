@@ -1,5 +1,7 @@
 'use server';
 
+// Fixed: extractPromptSections moved to promptUtils.ts to avoid async function requirement
+
 import {
   ChatTriggerPayload,
   ResumenSesionTriggerPayload,
@@ -37,6 +39,7 @@ import {
 import { EmbeddingTriggers } from './embedding-triggers';
 import { replaceVariables, replaceVariablesWithCache, VariableContext } from './utils';
 import { resolveAllVariables, resolveAllVariablesWithCache } from './grimorioUtils';
+import { extractPromptSections } from './promptUtils';
 
 // LLM Configuration
 const LLM_API_URL = process.env.LLM_API_URL || 'http://127.0.0.1:5000/v1/chat/completions';
@@ -825,74 +828,4 @@ export async function previewTriggerPrompt(payload: AnyTriggerPayload): Promise<
     default:
       throw new Error(`Unknown trigger mode: ${mode}`);
   }
-}
-
-/**
- * Extrae las secciones de un prompt para visualización en el frontend
- * Parsea el prompt buscando encabezados de sección (=== SECCIÓN ===)
- * y devuelve un array de secciones con formato visual
- *
- * @param prompt - El prompt completo a parsear
- * @returns Array de secciones con label, content y bgColor
- */
-export function extractPromptSections(prompt: string): Array<{
-  label: string;
-  content: string;
-  bgColor: string;
-}> {
-  const sections: Array<{ label: string; content: string; bgColor: string }> = [];
-  
-  // Mapeo de secciones a sus colores
-  const sectionColors: Record<string, string> = {
-    'Instrucción': 'bg-blue-50 dark:bg-blue-950',
-    'MAIN PROMPT': 'bg-green-50 dark:bg-green-950',
-    'DESCRIPCIÓN': 'bg-emerald-50 dark:bg-emerald-950',
-    'PERSONALIDAD': 'bg-teal-50 dark:bg-teal-950',
-    'ESCENARIO': 'bg-purple-50 dark:bg-purple-950',
-    'EJEMPLOS DE CHAT': 'bg-pink-50 dark:bg-pink-950',
-    'LAST USER MESSAGE': 'bg-slate-50 dark:bg-slate-950',
-    'INSTRUCCIONES POST-HISTORIAL': 'bg-red-50 dark:bg-red-950',
-    'INSTRUCCIONES POST-HISTORY': 'bg-red-50 dark:bg-red-950',
-    'TIPO DE LORE': 'bg-teal-50 dark:bg-teal-950',
-    'CONTEXTO': 'bg-orange-50 dark:bg-orange-950',
-    'RESUMENES': 'bg-yellow-50 dark:bg-yellow-950',
-    'NOMBRE': 'bg-blue-50 dark:bg-blue-950',
-    'SISTEMA': 'bg-indigo-50 dark:bg-indigo-950'
-  };
-
-  // Dividir el prompt por los encabezados de sección
-  const sectionPattern = /===\s*(.+?)\s*===/g;
-  const matches = [...prompt.matchAll(sectionPattern)];
-  
-  let currentIndex = 0;
-  
-  for (let i = 0; i < matches.length; i++) {
-    const match = matches[i];
-    const sectionLabel = match[1].trim();
-    const sectionStart = match.index!;
-    const sectionEnd = matches[i + 1]?.index || prompt.length;
-    
-    // Obtener el contenido de la sección (después del encabezado)
-    const sectionContent = prompt.slice(sectionStart + match[0].length, sectionEnd).trim();
-    
-    // Usar color conocido o un color por defecto
-    const bgColor = sectionColors[sectionLabel] || 'bg-gray-50 dark:bg-gray-950';
-    
-    sections.push({
-      label: sectionLabel,
-      content: sectionContent,
-      bgColor
-    });
-  }
-  
-  // Si no hay secciones, devolver el contenido completo como una sola sección
-  if (sections.length === 0) {
-    sections.push({
-      label: 'Prompt Completo',
-      content: prompt,
-      bgColor: 'bg-gray-50 dark:bg-gray-950'
-    });
-  }
-  
-  return sections;
 }

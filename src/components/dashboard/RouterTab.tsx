@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
-import { Send, RefreshCw, Network, MessageSquare, Globe, MapPin, Building, User, Eye, MessageCircle, FileText, Copy, Trash2, Terminal } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Send, RefreshCw, Network, MessageSquare, Globe, MapPin, Building, User, Eye, MessageCircle, FileText, Copy, Trash2, Terminal, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -12,12 +12,24 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
-import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
 import { World, Pueblo, Edificio, NPC, Session, GrimorioCard } from '@/lib/types';
 import { toast } from '@/hooks/use-toast';
+import { usePromptPreview } from '@/hooks/usePromptPreview';
 
 export default function RouterTab() {
+  // Preview hook
+  const { previewPrompt, loading: previewLoading } = usePromptPreview();
+
+  // Debounce refs
+  const chatTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const resumenSesionTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const resumenNPCTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const resumenEdificioTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const resumenPuebloTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const resumenMundoTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const nuevoLoreTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
   const [worlds, setWorlds] = useState<World[]>([]);
   const [pueblos, setPueblos] = useState<Pueblo[]>([]);
   const [edificios, setEdificios] = useState<Edificio[]>([]);
@@ -53,6 +65,15 @@ export default function RouterTab() {
     { id: '7', name: 'LAST USER MESSAGE' },
     { id: '8', name: 'INSTRUCCIONES POST-HISTORY' }
   ];
+
+  // Preview data from backend
+  const [chatPreviewData, setChatPreviewData] = useState<any>(null);
+  const [resumenSesionPreviewData, setResumenSesionPreviewData] = useState<any>(null);
+  const [resumenNPCPreviewData, setResumenNPCPreviewData] = useState<any>(null);
+  const [resumenEdificioPreviewData, setResumenEdificioPreviewData] = useState<any>(null);
+  const [resumenPuebloPreviewData, setResumenPuebloPreviewData] = useState<any>(null);
+  const [resumenMundoPreviewData, setResumenMundoPreviewData] = useState<any>(null);
+  const [nuevoLorePreviewData, setNuevoLorePreviewData] = useState<any>(null);
 
   // Estado para almacenar las sesiones con resúmenes del NPC seleccionado
   const [npcSessionSummaries, setNpcSessionSummaries] = useState<any[]>([]);
@@ -162,15 +183,10 @@ export default function RouterTab() {
             });
           });
 
-          console.log('[loadGrimorioCards] defaultRows creadas:', defaultRows.length);
-          console.log('[loadGrimorioCards] plantillaCards cargadas:', plantillaCards.length);
-
           // Cargar configuración guardada y merge con filas por defecto
           try {
             const configResponse = await fetch('/api/chat-trigger-config');
             const configResult = await configResponse.json();
-
-            console.log('[loadGrimorioCards] ConfigResponse:', configResult);
 
             if (configResult.success && configResult.data.grimorioTemplates && configResult.data.grimorioTemplates.length > 0) {
               // Merge: actualizar las filas por defecto con la configuración guardada
@@ -181,18 +197,15 @@ export default function RouterTab() {
                 }
                 return defaultRow;
               });
-              console.log('[loadGrimorioCards] mergedRows:', mergedRows);
               setPlantillaRows(mergedRows);
               setPlantillaConfigSaved(true);
             } else {
               // Si no hay configuración guardada, usar filas por defecto
-              console.log('[loadGrimorioCards] Usando defaultRows');
               setPlantillaRows(defaultRows);
             }
           } catch (configError) {
             console.error('Error cargando configuración de plantillas:', configError);
             // Inicializar con valores por defecto
-            console.log('[loadGrimorioCards] Error, usando defaultRows');
             setPlantillaRows(defaultRows);
           }
         }
@@ -272,10 +285,10 @@ export default function RouterTab() {
           if (result.success && result.data.sessions.length > 0) {
             // Guardar las sesiones con resúmenes
             setNpcSessionSummaries(result.data.sessions);
-            
+
             // Construir string con todos los resúmenes numerados
             const summariesText = result.data.sessions
-              .map((s: any, index: number) => 
+              .map((s: any, index: number) =>
                 `=== Sesión ${index + 1} (${s.sessionId}) ===\n${s.summary}`
               )
               .join('\n\n');
@@ -333,7 +346,7 @@ export default function RouterTab() {
           if (result.success && result.data.npcs.length > 0) {
             // Guardar los NPCs con resúmenes
             setEdificioNPCSummaries(result.data.npcs);
-            
+
             // Construir string con todos los resúmenes numerados
             const summariesText = result.data.npcs
               .filter((n: any) => n.consolidatedSummary)
@@ -404,7 +417,7 @@ export default function RouterTab() {
           if (result.success && result.data.edificios.length > 0) {
             // Guardar los edificios con resúmenes
             setPuebloEdificioSummaries(result.data.edificios);
-            
+
             // Construir string con todos los resúmenes numerados
             const summariesText = result.data.edificios
               .filter((e: any) => e.consolidatedSummary)
@@ -457,7 +470,7 @@ export default function RouterTab() {
           if (result.success && result.data.pueblos.length > 0) {
             // Guardar los pueblos con resúmenes
             setMundoPuebloSummaries(result.data.pueblos);
-            
+
             // Construir string con todos los resúmenes numerados
             const summariesText = result.data.pueblos
               .filter((p: any) => p.consolidatedSummary)
@@ -515,6 +528,235 @@ export default function RouterTab() {
     };
     loadSessionSummary();
   }, [chatForm.playersessionid, chatForm.sessionType]);
+
+  // Debounced preview for chat trigger
+  useEffect(() => {
+    const loadChatPreview = async () => {
+      const payload = buildChatPayload();
+      if (!payload) {
+        setChatPreviewData(null);
+        return;
+      }
+
+      try {
+        const data = await previewPrompt(payload);
+        setChatPreviewData(data);
+      } catch (error) {
+        console.error('Error loading chat preview:', error);
+        setChatPreviewData(null);
+      }
+    };
+
+    if (chatTimeoutRef.current) {
+      clearTimeout(chatTimeoutRef.current);
+    }
+    chatTimeoutRef.current = setTimeout(loadChatPreview, 500);
+
+    return () => {
+      if (chatTimeoutRef.current) {
+        clearTimeout(chatTimeoutRef.current);
+      }
+    };
+  }, [
+    chatForm.npcid,
+    chatForm.playersessionid,
+    chatForm.sessionType,
+    chatForm.jugador,
+    chatForm.mensaje,
+    chatForm.lastSummary,
+    JSON.stringify(plantillaRows)
+  ]);
+
+  // Debounced preview for resumen sesion trigger
+  useEffect(() => {
+    const loadResumenSesionPreview = async () => {
+      const payload = buildResumenSesionPayload();
+      if (!payload || !payload.npcid || !payload.playersessionid) {
+        setResumenSesionPreviewData(null);
+        return;
+      }
+
+      try {
+        const data = await previewPrompt(payload);
+        setResumenSesionPreviewData(data);
+      } catch (error) {
+        console.error('Error loading resumen sesion preview:', error);
+        setResumenSesionPreviewData(null);
+      }
+    };
+
+    if (resumenSesionTimeoutRef.current) {
+      clearTimeout(resumenSesionTimeoutRef.current);
+    }
+    resumenSesionTimeoutRef.current = setTimeout(loadResumenSesionPreview, 500);
+
+    return () => {
+      if (resumenSesionTimeoutRef.current) {
+        clearTimeout(resumenSesionTimeoutRef.current);
+      }
+    };
+  }, [
+    resumenSesionForm.npcid,
+    resumenSesionForm.sessionid,
+    resumenSesionForm.lastSummary,
+    resumenSesionForm.chatHistory
+  ]);
+
+  // Debounced preview for resumen NPC trigger
+  useEffect(() => {
+    const loadResumenNPCPreview = async () => {
+      const payload = buildResumenNPCPayload();
+      if (!payload || !payload.npcid) {
+        setResumenNPCPreviewData(null);
+        return;
+      }
+
+      try {
+        const data = await previewPrompt(payload);
+        setResumenNPCPreviewData(data);
+      } catch (error) {
+        console.error('Error loading resumen NPC preview:', error);
+        setResumenNPCPreviewData(null);
+      }
+    };
+
+    if (resumenNPCTimeoutRef.current) {
+      clearTimeout(resumenNPCTimeoutRef.current);
+    }
+    resumenNPCTimeoutRef.current = setTimeout(loadResumenNPCPreview, 500);
+
+    return () => {
+      if (resumenNPCTimeoutRef.current) {
+        clearTimeout(resumenNPCTimeoutRef.current);
+      }
+    };
+  }, [resumenNPCForm.npcid, resumenNPCForm.allSummaries]);
+
+  // Debounced preview for resumen edificio trigger
+  useEffect(() => {
+    const loadResumenEdificioPreview = async () => {
+      const payload = buildResumenEdificioPayload();
+      if (!payload || !payload.edificioid) {
+        setResumenEdificioPreviewData(null);
+        return;
+      }
+
+      try {
+        const data = await previewPrompt(payload);
+        setResumenEdificioPreviewData(data);
+      } catch (error) {
+        console.error('Error loading resumen edificio preview:', error);
+        setResumenEdificioPreviewData(null);
+      }
+    };
+
+    if (resumenEdificioTimeoutRef.current) {
+      clearTimeout(resumenEdificioTimeoutRef.current);
+    }
+    resumenEdificioTimeoutRef.current = setTimeout(loadResumenEdificioPreview, 500);
+
+    return () => {
+      if (resumenEdificioTimeoutRef.current) {
+        clearTimeout(resumenEdificioTimeoutRef.current);
+      }
+    };
+  }, [resumenEdificioForm.edificioid, resumenEdificioForm.allSummaries]);
+
+  // Debounced preview for resumen pueblo trigger
+  useEffect(() => {
+    const loadResumenPuebloPreview = async () => {
+      const payload = buildResumenPuebloPayload();
+      if (!payload || !payload.pueblid) {
+        setResumenPuebloPreviewData(null);
+        return;
+      }
+
+      try {
+        const data = await previewPrompt(payload);
+        setResumenPuebloPreviewData(data);
+      } catch (error) {
+        console.error('Error loading resumen pueblo preview:', error);
+        setResumenPuebloPreviewData(null);
+      }
+    };
+
+    if (resumenPuebloTimeoutRef.current) {
+      clearTimeout(resumenPuebloTimeoutRef.current);
+    }
+    resumenPuebloTimeoutRef.current = setTimeout(loadResumenPuebloPreview, 500);
+
+    return () => {
+      if (resumenPuebloTimeoutRef.current) {
+        clearTimeout(resumenPuebloTimeoutRef.current);
+      }
+    };
+  }, [resumenPuebloForm.pueblid, resumenPuebloForm.allSummaries]);
+
+  // Debounced preview for resumen mundo trigger
+  useEffect(() => {
+    const loadResumenMundoPreview = async () => {
+      const payload = buildResumenMundoPayload();
+      if (!payload || !payload.mundoid) {
+        setResumenMundoPreviewData(null);
+        return;
+      }
+
+      try {
+        const data = await previewPrompt(payload);
+        setResumenMundoPreviewData(data);
+      } catch (error) {
+        console.error('Error loading resumen mundo preview:', error);
+        setResumenMundoPreviewData(null);
+      }
+    };
+
+    if (resumenMundoTimeoutRef.current) {
+      clearTimeout(resumenMundoTimeoutRef.current);
+    }
+    resumenMundoTimeoutRef.current = setTimeout(loadResumenMundoPreview, 500);
+
+    return () => {
+      if (resumenMundoTimeoutRef.current) {
+        clearTimeout(resumenMundoTimeoutRef.current);
+      }
+    };
+  }, [resumenMundoForm.mundoid, resumenMundoForm.allSummaries]);
+
+  // Debounced preview for nuevo lore trigger
+  useEffect(() => {
+    const loadNuevoLorePreview = async () => {
+      const payload = buildNuevoLorePayload();
+      if (!payload || !payload.scope || !payload.targetId) {
+        setNuevoLorePreviewData(null);
+        return;
+      }
+
+      try {
+        const data = await previewPrompt(payload);
+        setNuevoLorePreviewData(data);
+      } catch (error) {
+        console.error('Error loading nuevo lore preview:', error);
+        setNuevoLorePreviewData(null);
+      }
+    };
+
+    if (nuevoLoreTimeoutRef.current) {
+      clearTimeout(nuevoLoreTimeoutRef.current);
+    }
+    nuevoLoreTimeoutRef.current = setTimeout(loadNuevoLorePreview, 500);
+
+    return () => {
+      if (nuevoLoreTimeoutRef.current) {
+        clearTimeout(nuevoLoreTimeoutRef.current);
+      }
+    };
+  }, [
+    nuevoLoreForm.scope,
+    nuevoLoreForm.mundoid,
+    nuevoLoreForm.pueblid,
+    nuevoLoreForm.loreType,
+    nuevoLoreForm.context
+  ]);
 
   const handleSaveResumenSesionTemplate = () => {
     localStorage.setItem('resumenSesionTemplate', resumenSesionForm.systemPrompt);
@@ -628,10 +870,12 @@ export default function RouterTab() {
   };
 
   const countTokens = (text: string): number => {
+    if (!text) return 0;
     return Math.ceil(text.length / 4);
   };
 
   const countWords = (text: string): number => {
+    if (!text) return 0;
     return text.trim().split(/\s+/).filter(w => w.length > 0).length;
   };
 
@@ -770,260 +1014,6 @@ export default function RouterTab() {
   const KEY_EXAMPLE_1 = '{' + '{';
   const KEY_EXAMPLE_2 = '}' + '}';
 
-  // Función para reemplazar keys {{key}} por valores reales (con soporte recursivo)
-  const replaceKeys = (text: string, context: any): string => {
-    if (!text) return '';
-
-    // Función auxiliar para hacer una sola pasada de reemplazo
-    const replaceSinglePass = (inputText: string): string => {
-      return inputText.replace(/\{\{\s*([\w.]+)\s*\}\}/g, (match: string, key: string) => {
-        // NPC object keys (npc.name, npc.description, etc.)
-        if (key.startsWith('npc.')) {
-          const npcKey = key.replace('npc.', '');
-          if (npcKey === 'name' || npcKey === 'nombre') return context.npc?.card?.data?.name || context.npc?.card?.name || '';
-          if (npcKey === 'description' || npcKey === 'descripcion') return context.npc?.card?.data?.description || context.npc?.card?.description || '';
-          if (npcKey === 'personality' || npcKey === 'personalidad') return context.npc?.card?.data?.personality || '';
-          if (npcKey === 'scenario') return context.npc?.card?.data?.scenario || '';
-        }
-
-        // NPC keys
-        if (key === 'npcid' || key === 'npc_name' || key === 'npc.name' || key === 'npc') {
-          return context.npc?.card?.data?.name || context.npc?.card?.name || '';
-        }
-        if (key === 'npc_description' || key === 'npc.description') {
-          return context.npc?.card?.data?.description || context.npc?.card?.description || '';
-        }
-        if (key === 'npc_personality' || key === 'npc.personality') {
-          return context.npc?.card?.data?.personality || '';
-        }
-
-        // Historial del NPC
-        if (key === 'npc_historial' || key === 'npc.historial') {
-          if (context.session && context.session.messages && context.session.messages.length > 0) {
-            return context.session.messages.map((msg: any) => {
-              const role = msg.role === 'user' ? 'Usuario' : 'NPC';
-              return `${role}: ${msg.content}`;
-            }).join('\n');
-          }
-          return '(Sin historial)';
-        }
-
-        // Player keys (nombre, playername, player_name)
-        if (key === 'playername' || key === 'player_name' || key === 'nombre') {
-          return context.jugador?.nombre || '';
-        }
-        if (key === 'player_race' || key === 'player_raza' || key === 'raza') {
-          return context.jugador?.raza || '';
-        }
-        if (key === 'player_level' || key === 'player_nivel' || key === 'nivel') {
-          return context.jugador?.nivel || '';
-        }
-        if (key === 'player_health' || key === 'player_salud' || key === 'salud_actual' || key === 'salud') {
-          return context.jugador?.salud_actual || '';
-        }
-        if (key === 'player_reputation' || key === 'player_reputacion' || key === 'reputacion' || key === 'reputación') {
-          return context.jugador?.reputacion || '';
-        }
-        if (key === 'player_time' || key === 'player_hora' || key === 'hora') {
-          return context.jugador?.hora || '';
-        }
-        if (key === 'player_weather' || key === 'player_clima' || key === 'clima') {
-          return context.jugador?.clima || '';
-        }
-        if (key === 'almakos') {
-          return context.jugador?.almakos || '';
-        }
-        if (key === 'deuda') {
-          return context.jugador?.deuda || '';
-        }
-        if (key === 'piedras_del_alma' || key === 'piedras') {
-          return context.jugador?.piedras_del_alma || '';
-        }
-
-        // Jugador object keys (jugador.nombre, jugador.raza, etc.)
-        if (key.startsWith('jugador.')) {
-          const jugadorKey = key.replace('jugador.', '');
-          if (jugadorKey === 'nombre') return context.jugador?.nombre || '';
-          if (jugadorKey === 'raza') return context.jugador?.raza || '';
-          if (jugadorKey === 'nivel') return context.jugador?.nivel || '';
-          if (jugadorKey === 'salud_actual' || jugadorKey === 'salud') return context.jugador?.salud_actual || '';
-          if (jugadorKey === 'reputacion' || jugadorKey === 'reputación') return context.jugador?.reputacion || '';
-          if (jugadorKey === 'hora') return context.jugador?.hora || '';
-          if (jugadorKey === 'clima') return context.jugador?.clima || '';
-          if (jugadorKey === 'almakos') return context.jugador?.almakos || '';
-          if (jugadorKey === 'deuda') return context.jugador?.deuda || '';
-          if (jugadorKey === 'piedras_del_alma' || jugadorKey === 'piedras') return context.jugador?.piedras_del_alma || '';
-          if (jugadorKey === 'mensaje') return context.mensaje || ''; // Mensaje del jugador actual
-        }
-
-        // Location keys
-        if (key === 'world_name' || key === 'mundo_nombre' || key === 'mundo') {
-          return context.world?.name || '';
-        }
-        if (key === 'pueblo_name' || key === 'pueblo') {
-          return context.pueblo?.name || '';
-        }
-        if (key === 'edificio_name' || key === 'edificio') {
-          return context.edificio?.name || '';
-        }
-
-        // Edificio object keys (edificio.name, edificio.lore, etc.)
-        if (key.startsWith('edificio.')) {
-          const edificioKey = key.replace('edificio.', '');
-          if (edificioKey === 'name' || edificioKey === 'nombre') return context.edificio?.name || '';
-          if (edificioKey === 'descripcion') return context.edificio?.lore || ''; // lore es un string directo en edificios
-          if (edificioKey === 'lore') return context.edificio?.lore || '';
-          if (edificioKey === 'eventos' || edificioKey === 'eventos_recientes') {
-            if (context.edificio?.eventos_recientes && context.edificio.eventos_recientes.length > 0) {
-              return context.edificio.eventos_recientes.map(e => `- ${e}`).join('\n');
-            }
-            return '(Sin eventos)';
-          }
-          if (edificioKey === 'type') return context.edificio?.type || '';
-          if (edificioKey === 'poislist' || edificioKey === 'puntos_de_interes_list') {
-            if (context.edificio?.puntosDeInteres && context.edificio.puntosDeInteres.length > 0) {
-              return context.edificio.puntosDeInteres.map((poi: any) => {
-                const nombre = poi.name || 'Sin nombre';
-                const descripcion = poi.descripcion || '';
-                const coords = poi.coordenadas || { x: 0, y: 0, z: 0 };
-                return `- ${nombre} (${descripcion}) {"coordenadas": {"x": ${coords.x},"y": ${coords.y},"z": ${coords.z}}}`;
-              }).join('\n');
-            }
-            return '(Sin puntos de interés)';
-          }
-        }
-
-        // NPC keys para edificio (todos los NPCs en el edificio)
-        if (key === 'npcs_count') {
-          return context.npcs?.length?.toString() || '0';
-        }
-        if (key === 'npcs_names') {
-          return context.npcs?.map((n: any) => n.card?.data?.name || n.card?.name).join(', ') || '';
-        }
-
-        // Pueblo object keys (pueblo.name, pueblo.type, etc.)
-        if (key.startsWith('pueblo.')) {
-          const puebloKey = key.replace('pueblo.', '');
-          if (puebloKey === 'name' || puebloKey === 'nombre') return context.pueblo?.name || '';
-          if (puebloKey === 'tipo') return context.pueblo?.type || '';
-          if (puebloKey === 'descripcion') return context.pueblo?.description || ''; // Descripción general
-          if (puebloKey === 'estado') return context.pueblo?.lore?.estado_pueblo || '';
-          if (puebloKey === 'rumores') {
-            if (context.pueblo?.lore?.rumores && context.pueblo.lore.rumores.length > 0) {
-              return context.pueblo.lore.rumores.map(r => `- ${r}`).join('\n');
-            }
-            return '(Sin rumores)';
-          }
-        }
-
-        // Edificios keys para pueblo (todos los edificios en el pueblo)
-        if (key === 'edificios_count') {
-          return context.edificios?.length?.toString() || '0';
-        }
-        if (key === 'edificios_names') {
-          return context.edificios?.map((e: any) => e.name).join(', ') || '';
-        }
-        if (key === 'edificios_list') {
-          return context.edificios?.map((e: any) => `- ${e.name}`).join('\n') || '';
-        }
-
-        // Mundo object keys (mundo.name, mundo.lore, etc.)
-        if (key.startsWith('mundo.')) {
-          const mundoKey = key.replace('mundo.', '');
-          if (mundoKey === 'name' || mundoKey === 'nombre') return context.mundo?.name || '';
-          if (mundoKey === 'estado' || mundoKey === 'estado_mundo') return context.mundo?.lore?.estado_mundo || '';
-          if (mundoKey === 'rumores') {
-            if (context.mundo?.lore?.rumores && context.mundo.lore.rumores.length > 0) {
-              return context.mundo.lore.rumores.map(r => `- ${r}`).join('\n');
-            }
-            return '(Sin rumores)';
-          }
-        }
-
-        // Pueblos keys para mundo (todos los pueblos/naciones en el mundo)
-        if (key === 'pueblos_count') {
-          return context.pueblos?.length?.toString() || '0';
-        }
-        if (key === 'pueblos_names') {
-          return context.pueblos?.map((p: any) => p.name).join(', ') || '';
-        }
-        if (key === 'pueblos_list') {
-          return context.pueblos?.map((p: any) => `- ${p.name}`).join('\n') || '';
-        }
-
-        // Si la key no existe, retorna el match original
-        return match;
-      });
-    };
-
-    // Procesamiento recursivo: hacer múltiples pasadas hasta que no haya más cambios
-    let result = text;
-    let iterations = 0;
-    const maxIterations = 10;
-
-    while (iterations < maxIterations) {
-      const previousResult = result;
-      result = replaceSinglePass(result);
-
-      // Si no hubo cambios en esta iteración, terminamos
-      if (result === previousResult) {
-        break;
-      }
-
-      iterations++;
-    }
-
-    return result;
-  };
-
-  // Función para procesar plantillas de Grimorio y expandir sus variables
-  const processGrimorioTemplates = (
-    templates: Array<{ enabled: boolean; templateKey?: string; section: string }> | undefined,
-    keyContext: any,
-    grimorioCards: GrimorioCard[]
-  ): Array<{ sectionName: string; content: string; bgColor: string; templateKey: string }> => {
-    if (!templates || templates.length === 0) return [];
-
-    const processedTemplates: Array<{ sectionName: string; content: string; bgColor: string; templateKey: string }> = [];
-
-    // Mapeo de secciones a sus nombres y colores
-    const sectionMap: Record<string, { name: string; bgColor: string }> = {
-      '1': { name: 'Instrucción Inicial', bgColor: 'bg-blue-50 dark:bg-blue-950' },
-      '2': { name: 'MAIN PROMPT', bgColor: 'bg-green-50 dark:bg-green-950' },
-      '3': { name: 'DESCRIPCIÓN', bgColor: 'bg-emerald-50 dark:bg-emerald-950' },
-      '4': { name: 'PERSONALIDAD', bgColor: 'bg-teal-50 dark:bg-teal-950' },
-      '5': { name: 'ESCENARIO', bgColor: 'bg-purple-50 dark:bg-purple-950' },
-      '6': { name: 'EJEMPLOS DE CHAT', bgColor: 'bg-pink-50 dark:bg-pink-950' },
-      '7': { name: 'LAST USER MESSAGE', bgColor: 'bg-slate-50 dark:bg-slate-950' },
-      '8': { name: 'INSTRUCCIONES POST-HISTORY', bgColor: 'bg-red-50 dark:bg-red-950' }
-    };
-
-    // Filtrar plantillas activas y procesarlas
-    templates.forEach(template => {
-      if (template.enabled && template.templateKey) {
-        const templateCard = grimorioCards.find(card => card.key === template.templateKey);
-
-        if (templateCard && templateCard.tipo === 'plantilla') {
-          const sectionInfo = sectionMap[template.section];
-
-          if (sectionInfo) {
-            // Expandir la plantilla con variables primarias usando replaceKeys
-            const expandedTemplate = replaceKeys(templateCard.plantilla || '', keyContext);
-
-            processedTemplates.push({
-              sectionName: sectionInfo.name,
-              content: expandedTemplate,
-              bgColor: sectionInfo.bgColor,
-              templateKey: template.templateKey
-            });
-          }
-        }
-      }
-    });
-
-    return processedTemplates;
-  };
-
   const sendRequest = async (triggerType: string, payload: any) => {
     try {
       const res = await fetch('/api/reroute', {
@@ -1068,747 +1058,102 @@ export default function RouterTab() {
     }
   };
 
-  const buildChatPreview = (payload: any): { text: string; sections: Array<{ label: string; content: string; bgColor: string }> } => {
-    if (!payload) return { text: '', sections: [] };
+  // Computed values for UI
+  const chatPrompt = chatPreviewData?.text || '';
+  const chatPromptSections = chatPreviewData?.sections || [];
+  const chatPayload = buildChatPayload();
 
-    const npc = npcs.find(n => n.id === payload.npcid);
-    const world = worlds.find(w => w.id === npc?.location?.worldId);
-    const pueblo = pueblos.find(p => p.id === npc?.location?.puebloId);
-    const edificio = edificios.find(e => e.id === npc?.location?.edificioId);
-    const session = sessions.find(s => s.id === payload.playersessionid);
+  const resumenSesionPrompt = resumenSesionPreviewData?.text || '';
+  const resumenSesionSections = resumenSesionPreviewData?.sections || [];
+  const resumenSesionPayload = buildResumenSesionPayload();
 
-    // Crear contexto para reemplazo de keys
-    const keyContext = {
-      npc,
-      world,
-      mundo: world, // Alias para variables {{mundo.*}}
-      pueblo,
-      edificio,
-      jugador: payload.jugador,
-      session, // Para variable {{npc.historial}}
-      mensaje: payload.message, // Para variable {{jugador.mensaje}}
-      lastSummary: payload.lastSummary // Para mostrar el último resumen
-    };
+  const resumenNPCPrompt = resumenNPCPreviewData?.text || '';
+  const resumenNPCSections = resumenNPCPreviewData?.sections || [];
+  const resumenNPCPayload = buildResumenNPCPayload();
 
-    const sections: Array<{ label: string; content: string; bgColor: string }> = [];
-    let prompt = '';
+  const resumenEdificioPrompt = resumenEdificioPreviewData?.text || '';
+  const resumenEdificioSections = resumenEdificioPreviewData?.sections || [];
+  const resumenEdificioPayload = buildResumenEdificioPayload();
 
-    // 1. Instrucción inicial
-    const instruction = `Escribe ÚNICAMENTE la próxima respuesta de {{npc.name}} en reacción al último mensaje de {{jugador.nombre}}.`;
-    const instructionText = replaceKeys(instruction, keyContext);
-    prompt += `${instructionText}\n\n`;
-    sections.push({
-      label: 'Instrucción',
-      content: instructionText,
-      bgColor: 'bg-blue-50 dark:bg-blue-950'
-    });
+  const resumenPuebloPrompt = resumenPuebloPreviewData?.text || '';
+  const resumenPuebloSections = resumenPuebloPreviewData?.sections || [];
+  const resumenPuebloPayload = buildResumenPuebloPayload();
 
-    // 2. Mainprompt (de la card del NPC)
-    const mainPrompt = npc?.card?.data?.system_prompt || npc?.card?.system_prompt || '';
-    if (mainPrompt) {
-      const mainPromptText = replaceKeys(mainPrompt, keyContext);
-      prompt += `${mainPromptText}\n\n`;
-      sections.push({
-        label: 'Main Prompt',
-        content: mainPromptText,
-        bgColor: 'bg-green-50 dark:bg-green-950'
-      });
-    }
+  const resumenMundoPrompt = resumenMundoPreviewData?.text || '';
+  const resumenMundoSections = resumenMundoPreviewData?.sections || [];
+  const resumenMundoPayload = buildResumenMundoPayload();
 
-    // 3. Descripción (de la card del NPC)
-    const description = npc?.card?.data?.description || npc?.card?.description || '';
-    if (description) {
-      const descriptionText = replaceKeys(description, keyContext);
-      prompt += `${descriptionText}\n\n`;
-      sections.push({
-        label: 'Descripción',
-        content: descriptionText,
-        bgColor: 'bg-emerald-50 dark:bg-emerald-950'
-      });
-    }
+  const nuevoLorePrompt = nuevoLorePreviewData?.text || '';
+  const nuevoLoreSections = nuevoLorePreviewData?.sections || [];
+  const nuevoLorePayload = buildNuevoLorePayload();
 
-    // 3.1 Personalidad (de la card del NPC)
-    const personality = npc?.card?.data?.personality || '';
-    if (personality) {
-      const personalityText = replaceKeys(personality, keyContext);
-      prompt += `${personalityText}\n\n`;
-      sections.push({
-        label: 'Personalidad',
-        content: personalityText,
-        bgColor: 'bg-teal-50 dark:bg-teal-950'
-      });
-    }
-
-    // 4. World Lore (Mundo, Pueblo, Edificio) - REMOVIDO
-    // Estas secciones ya no se agregan automáticamente al prompt
-    // Las variables {{mundo.estado}}, {{mundo.rumores}}, {{pueblo.estado}}, {{pueblo.rumores}},
-    // {{edificio.descripcion}}, {{edificio.eventos}} pueden usarse manualmente en Template User o system_prompt
-    /*
-    let worldLoreText = '';
-    if (world?.lore) {
-      if (world.lore.estado_mundo) {
-        worldLoreText += `Estado del Mundo: ${world.lore.estado_mundo}\n`;
-      }
-      if (world.lore.rumores && world.lore.rumores.length > 0) {
-        worldLoreText += 'Rumores:\n';
-        world.lore.rumores.forEach((rumor: string, idx: number) => {
-          worldLoreText += `  - ${rumor}\n`;
-        });
-      }
-    }
-
-    if (worldLoreText) {
-      const worldName = world?.name || 'Mundo';
-      prompt += `Mundo: ${worldName}\n${worldLoreText}\n`;
-      sections.push({
-        label: `Mundo: ${worldName}`,
-        content: `Mundo: ${worldName}\n${worldLoreText}`,
-        bgColor: 'bg-yellow-50 dark:bg-yellow-950'
-      });
-    }
-    */
-
-    // Pueblo Lore - REMOVIDO
-    /*
-    let puebloLoreText = '';
-    if (pueblo?.lore) {
-      if (pueblo.lore.estado_pueblo) {
-        puebloLoreText += `Estado del Pueblo: ${pueblo.lore.estado_pueblo}\n`;
-      }
-      if (pueblo.lore.rumores && pueblo.lore.rumores.length > 0) {
-        puebloLoreText += 'Rumores:\n';
-        pueblo.lore.rumores.forEach((rumor: string, idx: number) => {
-          puebloLoreText += `  - ${rumor}\n`;
-        });
-      }
-    }
-
-    if (puebloLoreText) {
-      const puebloName = pueblo?.name || 'Pueblo';
-      prompt += `Pueblo: ${puebloName}\n${puebloLoreText}\n`;
-      sections.push({
-        label: `Pueblo: ${puebloName}`,
-        content: `Pueblo: ${puebloName}\n${puebloLoreText}`,
-        bgColor: 'bg-amber-50 dark:bg-amber-950'
-      });
-    }
-    */
-
-    // Edificio Lore - REMOVIDO
-    /*
-    let edificioLoreText = '';
-    if (edificio?.lore) {
-      if (edificio.lore.descripcion) {
-        edificioLoreText += `Descripción: ${edificio.lore.descripcion}\n`;
-      }
-      if (edificio.lore.eventos_recientes && Object.keys(edificio.lore.eventos_recientes).length > 0) {
-        edificioLoreText += 'Eventos Recientes:\n';
-        Object.entries(edificio.lore.eventos_recientes).forEach(([key, value]: [string, any]) => {
-          edificioLoreText += `  - ${value}\n`;
-        });
-      }
-      if (edificio.area) {
-        edificioLoreText += `Área: Desde (${edificio.area.start?.x || 0}, ${edificio.area.start?.y || 0}, ${edificio.area.start?.z || 0}) hasta (${edificio.area.end?.x || 0}, ${edificio.area.end?.y || 0}, ${edificio.area.end?.z || 0})\n`;
-      }
-    }
-
-    if (edificioLoreText) {
-      const edificioName = edificio?.name || 'Edificio';
-      prompt += `Edificio: ${edificioName}\n${edificioLoreText}\n`;
-      sections.push({
-        label: `Edificio: ${edificioName}`,
-        content: `Edificio: ${edificioName}\n${edificioLoreText}`,
-        bgColor: 'bg-orange-50 dark:bg-orange-950'
-      });
-    }
-    */
-
-    // 5. Scenario
-    if (npc?.card?.data?.scenario) {
-      const scenarioText = replaceKeys(npc.card.data.scenario, keyContext);
-      prompt += `${scenarioText}\n\n`;
-      sections.push({
-        label: 'Scenario',
-        content: scenarioText,
-        bgColor: 'bg-purple-50 dark:bg-purple-950'
-      });
-    }
-
-    // 6. Chat Examples
-    if (npc?.card?.data?.mes_example) {
-      const examplesText = replaceKeys(npc.card.data.mes_example, keyContext);
-      prompt += `${examplesText}\n\n`;
-      sections.push({
-        label: 'Chat Examples',
-        content: examplesText,
-        bgColor: 'bg-pink-50 dark:bg-pink-950'
-      });
-    }
-
-    // 7. Template User (plantilla del jugador) - SIEMPRE mostrar, incluso vacío
-    // Usar payload.templateUser en lugar de chatForm.templateUser para consistencia
-    const templateUserText = replaceKeys(payload.templateUser || '', keyContext);
-    prompt += `${templateUserText}\n\n`;
-    sections.push({
-      label: 'Template User',
-      content: templateUserText,
-      bgColor: 'bg-indigo-50 dark:bg-indigo-950'
-    });
-
-    // 7. Plantillas de Grimorio (si hay activas)
-    const grimorioTemplates = processGrimorioTemplates(
-      payload.grimorioTemplates,
-      keyContext,
-      grimorioCards
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="text-center space-y-4">
+          <Loader2 className="h-8 w-8 animate-spin mx-auto" />
+          <p className="text-muted-foreground">Cargando datos...</p>
+        </div>
+      </div>
     );
-
-    // Insertar plantillas de Grimorio en sus secciones correspondientes
-    grimorioTemplates.forEach(template => {
-      // Buscar el nombre de la plantilla para mostrar en el label
-      const templateCard = grimorioCards.find(card => card.key === template.templateKey);
-      const templateName = templateCard?.name || template.templateKey || 'Plantilla';
-
-      prompt += `${template.content}\n\n`;
-      sections.push({
-        label: `📝 ${templateName} (${template.sectionName})`,
-        content: template.content,
-        bgColor: template.bgColor
-      });
-    });
-
-    // 8. Historial y Último Mensaje
-    let historyText = '';
-
-    // 8.0. Último Resumen (si existe)
-    if (payload.lastSummary) {
-      prompt += `Último Resumen:\n${payload.lastSummary}\n\n`;
-      sections.push({
-        label: 'Último Resumen',
-        content: `Último Resumen:\n${payload.lastSummary}`,
-        bgColor: 'bg-indigo-50 dark:bg-indigo-950'
-      });
-    }
-
-    // 8.1. Chat History (historial de la sesión) - limitado por historyLimit
-    const historyLimit = chatForm.historyLimit || 10;
-    if (session && session.messages && session.messages.length > 0) {
-      const messagesToShow = session.messages.slice(-historyLimit);
-      messagesToShow.forEach((msg: any) => {
-        const role = msg.role === 'user' ? 'Usuario' : 'NPC';
-        historyText += `${role}: ${msg.content}\n`;
-      });
-      historyText += '\n';
-    }
-
-    // 8.2. Last User Message (incluye último resumen, historial de la sesión y último mensaje)
-    if (payload.message) {
-      const mensajeReemplazado = replaceKeys(payload.message, keyContext);
-      
-      // Obtener el último resumen (prioridad al de la sesión guardado o payload.lastSummary)
-      const lastSummary = payload.lastSummary || session?.lastPrompt || '(Sin último resumen)';
-      
-      // Obtener el historial completo de la sesión
-      let sessionHistoryText = '(Sin historial)';
-      if (session && session.messages && session.messages.length > 0) {
-        sessionHistoryText = session.messages.map((msg: any) => {
-          const role = msg.role === 'user' ? 'Usuario' : 'NPC';
-          return `${role}: ${msg.content}`;
-        }).join('\n');
-      }
-      
-      historyText += `Último resumen:\n${lastSummary}\n\nHistorial de la sesión:\n${sessionHistoryText}\n\nMensaje: ${mensajeReemplazado}`;
-    }
-
-    // Siempre mostrar la sección, aunque esté vacía
-    if (!historyText) {
-      historyText = '(Sin historial ni mensaje)';
-    }
-
-    prompt += historyText + '\n\n';
-    sections.push({
-      label: 'Last User Message',
-      content: historyText,
-      bgColor: 'bg-slate-50 dark:bg-slate-950'
-    });
-
-    // 9. POST-HISTORY
-    if (npc?.card?.data?.post_history_instructions) {
-      const phiText = replaceKeys(npc.card.data.post_history_instructions, keyContext);
-      prompt += `${phiText}\n\n`;
-      sections.push({
-        label: 'POST-HISTORY',
-        content: phiText,
-        bgColor: 'bg-red-50 dark:bg-red-950'
-      });
-    }
-
-    return { text: prompt, sections };
-  };
-
-  const buildResumenSesionPreview = (payload: any): { text: string; sections: Array<{ label: string; content: string; bgColor: string }> } => {
-    if (!payload) return { text: '', sections: [] };
-
-    const npc = npcs.find(n => n.id === payload.npcid);
-    const session = sessions.find(s => s.id === payload.playersessionid);
-
-    // Buscar world, pueblo y edificio del NPC para las variables de ubicación
-    const world = worlds.find(w => w.id === npc?.location?.worldId);
-    const pueblo = pueblos.find(p => p.id === npc?.location?.puebloId);
-    const edificio = edificios.find(e => e.id === npc?.location?.edificioId);
-
-    // Crear contexto para reemplazo de keys
-    const keyContext = {
-      npc,
-      world,
-      mundo: world, // Alias para variables {{mundo.*}}
-      pueblo,
-      edificio
-    };
-
-    const sections: Array<{ label: string; content: string; bgColor: string }> = [];
-    let prompt = '';
-
-    // 1. System Prompt (solo de la plantilla del usuario para este tipo de trigger)
-    const userSystemPrompt = resumenSesionForm.systemPrompt || '';
-    if (userSystemPrompt) {
-      const systemPromptText = replaceKeys(userSystemPrompt, keyContext);
-      prompt += systemPromptText + '\n\n';
-      sections.push({
-        label: 'System Prompt',
-        content: systemPromptText,
-        bgColor: 'bg-green-50 dark:bg-green-950'
-      });
-    }
-
-    // 2. Historial de la Sesión (mensajes completos)
-    if (session && session.messages && session.messages.length > 0) {
-      let chatHistoryText = 'Historial de la Sesión:\n';
-      session.messages.forEach((msg: any) => {
-        const role = msg.role === 'user' ? 'Usuario' : 'NPC';
-        chatHistoryText += `${role}: ${msg.content}\n`;
-      });
-      prompt += chatHistoryText + '\n';
-      sections.push({
-        label: 'Historial de la Sesión',
-        content: chatHistoryText,
-        bgColor: 'bg-gray-50 dark:bg-gray-950'
-      });
-    }
-
-    // 3. Último Resumen (si es que lo hay)
-    if (payload.lastSummary) {
-      prompt += `Último Resumen:\n${payload.lastSummary}\n\n`;
-      sections.push({
-        label: 'Último Resumen',
-        content: `Último Resumen:\n${payload.lastSummary}`,
-        bgColor: 'bg-indigo-50 dark:bg-indigo-950'
-      });
-    }
-
-    return { text: prompt, sections };
-  };
-
-  const buildResumenNPCPreview = (payload: any): { text: string; sections: Array<{ label: string; content: string; bgColor: string }> } => {
-    if (!payload) return { text: '', sections: [] };
-
-    const npc = npcs.find(n => n.id === payload.npcid);
-
-    // Buscar world, pueblo y edificio del NPC para las variables de ubicación
-    const world = worlds.find(w => w.id === npc?.location?.worldId);
-    const pueblo = pueblos.find(p => p.id === npc?.location?.puebloId);
-    const edificio = edificios.find(e => e.id === npc?.location?.edificioId);
-
-    // Crear contexto para reemplazo de keys
-    const keyContext = {
-      npc,
-      world,
-      mundo: world, // Alias para variables {{mundo.*}}
-      pueblo,
-      edificio
-    };
-
-    const sections: Array<{ label: string; content: string; bgColor: string }> = [];
-    let prompt = '';
-
-    // 1. System Prompt (solo de la plantilla del usuario para este tipo de trigger)
-    const userSystemPrompt = resumenNPCForm.systemPrompt || '';
-    if (userSystemPrompt) {
-      const systemPromptText = replaceKeys(userSystemPrompt, keyContext);
-      prompt += systemPromptText + '\n\n';
-      sections.push({
-        label: 'System Prompt',
-        content: systemPromptText,
-        bgColor: 'bg-green-50 dark:bg-green-950'
-      });
-    }
-
-    // 2. Todos los Resúmenes del NPC
-    if (payload.allSummaries) {
-      prompt += `Resúmenes del NPC:\n${payload.allSummaries}\n\n`;
-      sections.push({
-        label: 'Resúmenes del NPC',
-        content: `Resúmenes del NPC:\n${payload.allSummaries}`,
-        bgColor: 'bg-indigo-50 dark:bg-indigo-950'
-      });
-    }
-
-    return { text: prompt, sections };
-  };
-
-  const buildResumenEdificioPreview = (payload: any): { text: string; sections: Array<{ label: string; content: string; bgColor: string }> } => {
-    if (!payload) return { text: '', sections: [] };
-
-    const edificio = edificios.find(e => e.id === payload.edificioid);
-    const npcsEnEdificio = npcs.filter(n => n.location.edificioId === payload.edificioid);
-    const mundo = worlds.find(w => w.id === edificio?.worldId);
-    const pueblo = pueblos.find(p => p.id === edificio?.puebloId);
-
-    // Crear contexto para reemplazo de keys
-    const keyContext = {
-      edificio,
-      npcs: npcsEnEdificio,
-      mundo,
-      mundo: mundo, // Alias para variables {{mundo.*}}
-      pueblo
-    };
-
-    const sections: Array<{ label: string; content: string; bgColor: string }> = [];
-    let prompt = '';
-
-    // 1. System Prompt (solo de la plantilla del usuario para este tipo de trigger)
-    const userSystemPrompt = resumenEdificioForm.systemPrompt || '';
-    if (userSystemPrompt) {
-      const systemPromptText = replaceKeys(userSystemPrompt, keyContext);
-      prompt += systemPromptText + '\n\n';
-      sections.push({
-        label: 'System Prompt',
-        content: systemPromptText,
-        bgColor: 'bg-green-50 dark:bg-green-950'
-      });
-    }
-
-    // 2. Resúmenes de Todos los NPCs del Edificio
-    if (payload.allSummaries) {
-      prompt += `Resúmenes de los NPCs del edificio:\n${payload.allSummaries}\n\n`;
-      sections.push({
-        label: 'Resúmenes de los NPCs del Edificio',
-        content: `Resúmenes de los NPCs del edificio:\n${payload.allSummaries}`,
-        bgColor: 'bg-purple-50 dark:bg-purple-950'
-      });
-    }
-
-    // 3. Contexto del Pueblo/Mundo del Edificio
-    if (pueblo || mundo) {
-      const contextTemplate = `CONTEXTO DE LA REGIÓN
-Tipo: {{pueblo.tipo}}
-Nombre: {{pueblo.name}}
-Rumores:
-{{pueblo.rumores}}
-
-CONTEXTO DEL MUNDO ({{mundo.name}})
-Estado: {{mundo.estado}}
-Rumores:
-{{mundo.rumores}}`;
-
-      const contextText = replaceKeys(contextTemplate, keyContext);
-      prompt += contextText + '\n';
-      sections.push({
-        label: 'Contexto de la Región',
-        content: contextText,
-        bgColor: 'bg-teal-50 dark:bg-teal-950'
-      });
-    }
-
-    return { text: prompt, sections };
-  };
-
-  const buildResumenPuebloPreview = (payload: any): { text: string; sections: Array<{ label: string; content: string; bgColor: string }> } => {
-    if (!payload) return { text: '', sections: [] };
-
-    const pueblo = pueblos.find(p => p.id === payload.pueblid);
-    const edificiosEnPueblo = edificios.filter(e => e.puebloId === payload.pueblid);
-    const mundo = worlds.find(w => w.id === pueblo?.worldId);
-
-    // Crear contexto para reemplazo de keys
-    const keyContext = {
-      pueblo,
-      edificios: edificiosEnPueblo,
-      mundo,
-      mundo: mundo, // Alias para variables {{mundo.*}}
-      pueblos: worlds.filter(w => w.id === mundo?.id)
-    };
-
-    const sections: Array<{ label: string; content: string; bgColor: string }> = [];
-    let prompt = '';
-
-    // 1. System Prompt (solo de la plantilla del usuario para este tipo de trigger)
-    const userSystemPrompt = resumenPuebloForm.systemPrompt || '';
-    if (userSystemPrompt) {
-      const systemPromptText = replaceKeys(userSystemPrompt, keyContext);
-      prompt += systemPromptText + '\n\n';
-      sections.push({
-        label: 'System Prompt',
-        content: systemPromptText,
-        bgColor: 'bg-green-50 dark:bg-green-950'
-      });
-    }
-
-    // 2. Resúmenes de Todos los Edificios del Pueblo
-    if (payload.allSummaries) {
-      prompt += `Resúmenes de los edificios del pueblo/nación:\n${payload.allSummaries}\n\n`;
-      sections.push({
-        label: 'Resúmenes de los Edificios del Pueblo/Nación',
-        content: `Resúmenes de los edificios del pueblo/nación:\n${payload.allSummaries}`,
-        bgColor: 'bg-purple-50 dark:bg-purple-950'
-      });
-    }
-
-    // 3. Contexto del Mundo del Pueblo
-    if (mundo) {
-      const contextTemplate = `CONTEXTO DEL MUNDO ({{mundo.name}})
-Estado: {{mundo.estado}}
-Rumores:
-{{mundo.rumores}}`;
-
-      const contextText = replaceKeys(contextTemplate, keyContext);
-      prompt += contextText + '\n';
-      sections.push({
-        label: 'Contexto del Mundo',
-        content: contextText,
-        bgColor: 'bg-teal-50 dark:bg-teal-950'
-      });
-    }
-
-    return { text: prompt, sections };
-  };
-
-  const buildResumenMundoPreview = (payload: any): { text: string; sections: Array<{ label: string; content: string; bgColor: string }> } => {
-    if (!payload) return { text: '', sections: [] };
-
-    const mundo = worlds.find(w => w.id === payload.mundoid);
-    const pueblosEnMundo = pueblos.filter(p => p.worldId === payload.mundoid);
-
-    // Crear contexto para reemplazo de keys
-    const keyContext = {
-      mundo,
-      mundo: mundo, // Alias para variables {{mundo.*}}
-      pueblos: pueblosEnMundo
-    };
-
-    const sections: Array<{ label: string; content: string; bgColor: string }> = [];
-    let prompt = '';
-
-    // 1. System Prompt (solo de la plantilla del usuario para este tipo de trigger)
-    const userSystemPrompt = resumenMundoForm.systemPrompt || '';
-    if (userSystemPrompt) {
-      const systemPromptText = replaceKeys(userSystemPrompt, keyContext);
-      prompt += systemPromptText + '\n\n';
-      sections.push({
-        label: 'System Prompt',
-        content: systemPromptText,
-        bgColor: 'bg-green-50 dark:bg-green-950'
-      });
-    }
-
-    // 2. Resúmenes de Todos los Pueblos/Naciones del Mundo
-    if (payload.allSummaries) {
-      prompt += `Resúmenes de los pueblos/naciones del mundo:\n${payload.allSummaries}\n\n`;
-      sections.push({
-        label: 'Resúmenes de los Pueblos/Naciones del Mundo',
-        content: `Resúmenes de los pueblos/naciones del mundo:\n${payload.allSummaries}`,
-        bgColor: 'bg-purple-50 dark:bg-purple-950'
-      });
-    }
-
-    return { text: prompt, sections };
-  };
-
-  const buildNuevoLorePreview = (payload: any): { text: string; sections: Array<{ label: string; content: string; bgColor: string }> } => {
-    if (!payload) return { text: '', sections: [] };
-
-    // Crear contexto basado en el scope
-    const mundo = worlds.find(w => w.id === nuevoLoreForm.mundoid);
-    const pueblo = pueblos.find(p => p.id === nuevoLoreForm.pueblid);
-    const edificio = edificios.find(e => e.id === nuevoLoreForm.edificioid);
-
-    // Contexto dinámico según el scope seleccionado
-    const keyContext: any = {
-      mundo,
-      mundo: mundo, // Alias para variables {{mundo.*}}
-      pueblo,
-      edificio,
-      scope: nuevoLoreForm.scope,
-      loreType: nuevoLoreForm.loreType
-    };
-
-    const sections: Array<{ label: string; content: string; bgColor: string }> = [];
-    let prompt = '';
-
-    // 1. System Prompt (solo de la plantilla del usuario para este tipo de trigger)
-    const userSystemPrompt = nuevoLoreForm.systemPrompt || '';
-    if (userSystemPrompt) {
-      const systemPromptText = replaceKeys(userSystemPrompt, keyContext);
-      prompt += systemPromptText + '\n\n';
-      sections.push({
-        label: 'System Prompt',
-        content: systemPromptText,
-        bgColor: 'bg-green-50 dark:bg-green-950'
-      });
-    }
-
-    // 2. Contexto de información según scope (usando replaceKeys para variables anidadas)
-    let contextInfoText = '';
-
-    if (nuevoLoreForm.scope === 'mundo' && mundo) {
-      const mundoTemplate = `CONTEXTO DEL MUNDO
-Mundo: {{mundo.name}}
-Estado del Mundo: {{mundo.estado}}
-Rumores:
-{{mundo.rumores}}`;
-
-      contextInfoText = replaceKeys(mundoTemplate, keyContext);
-      sections.push({
-        label: 'Contexto del Mundo',
-        content: contextInfoText,
-        bgColor: 'bg-blue-50 dark:bg-blue-950'
-      });
-    } else if (nuevoLoreForm.scope === 'pueblo' && pueblo && mundo) {
-      const puebloTemplate = `CONTEXTO DE LA REGIÓN
-Pueblo/Nación: {{pueblo.name}}
-Tipo: {{pueblo.tipo}}
-Descripción: {{pueblo.descripcion}}
-Estado: {{pueblo.estado}}
-Rumores:
-{{pueblo.rumores}}
-
-CONTEXTO DEL MUNDO
-Mundo: {{mundo.name}}
-Estado del Mundo: {{mundo.estado}}
-Rumores:
-{{mundo.rumores}}`;
-
-      contextInfoText = replaceKeys(puebloTemplate, keyContext);
-      sections.push({
-        label: 'Contexto del Pueblo/Nación',
-        content: contextInfoText,
-        bgColor: 'bg-amber-50 dark:bg-amber-950'
-      });
-    } else if (nuevoLoreForm.scope === 'edificio' && edificio && pueblo && mundo) {
-      const edificioTemplate = `CONTEXTO DEL EDIFICIO
-Edificio: {{edificio.name}}
-Descripción: {{edificio.descripcion}}
-Tipo: {{edificio.type}}
-Eventos recientes:
-{{edificio.eventos}}
-POIs disponibles:
-{{edificio.poislist}}
-
-CONTEXTO DE LA REGIÓN
-Pueblo/Nación: {{pueblo.name}}
-Tipo: {{pueblo.tipo}}
-Rumores:
-{{pueblo.rumores}}
-
-CONTEXTO DEL MUNDO
-Mundo: {{mundo.name}}
-Estado del Mundo: {{mundo.estado}}
-Rumores:
-{{mundo.rumores}}`;
-
-      contextInfoText = replaceKeys(edificioTemplate, keyContext);
-      sections.push({
-        label: 'Contexto del Edificio',
-        content: contextInfoText,
-        bgColor: 'bg-orange-50 dark:bg-orange-950'
-      });
-    }
-
-    prompt += contextInfoText + '\n';
-
-    // 3. Contexto del nuevo lore
-    if (nuevoLoreForm.context) {
-      const contextProcessed = replaceKeys(nuevoLoreForm.context, keyContext);
-      prompt += `CONTEXTO DEL NUEVO LORE:\n${contextProcessed}\n\n`;
-      sections.push({
-        label: 'Contexto del Nuevo Lore',
-        content: contextProcessed,
-        bgColor: 'bg-purple-50 dark:bg-purple-950'
-      });
-    }
-
-    // 4. Tipo de Lore
-    if (nuevoLoreForm.loreType) {
-      prompt += `TIPO DE LORE: ${nuevoLoreForm.loreType}\n\n`;
-      sections.push({
-        label: 'Tipo de Lore',
-        content: nuevoLoreForm.loreType,
-        bgColor: 'bg-teal-50 dark:bg-teal-950'
-      });
-    }
-
-    return { text: prompt, sections };
-  };
-
-  // Construir payloads y previews con useMemo para actualizar automáticamente
-  const chatPayload = useMemo(() => buildChatPayload(), [chatForm, npcs, worlds, pueblos, edificios, sessions]);
-  const chatPromptData = useMemo(() => buildChatPreview(chatPayload), [chatPayload, chatForm, npcs, worlds, pueblos, edificios, sessions, grimorioCards]);
-  const chatPrompt = chatPromptData.text;
-  const chatPromptSections = chatPromptData.sections;
-  const resumenSesionPayload = useMemo(() => buildResumenSesionPayload(), [resumenSesionForm]);
-  const resumenSesionPromptData = useMemo(() => buildResumenSesionPreview(resumenSesionPayload), [resumenSesionPayload, resumenSesionForm, npcs, sessions]);
-  const resumenSesionPrompt = resumenSesionPromptData.text;
-  const resumenSesionSections = resumenSesionPromptData.sections;
-  const resumenNPCPayload = useMemo(() => buildResumenNPCPayload(), [resumenNPCForm]);
-  const resumenNPCPromptData = useMemo(() => buildResumenNPCPreview(resumenNPCPayload), [resumenNPCPayload, resumenNPCForm, npcs]);
-  const resumenNPCPrompt = resumenNPCPromptData.text;
-  const resumenNPCSections = resumenNPCPromptData.sections;
-  const resumenEdificioPayload = useMemo(() => buildResumenEdificioPayload(), [resumenEdificioForm]);
-  const resumenEdificioPromptData = useMemo(() => buildResumenEdificioPreview(resumenEdificioPayload), [resumenEdificioPayload, resumenEdificioForm]);
-  const resumenEdificioPrompt = resumenEdificioPromptData.text;
-  const resumenEdificioSections = resumenEdificioPromptData.sections;
-  const resumenPuebloPayload = useMemo(() => buildResumenPuebloPayload(), [resumenPuebloForm]);
-  const resumenPuebloPromptData = useMemo(() => buildResumenPuebloPreview(resumenPuebloPayload), [resumenPuebloPayload, resumenPuebloForm]);
-  const resumenPuebloPrompt = resumenPuebloPromptData.text;
-  const resumenPuebloSections = resumenPuebloPromptData.sections;
-  const resumenMundoPayload = useMemo(() => buildResumenMundoPayload(), [resumenMundoForm]);
-  const resumenMundoPromptData = useMemo(() => buildResumenMundoPreview(resumenMundoPayload), [resumenMundoPayload, resumenMundoForm]);
-  const resumenMundoPrompt = resumenMundoPromptData.text;
-  const resumenMundoSections = resumenMundoPromptData.sections;
-  const nuevoLorePayload = useMemo(() => buildNuevoLorePayload(), [nuevoLoreForm]);
-  const nuevoLorePromptData = useMemo(() => buildNuevoLorePreview(nuevoLorePayload), [nuevoLorePayload, nuevoLoreForm, worlds, pueblos, edificios]);
-  const nuevoLorePrompt = nuevoLorePromptData.text;
-  const nuevoLoreSections = nuevoLorePromptData.sections;
+  }
 
   return (
     <div className="space-y-4">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold">Router de Triggers</h2>
-          <p className="text-muted-foreground">Testea y visualiza peticiones a Denizen</p>
+          <p className="text-muted-foreground">Sistema de envío de prompts a la API de rerouting</p>
         </div>
-        <Button onClick={fetchData}>
-          <RefreshCw className="h-4 w-4 mr-2" />
-          Recargar
-        </Button>
+        <Badge variant="outline">
+          <Network className="h-3 w-3 mr-1" />
+          {worlds.length} mundos, {pueblos.length} pueblos, {edificios.length} edificios, {npcs.length} NPCs
+        </Badge>
       </div>
 
-      {loading ? (
-        <div className="flex items-center justify-center py-12">
-          <div className="text-center">
-            <RefreshCw className="h-8 w-8 animate-spin mx-auto mb-4" />
-            <p className="text-muted-foreground">Cargando datos...</p>
-          </div>
-        </div>
-      ) : (
-        <>
-        <Tabs defaultValue="chat" className="w-full">
-          <TabsList className="grid w-full grid-cols-7">
-            <TabsTrigger value="chat">
-              <MessageSquare className="h-4 w-4 mr-2" />
-              Chat
-            </TabsTrigger>
-            <TabsTrigger value="resumen_sesion">
-              <MessageCircle className="h-4 w-4 mr-2" />
+      <Dialog open={responseDialogOpen} onOpenChange={setResponseDialogOpen}>
+        <DialogContent className="max-w-4xl max-h-[80vh]">
+          <DialogHeader>
+            <DialogTitle>Respuesta del Trigger</DialogTitle>
+            <DialogDescription>
+              Última respuesta recibida del sistema de triggers
+            </DialogDescription>
+          </DialogHeader>
+          <ScrollArea className="h-[60vh] pr-4">
+            <pre className="text-xs bg-muted p-4 rounded-lg overflow-x-auto">
+              {JSON.stringify(response, null, 2)}
+            </pre>
+          </ScrollArea>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                if (response?.request) {
+                  const script = generateDenizenScript(response.request);
+                  copyToClipboard(script, 'Script Denizen copiado');
+                }
+              }}
+            >
+              <Terminal className="h-4 w-4 mr-2" />
+              Copiar Script Denizen
+            </Button>
+            <Button onClick={() => setResponseDialogOpen(false)}>
+              Cerrar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Main Tabs */}
+      <Tabs defaultValue="chat" className="w-full">
+        <TabsList className="grid w-full grid-cols-7">
+          <TabsTrigger value="chat">
+            <MessageSquare className="h-4 w-4 mr-2" />
+            Chat
+          </TabsTrigger>
+          <TabsTrigger value="resumen_sesion">
+            <MessageCircle className="h-4 w-4 mr-2" />
             Resumen Sesión
           </TabsTrigger>
           <TabsTrigger value="resumen_npc">
@@ -2134,95 +1479,21 @@ Rumores:
                   <Textarea
                     value={chatForm.mensaje}
                     onChange={(e) => setChatForm({ ...chatForm, mensaje: e.target.value })}
-                    placeholder="Escribe el mensaje del jugador... (puedes usar variables como {{jugador.nombre}}, {{mundo.estado}}, {{mundo.rumores}}, {{pueblo.rumores}}, {{edificio.eventos}}, etc.)"
-                    rows={3}
+                    placeholder="Escribe aquí el mensaje del jugador..."
+                    rows={4}
                   />
-
-                  <div className="border rounded-lg p-4 bg-muted/50">
-                    <h4 className="font-semibold text-sm mb-3 flex items-center gap-2">
-                      <RefreshCw className="h-4 w-4" />
-                      Glosario de Variables Disponibles
-                    </h4>
-                    <div className="space-y-3 text-xs">
-                      <div>
-                        <p className="font-semibold text-foreground mb-1">Variables del Jugador:</p>
-                        <div className="grid grid-cols-2 gap-2 text-muted-foreground">
-                          <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}jugador.nombre{KEY_EXAMPLE_2}</span>
-                          <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}jugador.raza{KEY_EXAMPLE_2}</span>
-                          <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}jugador.nivel{KEY_EXAMPLE_2}</span>
-                          <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}jugador.salud_actual{KEY_EXAMPLE_2}</span>
-                          <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}jugador.reputacion{KEY_EXAMPLE_2}</span>
-                          <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}jugador.almakos{KEY_EXAMPLE_2}</span>
-                          <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}jugador.deuda{KEY_EXAMPLE_2}</span>
-                          <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}jugador.piedras_del_alma{KEY_EXAMPLE_2}</span>
-                          <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}jugador.hora{KEY_EXAMPLE_2}</span>
-                          <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}jugador.clima{KEY_EXAMPLE_2}</span>
-                          <span className="font-mono bg-background px-2 py-1 rounded text-blue-600 dark:text-blue-400">{KEY_EXAMPLE_1}jugador.mensaje{KEY_EXAMPLE_2}</span>
-                        </div>
-                      </div>
-
-                      <div>
-                        <p className="font-semibold text-foreground mb-1">Variables del NPC:</p>
-                        <div className="grid grid-cols-2 gap-2 text-muted-foreground">
-                          <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}npc.name{KEY_EXAMPLE_2}</span>
-                          <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}npc.description{KEY_EXAMPLE_2}</span>
-                          <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}npc.personality{KEY_EXAMPLE_2}</span>
-                          <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}npc.scenario{KEY_EXAMPLE_2}</span>
-                          <span className="font-mono bg-background px-2 py-1 rounded text-blue-600 dark:text-blue-400">{KEY_EXAMPLE_1}npc.historial{KEY_EXAMPLE_2}</span>
-                        </div>
-                      </div>
-
-                      <div>
-                        <p className="font-semibold text-foreground mb-1">Variables de Ubicación:</p>
-                        <div className="grid grid-cols-2 gap-2 text-muted-foreground">
-                          <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}mundo{KEY_EXAMPLE_2}</span>
-                          <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}pueblo{KEY_EXAMPLE_2}</span>
-                          <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}edificio{KEY_EXAMPLE_2}</span>
-                        </div>
-                      </div>
-
-                      <div>
-                        <p className="font-semibold text-foreground mb-1">Variables del Mundo:</p>
-                        <div className="grid grid-cols-2 gap-2 text-muted-foreground">
-                          <span className="font-mono bg-background px-2 py-1 rounded text-blue-600 dark:text-blue-400">{KEY_EXAMPLE_1}mundo.estado{KEY_EXAMPLE_2}</span>
-                          <span className="font-mono bg-background px-2 py-1 rounded text-blue-600 dark:text-blue-400">{KEY_EXAMPLE_1}mundo.rumores{KEY_EXAMPLE_2}</span>
-                        </div>
-                      </div>
-
-                      <div>
-                        <p className="font-semibold text-foreground mb-1">Variables del Pueblo:</p>
-                        <div className="grid grid-cols-2 gap-2 text-muted-foreground">
-                          <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}pueblo.name{KEY_EXAMPLE_2}</span>
-                          <span className="font-mono bg-background px-2 py-1 rounded text-blue-600 dark:text-blue-400">{KEY_EXAMPLE_1}pueblo.tipo{KEY_EXAMPLE_2}</span>
-                          <span className="font-mono bg-background px-2 py-1 rounded text-blue-600 dark:text-blue-400">{KEY_EXAMPLE_1}pueblo.descripcion{KEY_EXAMPLE_2}</span>
-                          <span className="font-mono bg-background px-2 py-1 rounded text-blue-600 dark:text-blue-400">{KEY_EXAMPLE_1}pueblo.estado{KEY_EXAMPLE_2}</span>
-                          <span className="font-mono bg-background px-2 py-1 rounded text-blue-600 dark:text-blue-400">{KEY_EXAMPLE_1}pueblo.rumores{KEY_EXAMPLE_2}</span>
-                        </div>
-                      </div>
-
-                      <div>
-                        <p className="font-semibold text-foreground mb-1">Variables del Edificio:</p>
-                        <div className="grid grid-cols-2 gap-2 text-muted-foreground">
-                          <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}edificio.name{KEY_EXAMPLE_2}</span>
-                          <span className="font-mono bg-background px-2 py-1 rounded text-blue-600 dark:text-blue-400">{KEY_EXAMPLE_1}edificio.descripcion{KEY_EXAMPLE_2}</span>
-                          <span className="font-mono bg-background px-2 py-1 rounded text-blue-600 dark:text-blue-400">{KEY_EXAMPLE_1}edificio.eventos{KEY_EXAMPLE_2}</span>
-                          <span className="font-mono bg-background px-2 py-1 rounded text-blue-600 dark:text-blue-400">{KEY_EXAMPLE_1}edificio.poislist{KEY_EXAMPLE_2}</span>
-                        </div>
-                      </div>
-
-                      <div>
-                        <p className="font-semibold text-foreground mb-1">Variables Abreviadas:</p>
-                        <div className="grid grid-cols-3 gap-2 text-muted-foreground">
-                          <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}nombre{KEY_EXAMPLE_2}</span>
-                          <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}raza{KEY_EXAMPLE_2}</span>
-                          <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}nivel{KEY_EXAMPLE_2}</span>
-                          <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}salud{KEY_EXAMPLE_2}</span>
-                          <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}npc{KEY_EXAMPLE_2}</span>
-                          <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}playername{KEY_EXAMPLE_2}</span>
-                        </div>
-                      </div>
+                  {chatForm.lastSummary && (
+                    <div>
+                      <Label>Último Resumen de Sesión</Label>
+                      <Textarea
+                        value={chatForm.lastSummary}
+                        onChange={(e) => setChatForm({ ...chatForm, lastSummary: e.target.value })}
+                        placeholder="Resumen de la sesión anterior..."
+                        rows={3}
+                        className="text-sm bg-muted/50"
+                      />
                     </div>
-                  </div>
+                  )}
                 </CardContent>
               </Card>
             </div>
@@ -2236,14 +1507,26 @@ Rumores:
                       Visualizador de Prompt
                     </CardTitle>
                   </div>
-                  <Badge variant="secondary">
-                    {countTokens(chatPrompt)} tokens / {countWords(chatPrompt)} palabras
-                  </Badge>
+                  {previewLoading ? (
+                    <Badge variant="secondary">
+                      <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                      Cargando...
+                    </Badge>
+                  ) : (
+                    <Badge variant="secondary">
+                      {countTokens(chatPrompt)} tokens / {countWords(chatPrompt)} palabras
+                    </Badge>
+                  )}
                 </CardHeader>
                 <CardContent>
                   <ScrollArea className="h-[500px] pr-4">
                     <div className="space-y-3">
-                      {chatPromptSections.length === 0 ? (
+                      {previewLoading ? (
+                        <div className="text-center py-8">
+                          <Loader2 className="h-8 w-8 animate-spin mx-auto mb-2" />
+                          <p className="text-muted-foreground">Cargando preview...</p>
+                        </div>
+                      ) : chatPromptSections.length === 0 ? (
                         <div className="text-center text-muted-foreground py-8">
                           Selecciona un NPC y completa los campos para ver el prompt
                         </div>
@@ -2263,23 +1546,23 @@ Rumores:
                       )}
                     </div>
                   </ScrollArea>
-                  {chatPrompt && (
-                    <div className="flex gap-2 mt-2">
+                  {chatPromptSections.length > 0 && (
+                    <div className="mt-4 flex gap-2">
                       <Button
                         variant="outline"
                         size="sm"
                         onClick={() => copyToClipboard(chatPrompt, 'Prompt copiado')}
+                        className="flex-1"
                       >
-                        {copied ? <RefreshCw className="h-4 w-4 mr-2" /> : <RefreshCw className="h-4 w-4 mr-2" />}
+                        <Copy className="h-4 w-4 mr-2" />
                         {copied ? 'Copiado' : 'Copiar'}
                       </Button>
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => copyToClipboard(JSON.stringify(chatPayload?.context ? {...chatPayload, context: null} : chatPayload, null, 2), 'JSON copiado')}
+                        onClick={() => setChatPreviewData(null)}
                       >
-                        <RefreshCw className="h-4 w-4 mr-2" />
-                        Copiar JSON
+                        <Eye className="h-4 w-4" />
                       </Button>
                     </div>
                   )}
@@ -2291,7 +1574,7 @@ Rumores:
                   <div>
                     <CardTitle className="flex items-center gap-2">
                       <Globe className="h-5 w-5" />
-                      JSON de Request (Completo)
+                      JSON de Request
                     </CardTitle>
                   </div>
                   <Badge variant="secondary">
@@ -2307,41 +1590,14 @@ Rumores:
                 </CardContent>
               </Card>
 
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between">
-                  <div>
-                    <CardTitle className="flex items-center gap-2">
-                      <Terminal className="h-5 w-5" />
-                      Script de Denizen
-                    </CardTitle>
-                  </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => copyToClipboard(generateDenizenScript(chatPayload), 'Script de Denizen copiado')}
-                    disabled={!chatPayload}
-                  >
-                    <Copy className="h-4 w-4 mr-2" />
-                    {copied ? 'Copiado' : 'Copiar'}
-                  </Button>
-                </CardHeader>
-                <CardContent>
-                  <ScrollArea className="h-[200px] pr-4">
-                    <pre className="text-xs bg-muted p-4 rounded-lg overflow-x-auto font-mono">
-                      {generateDenizenScript(chatPayload) || 'Selecciona un NPC y completa los campos para ver el script de Denizen'}
-                    </pre>
-                  </ScrollArea>
-                </CardContent>
-              </Card>
-
               <Button
                 className="w-full"
                 size="lg"
                 onClick={() => chatPayload && sendRequest('chat', chatPayload)}
-                disabled={!chatPayload || !chatPayload.npcid || (chatForm.sessionType === 'exist' && !chatForm.playersessionid)}
+                disabled={!chatForm.npcid || !chatForm.mensaje}
               >
                 <Send className="h-5 w-5 mr-2" />
-                Enviar Trigger de Chat
+                Enviar Chat
               </Button>
             </div>
           </div>
@@ -2352,8 +1608,8 @@ Rumores:
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <Card>
               <CardHeader>
-                <CardTitle>Configuración del Resumen</CardTitle>
-                <CardDescription>Selecciona NPC y sesión para generar el resumen</CardDescription>
+                <CardTitle>Configuración del Resumen de Sesión</CardTitle>
+                <CardDescription>Genera un resumen consolidado del historial de chat de una sesión</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
@@ -2380,6 +1636,7 @@ Rumores:
                     <Select
                       value={resumenSesionForm.sessionid}
                       onValueChange={(v) => setResumenSesionForm({ ...resumenSesionForm, sessionid: v })}
+                      disabled={!resumenSesionForm.npcid}
                     >
                       <SelectTrigger>
                         <SelectValue placeholder="Selecciona sesión" />
@@ -2396,143 +1653,24 @@ Rumores:
                 </div>
 
                 <div>
-                  <Label>System Prompt</Label>
+                  <Label>Historial de Chat</Label>
                   <Textarea
-                    value={resumenSesionForm.systemPrompt}
-                    onChange={(e) => setResumenSesionForm({ ...resumenSesionForm, systemPrompt: e.target.value })}
-                    placeholder="Instrucciones para generar el resumen (puedes usar {{npc.name}}, {{jugador.nombre}}, {{mundo.estado}}, {{mundo.rumores}}, {{pueblo.tipo}}, {{pueblo.descripcion}}, {{pueblo.estado}}, {{pueblo.rumores}}, {{edificio.descripcion}}, {{edificio.eventos}}, {{edificio.poislist}}, etc.)"
+                    value={resumenSesionForm.chatHistory}
+                    onChange={(e) => setResumenSesionForm({ ...resumenSesionForm, chatHistory: e.target.value })}
+                    placeholder="Pega aquí el historial de chat de la sesión..."
                     rows={6}
                   />
                 </div>
 
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleSaveResumenSesionTemplate}
-                    className="flex-1"
-                  >
-                    <RefreshCw className="h-4 w-4 mr-2" />
-                    Guardar Template
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      localStorage.removeItem('resumenSesionTemplate');
-                      setResumenSesionForm(prev => ({ ...prev, systemPrompt: '' }));
-                      setResumenSesionTemplateSaved(false);
-                      toast({
-                        title: 'Template Eliminado',
-                        description: 'El template de resumen de sesión ha sido eliminado'
-                      });
-                    }}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
-
-                <div className="border rounded-lg p-4 bg-muted/50">
-                  <h4 className="font-semibold text-sm mb-3 flex items-center gap-2">
-                    <RefreshCw className="h-4 w-4" />
-                    Glosario de Variables Disponibles
-                  </h4>
-                  <div className="space-y-3 text-xs">
-                    <div>
-                      <p className="font-semibold text-foreground mb-1">Variables del NPC:</p>
-                      <div className="grid grid-cols-2 gap-2 text-muted-foreground">
-                        <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}npc.name{KEY_EXAMPLE_2}</span>
-                        <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}npc.description{KEY_EXAMPLE_2}</span>
-                        <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}npc.personality{KEY_EXAMPLE_2}</span>
-                        <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}npc.scenario{KEY_EXAMPLE_2}</span>
-                      </div>
-                    </div>
-
-                    <div>
-                      <p className="font-semibold text-foreground mb-1">Variables del Jugador:</p>
-                      <div className="grid grid-cols-2 gap-2 text-muted-foreground">
-                        <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}jugador.nombre{KEY_EXAMPLE_2}</span>
-                        <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}jugador.raza{KEY_EXAMPLE_2}</span>
-                        <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}jugador.nivel{KEY_EXAMPLE_2}</span>
-                        <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}jugador.salud_actual{KEY_EXAMPLE_2}</span>
-                        <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}jugador.reputacion{KEY_EXAMPLE_2}</span>
-                        <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}jugador.almakos{KEY_EXAMPLE_2}</span>
-                        <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}jugador.deuda{KEY_EXAMPLE_2}</span>
-                        <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}jugador.piedras_del_alma{KEY_EXAMPLE_2}</span>
-                        <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}jugador.hora{KEY_EXAMPLE_2}</span>
-                        <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}jugador.clima{KEY_EXAMPLE_2}</span>
-                        <span className="font-mono bg-background px-2 py-1 rounded text-blue-600 dark:text-blue-400">{KEY_EXAMPLE_1}jugador.mensaje{KEY_EXAMPLE_2}</span>
-                      </div>
-                    </div>
-
-                    <div>
-                      <p className="font-semibold text-foreground mb-1">Variables del Mundo:</p>
-                      <div className="grid grid-cols-2 gap-2 text-muted-foreground">
-                        <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}mundo{KEY_EXAMPLE_2}</span>
-                        <span className="font-mono bg-background px-2 py-1 rounded text-blue-600 dark:text-blue-400">{KEY_EXAMPLE_1}mundo.estado{KEY_EXAMPLE_2}</span>
-                        <span className="font-mono bg-background px-2 py-1 rounded text-blue-600 dark:text-blue-400">{KEY_EXAMPLE_1}mundo.rumores{KEY_EXAMPLE_2}</span>
-                      </div>
-                    </div>
-
-                    <div>
-                      <p className="font-semibold text-foreground mb-1">Variables del Pueblo:</p>
-                      <div className="grid grid-cols-2 gap-2 text-muted-foreground">
-                        <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}pueblo{KEY_EXAMPLE_2}</span>
-                        <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}pueblo.name{KEY_EXAMPLE_2}</span>
-                        <span className="font-mono bg-background px-2 py-1 rounded text-blue-600 dark:text-blue-400">{KEY_EXAMPLE_1}pueblo.tipo{KEY_EXAMPLE_2}</span>
-                        <span className="font-mono bg-background px-2 py-1 rounded text-blue-600 dark:text-blue-400">{KEY_EXAMPLE_1}pueblo.descripcion{KEY_EXAMPLE_2}</span>
-                        <span className="font-mono bg-background px-2 py-1 rounded text-blue-600 dark:text-blue-400">{KEY_EXAMPLE_1}pueblo.estado{KEY_EXAMPLE_2}</span>
-                        <span className="font-mono bg-background px-2 py-1 rounded text-blue-600 dark:text-blue-400">{KEY_EXAMPLE_1}pueblo.rumores{KEY_EXAMPLE_2}</span>
-                      </div>
-                    </div>
-
-                    <div>
-                      <p className="font-semibold text-foreground mb-1">Variables del Edificio:</p>
-                      <div className="grid grid-cols-2 gap-2 text-muted-foreground">
-                        <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}edificio{KEY_EXAMPLE_2}</span>
-                        <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}edificio.name{KEY_EXAMPLE_2}</span>
-                        <span className="font-mono bg-background px-2 py-1 rounded text-blue-600 dark:text-blue-400">{KEY_EXAMPLE_1}edificio.descripcion{KEY_EXAMPLE_2}</span>
-                        <span className="font-mono bg-background px-2 py-1 rounded text-blue-600 dark:text-blue-400">{KEY_EXAMPLE_1}edificio.eventos{KEY_EXAMPLE_2}</span>
-                        <span className="font-mono bg-background px-2 py-1 rounded text-blue-600 dark:text-blue-400">{KEY_EXAMPLE_1}edificio.poislist{KEY_EXAMPLE_2}</span>
-                      </div>
-                    </div>
-
-                    <div>
-                      <p className="font-semibold text-foreground mb-1">Variables Abreviadas:</p>
-                      <div className="grid grid-cols-3 gap-2 text-muted-foreground">
-                        <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}npc{KEY_EXAMPLE_2}</span>
-                        <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}npcid{KEY_EXAMPLE_2}</span>
-                        <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}playername{KEY_EXAMPLE_2}</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleSaveResumenSesionTemplate}
-                    className="flex-1"
-                  >
-                    <RefreshCw className="h-4 w-4 mr-2" />
-                    Guardar Template
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      localStorage.removeItem('resumenSesionTemplate');
-                      setResumenSesionForm(prev => ({ ...prev, systemPrompt: '' }));
-                      setResumenSesionTemplateSaved(false);
-                      toast({
-                        title: 'Template Eliminado',
-                        description: 'El template de resumen de sesión ha sido eliminado'
-                      });
-                    }}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+                <div>
+                  <Label>Último Resumen</Label>
+                  <Textarea
+                    value={resumenSesionForm.lastSummary}
+                    onChange={(e) => setResumenSesionForm({ ...resumenSesionForm, lastSummary: e.target.value })}
+                    placeholder="Último resumen de la sesión (si existe)..."
+                    rows={4}
+                    className="text-sm bg-muted/50"
+                  />
                 </div>
               </CardContent>
             </Card>
@@ -2546,24 +1684,28 @@ Rumores:
                       Visualizador de Prompt
                     </CardTitle>
                   </div>
-                  <div className="flex items-center gap-2">
-                    {resumenSesionTemplateSaved && (
-                      <div className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400">
-                        <RefreshCw className="h-3 w-3" />
-                        Guardado
-                      </div>
-                    )}
+                  {previewLoading ? (
+                    <Badge variant="secondary">
+                      <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                      Cargando...
+                    </Badge>
+                  ) : (
                     <Badge variant="secondary">
                       {countTokens(resumenSesionPrompt)} tokens / {countWords(resumenSesionPrompt)} palabras
                     </Badge>
-                  </div>
+                  )}
                 </CardHeader>
                 <CardContent>
                   <ScrollArea className="h-[500px] pr-4">
                     <div className="space-y-3">
-                      {resumenSesionSections.length === 0 ? (
+                      {previewLoading ? (
+                        <div className="text-center py-8">
+                          <Loader2 className="h-8 w-8 animate-spin mx-auto mb-2" />
+                          <p className="text-muted-foreground">Cargando preview...</p>
+                        </div>
+                      ) : resumenSesionSections.length === 0 ? (
                         <div className="text-center text-muted-foreground py-8">
-                          Selecciona un NPC y una sesión para ver el prompt
+                          Selecciona una sesión y completa los campos para ver el prompt
                         </div>
                       ) : (
                         resumenSesionSections.map((section, index) => (
@@ -2581,40 +1723,20 @@ Rumores:
                       )}
                     </div>
                   </ScrollArea>
-                  {resumenSesionPrompt && (
-                    <div className="flex gap-2 mt-2">
+                  {resumenSesionSections.length > 0 && (
+                    <div className="mt-4 flex gap-2">
                       <Button
                         variant="outline"
                         size="sm"
                         onClick={() => copyToClipboard(resumenSesionPrompt, 'Prompt copiado')}
+                        className="flex-1"
                       >
-                        {copied ? <RefreshCw className="h-4 w-4 mr-2" /> : <RefreshCw className="h-4 w-4 mr-2" />}
+                        <Copy className="h-4 w-4 mr-2" />
                         {copied ? 'Copiado' : 'Copiar'}
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => copyToClipboard(JSON.stringify(resumenSesionPayload, null, 2), 'JSON copiado')}
-                      >
-                        <RefreshCw className="h-4 w-4 mr-2" />
-                        Copiar JSON
                       </Button>
                     </div>
                   )}
                 </CardContent>
-
-                <Button
-                  className="w-full"
-                  onClick={() => {
-                    if (resumenSesionPayload && resumenSesionPayload.playersessionid) {
-                      sendRequest('resumen_sesion', resumenSesionPayload);
-                    }
-                  }}
-                  disabled={!resumenSesionPayload.npcid || !resumenSesionForm.sessionid}
-                >
-                  <Send className="h-4 w-4 mr-2" />
-                  Generar Resumen de Sesión
-                </Button>
               </Card>
 
               <Card>
@@ -2632,11 +1754,21 @@ Rumores:
                 <CardContent>
                   <ScrollArea className="h-[200px] pr-4">
                     <pre className="text-xs bg-muted p-4 rounded-lg overflow-x-auto">
-                      {JSON.stringify(resumenSesionPayload || {}, null, 2)}
+                      {JSON.stringify(resumenSesionPayload || {}, null, 2) || '{}'}
                     </pre>
                   </ScrollArea>
                 </CardContent>
               </Card>
+
+              <Button
+                className="w-full"
+                size="lg"
+                onClick={() => resumenSesionPayload && sendRequest('resumen_sesion', resumenSesionPayload)}
+                disabled={!resumenSesionForm.npcid || !resumenSesionForm.sessionid || !resumenSesionForm.chatHistory}
+              >
+                <Send className="h-5 w-5 mr-2" />
+                Generar Resumen de Sesión
+              </Button>
             </div>
           </div>
         </TabsContent>
@@ -2646,8 +1778,8 @@ Rumores:
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <Card>
               <CardHeader>
-                <CardTitle>Configuración del Resumen NPC</CardTitle>
-                <CardDescription>Genera un resumen consolidado de las interacciones del NPC</CardDescription>
+                <CardTitle>Configuración del Resumen de NPC</CardTitle>
+                <CardDescription>Genera un resumen consolidado de todas las sesiones de un NPC</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div>
@@ -2671,50 +1803,8 @@ Rumores:
 
                 <div>
                   <div className="flex items-center justify-between mb-2">
-                    <Label>System Prompt</Label>
-                    {resumenNPCTemplateSaved && (
-                      <div className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400">
-                        <RefreshCw className="h-3 w-3" />
-                        Guardado
-                      </div>
-                    )}
+                    <Label>Resúmenes de Sesiones del NPC</Label>
                   </div>
-                  <Textarea
-                    value={resumenNPCForm.systemPrompt}
-                    onChange={(e) => setResumenNPCForm({ ...resumenNPCForm, systemPrompt: e.target.value })}
-                    placeholder="Instrucciones para generar el resumen del NPC (puedes usar {{npc.name}}, {{npc.description}}, {{npc.personality}}, etc.)"
-                    rows={6}
-                  />
-                  <div className="flex gap-2 mt-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handleSaveResumenNPCTemplate}
-                      className="flex-1"
-                    >
-                      <RefreshCw className="h-4 w-4 mr-2" />
-                      Guardar Template
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        localStorage.removeItem('resumenNPCTemplate');
-                        setResumenNPCForm(prev => ({ ...prev, systemPrompt: '' }));
-                        setResumenNPCTemplateSaved(false);
-                        toast({
-                          title: 'Template Eliminado',
-                          description: 'El system prompt de resumen NPC ha sido eliminado'
-                        });
-                      }}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-
-                <div>
-                  <Label>Todos los Resúmenes del NPC</Label>
                   {npcSessionSummaries.length > 0 ? (
                     <div className="border rounded-lg p-4 bg-muted/50">
                       <ScrollArea className="h-[300px] pr-4">
@@ -2728,9 +1818,6 @@ Rumores:
                                     ID: {session.sessionId}
                                   </span>
                                 </div>
-                                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                                  <span>{session.messageCount} mensajes</span>
-                                </div>
                               </div>
                               <p className="text-sm text-foreground line-clamp-4">
                                 {session.summary}
@@ -2743,7 +1830,7 @@ Rumores:
                   ) : (
                     <div className="border rounded-lg p-6 bg-muted/50 text-center">
                       <p className="text-sm text-muted-foreground">
-                        {resumenNPCForm.npcid 
+                        {resumenNPCForm.npcid
                           ? "Este NPC no tiene sesiones con resúmenes generados aún."
                           : "Selecciona un NPC para ver sus sesiones con resúmenes."
                         }
@@ -2754,45 +1841,9 @@ Rumores:
                     className="hidden"
                     value={resumenNPCForm.allSummaries}
                     onChange={(e) => setResumenNPCForm({ ...resumenNPCForm, allSummaries: e.target.value })}
-                    placeholder="Pega aquí todos los resúmenes previos del NPC..."
+                    placeholder="Pega aquí los resúmenes de todas las sesiones de este NPC..."
                     rows={6}
                   />
-                </div>
-
-                <div className="border rounded-lg p-4 bg-muted/50">
-                  <h4 className="font-semibold text-sm mb-3 flex items-center gap-2">
-                    <RefreshCw className="h-4 w-4" />
-                    Glosario de Variables Disponibles
-                  </h4>
-                  <div className="space-y-3 text-xs">
-                    <div>
-                      <p className="font-semibold text-foreground mb-1">Variables del NPC:</p>
-                      <div className="grid grid-cols-2 gap-2 text-muted-foreground">
-                        <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}npc.name{KEY_EXAMPLE_2}</span>
-                        <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}npc.description{KEY_EXAMPLE_2}</span>
-                        <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}npc.personality{KEY_EXAMPLE_2}</span>
-                        <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}npc.scenario{KEY_EXAMPLE_2}</span>
-                      </div>
-                    </div>
-
-                    <div>
-                      <p className="font-semibold text-foreground mb-1">Variables de Ubicación:</p>
-                      <div className="grid grid-cols-3 gap-2 text-muted-foreground">
-                        <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}mundo{KEY_EXAMPLE_2}</span>
-                        <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}pueblo{KEY_EXAMPLE_2}</span>
-                        <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}edificio{KEY_EXAMPLE_2}</span>
-                      </div>
-                    </div>
-
-                    <div>
-                      <p className="font-semibold text-foreground mb-1">Variables Abreviadas:</p>
-                      <div className="grid grid-cols-3 gap-2 text-muted-foreground">
-                        <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}npc{KEY_EXAMPLE_2}</span>
-                        <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}npcid{KEY_EXAMPLE_2}</span>
-                        <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}npc_name{KEY_EXAMPLE_2}</span>
-                      </div>
-                    </div>
-                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -2806,14 +1857,26 @@ Rumores:
                       Visualizador de Prompt
                     </CardTitle>
                   </div>
-                  <Badge variant="secondary">
-                    {countTokens(resumenNPCPrompt)} tokens / {countWords(resumenNPCPrompt)} palabras
-                  </Badge>
+                  {previewLoading ? (
+                    <Badge variant="secondary">
+                      <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                      Cargando...
+                    </Badge>
+                  ) : (
+                    <Badge variant="secondary">
+                      {countTokens(resumenNPCPrompt)} tokens / {countWords(resumenNPCPrompt)} palabras
+                    </Badge>
+                  )}
                 </CardHeader>
                 <CardContent>
                   <ScrollArea className="h-[500px] pr-4">
                     <div className="space-y-3">
-                      {resumenNPCSections.length === 0 ? (
+                      {previewLoading ? (
+                        <div className="text-center py-8">
+                          <Loader2 className="h-8 w-8 animate-spin mx-auto mb-2" />
+                          <p className="text-muted-foreground">Cargando preview...</p>
+                        </div>
+                      ) : resumenNPCSections.length === 0 ? (
                         <div className="text-center text-muted-foreground py-8">
                           Selecciona un NPC y completa los campos para ver el prompt
                         </div>
@@ -3046,14 +2109,26 @@ Rumores:
                       Visualizador de Prompt
                     </CardTitle>
                   </div>
-                  <Badge variant="secondary">
-                    {countTokens(resumenEdificioPrompt)} tokens / {countWords(resumenEdificioPrompt)} palabras
-                  </Badge>
+                  {previewLoading ? (
+                    <Badge variant="secondary">
+                      <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                      Cargando...
+                    </Badge>
+                  ) : (
+                    <Badge variant="secondary">
+                      {countTokens(resumenEdificioPrompt)} tokens / {countWords(resumenEdificioPrompt)} palabras
+                    </Badge>
+                  )}
                 </CardHeader>
                 <CardContent>
                   <ScrollArea className="h-[500px] pr-4">
                     <div className="space-y-3">
-                      {resumenEdificioSections.length === 0 ? (
+                      {previewLoading ? (
+                        <div className="text-center py-8">
+                          <Loader2 className="h-8 w-8 animate-spin mx-auto mb-2" />
+                          <p className="text-muted-foreground">Cargando preview...</p>
+                        </div>
+                      ) : resumenEdificioSections.length === 0 ? (
                         <div className="text-center text-muted-foreground py-8">
                           Selecciona un edificio y completa los campos para ver el prompt
                         </div>
@@ -3129,7 +2204,7 @@ Rumores:
             <Card>
               <CardHeader>
                 <CardTitle>Configuración del Resumen de Pueblo/Nación</CardTitle>
-                <CardDescription>Genera un resumen consolidado de todos los edificios en el pueblo/nación</CardDescription>
+                <CardDescription>Genera un resumen consolidado de todos los edificios del pueblo/nación</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div>
@@ -3250,8 +2325,9 @@ Rumores:
                       <div className="grid grid-cols-2 gap-2 text-muted-foreground">
                         <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}pueblo.name{KEY_EXAMPLE_2}</span>
                         <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}pueblo.type{KEY_EXAMPLE_2}</span>
+                        <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}pueblo.descripcion{KEY_EXAMPLE_2}</span>
                         <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}pueblo.estado{KEY_EXAMPLE_2}</span>
-                        <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}pueblo.rumores{KEY_EXAMPLE_2}</span>
+                        <span className="font-mono bg-background px-2 py-1 rounded text-blue-600 dark:text-blue-400">{KEY_EXAMPLE_1}pueblo.rumores{KEY_EXAMPLE_2}</span>
                       </div>
                     </div>
 
@@ -3260,7 +2336,6 @@ Rumores:
                       <div className="grid grid-cols-2 gap-2 text-muted-foreground">
                         <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}edificios_count{KEY_EXAMPLE_2}</span>
                         <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}edificios_names{KEY_EXAMPLE_2}</span>
-                        <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}edificios_list{KEY_EXAMPLE_2}</span>
                       </div>
                     </div>
 
@@ -3268,8 +2343,8 @@ Rumores:
                       <p className="font-semibold text-foreground mb-1">Variables de Ubicación:</p>
                       <div className="grid grid-cols-3 gap-2 text-muted-foreground">
                         <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}mundo{KEY_EXAMPLE_2}</span>
-                        <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}pueblo{KEY_EXAMPLE_2}</span>
-                        <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}pueblo.name{KEY_EXAMPLE_2}</span>
+                        <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}mundo.name{KEY_EXAMPLE_2}</span>
+                        <span className="font-mono bg-background px-2 py-1 rounded text-blue-600 dark:text-blue-400">{KEY_EXAMPLE_1}mundo.rumores{KEY_EXAMPLE_2}</span>
                       </div>
                     </div>
                   </div>
@@ -3286,14 +2361,26 @@ Rumores:
                       Visualizador de Prompt
                     </CardTitle>
                   </div>
-                  <Badge variant="secondary">
-                    {countTokens(resumenPuebloPrompt)} tokens / {countWords(resumenPuebloPrompt)} palabras
-                  </Badge>
+                  {previewLoading ? (
+                    <Badge variant="secondary">
+                      <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                      Cargando...
+                    </Badge>
+                  ) : (
+                    <Badge variant="secondary">
+                      {countTokens(resumenPuebloPrompt)} tokens / {countWords(resumenPuebloPrompt)} palabras
+                    </Badge>
+                  )}
                 </CardHeader>
                 <CardContent>
                   <ScrollArea className="h-[500px] pr-4">
                     <div className="space-y-3">
-                      {resumenPuebloSections.length === 0 ? (
+                      {previewLoading ? (
+                        <div className="text-center py-8">
+                          <Loader2 className="h-8 w-8 animate-spin mx-auto mb-2" />
+                          <p className="text-muted-foreground">Cargando preview...</p>
+                        </div>
+                      ) : resumenPuebloSections.length === 0 ? (
                         <div className="text-center text-muted-foreground py-8">
                           Selecciona un pueblo/nación y completa los campos para ver el prompt
                         </div>
@@ -3404,7 +2491,7 @@ Rumores:
                   <Textarea
                     value={resumenMundoForm.systemPrompt}
                     onChange={(e) => setResumenMundoForm({ ...resumenMundoForm, systemPrompt: e.target.value })}
-                    placeholder="Instrucciones para generar el resumen del mundo (puedes usar {{mundo.name}}, {{mundo.estado_mundo}}, {{pueblos_count}}, etc.)"
+                    placeholder="Instrucciones para generar el resumen del mundo (puedes usar {{mundo.name}}, {{mundo.estado}}, {{pueblos_count}}, etc.)"
                     rows={6}
                   />
                   <div className="flex gap-2 mt-2">
@@ -3474,7 +2561,7 @@ Rumores:
                     className="hidden"
                     value={resumenMundoForm.allSummaries}
                     onChange={(e) => setResumenMundoForm({ ...resumenMundoForm, allSummaries: e.target.value })}
-                    placeholder="Pega aquí los resúmenes de todos los pueblos/naciones del mundo..."
+                    placeholder="Pega aquí los resúmenes de todos los pueblos/naciones en este mundo..."
                     rows={6}
                   />
                 </div>
@@ -3489,20 +2576,8 @@ Rumores:
                       <p className="font-semibold text-foreground mb-1">Variables del Mundo:</p>
                       <div className="grid grid-cols-2 gap-2 text-muted-foreground">
                         <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}mundo.name{KEY_EXAMPLE_2}</span>
-                        <span className="font-mono bg-background px-2 py-1 rounded text-blue-600 dark:text-blue-400">{KEY_EXAMPLE_1}mundo.estado{KEY_EXAMPLE_2}</span>
-                        <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}mundo.estado_mundo{KEY_EXAMPLE_2}</span>
-                        <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}mundo.rumores{KEY_EXAMPLE_2}</span>
-                      </div>
-                    </div>
-
-                    <div>
-                      <p className="font-semibold text-foreground mb-1">Variables del Pueblo:</p>
-                      <div className="grid grid-cols-2 gap-2 text-muted-foreground">
-                        <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}pueblo.name{KEY_EXAMPLE_2}</span>
-                        <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}pueblo.tipo{KEY_EXAMPLE_2}</span>
-                        <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}pueblo.descripcion{KEY_EXAMPLE_2}</span>
-                        <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}pueblo.estado{KEY_EXAMPLE_2}</span>
-                        <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}pueblo.rumores{KEY_EXAMPLE_2}</span>
+                        <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}mundo.estado{KEY_EXAMPLE_2}</span>
+                        <span className="font-mono bg-background px-2 py-1 rounded text-blue-600 dark:text-blue-400">{KEY_EXAMPLE_1}mundo.rumores{KEY_EXAMPLE_2}</span>
                       </div>
                     </div>
 
@@ -3511,16 +2586,6 @@ Rumores:
                       <div className="grid grid-cols-2 gap-2 text-muted-foreground">
                         <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}pueblos_count{KEY_EXAMPLE_2}</span>
                         <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}pueblos_names{KEY_EXAMPLE_2}</span>
-                        <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}pueblos_list{KEY_EXAMPLE_2}</span>
-                      </div>
-                    </div>
-
-                    <div>
-                      <p className="font-semibold text-foreground mb-1">Variables de Ubicación:</p>
-                      <div className="grid grid-cols-3 gap-2 text-muted-foreground">
-                        <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}mundo{KEY_EXAMPLE_2}</span>
-                        <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}pueblos{KEY_EXAMPLE_2}</span>
-                        <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}mundo.name{KEY_EXAMPLE_2}</span>
                       </div>
                     </div>
                   </div>
@@ -3537,14 +2602,26 @@ Rumores:
                       Visualizador de Prompt
                     </CardTitle>
                   </div>
-                  <Badge variant="secondary">
-                    {countTokens(resumenMundoPrompt)} tokens / {countWords(resumenMundoPrompt)} palabras
-                  </Badge>
+                  {previewLoading ? (
+                    <Badge variant="secondary">
+                      <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                      Cargando...
+                    </Badge>
+                  ) : (
+                    <Badge variant="secondary">
+                      {countTokens(resumenMundoPrompt)} tokens / {countWords(resumenMundoPrompt)} palabras
+                    </Badge>
+                  )}
                 </CardHeader>
                 <CardContent>
                   <ScrollArea className="h-[500px] pr-4">
                     <div className="space-y-3">
-                      {resumenMundoSections.length === 0 ? (
+                      {previewLoading ? (
+                        <div className="text-center py-8">
+                          <Loader2 className="h-8 w-8 animate-spin mx-auto mb-2" />
+                          <p className="text-muted-foreground">Cargando preview...</p>
+                        </div>
+                      ) : resumenMundoSections.length === 0 ? (
                         <div className="text-center text-muted-foreground py-8">
                           Selecciona un mundo y completa los campos para ver el prompt
                         </div>
@@ -3605,7 +2682,7 @@ Rumores:
                 className="w-full"
                 size="lg"
                 onClick={() => resumenMundoPayload && sendRequest('resumen_mundo', resumenMundoPayload)}
-                disabled={!resumenMundoForm.mundoid}
+                disabled={!resumenMundoForm.mundoid || !resumenMundoForm.allSummaries}
               >
                 <Send className="h-5 w-5 mr-2" />
                 Generar Resumen de Mundo
@@ -3616,281 +2693,222 @@ Rumores:
 
         {/* Nuevo Lore Trigger */}
         <TabsContent value="nuevo_lore" className="space-y-4">
-          {/* Preview del Prompt */}
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <div>
-                <CardTitle className="flex items-center gap-2">
-                  <FileText className="h-5 w-5" />
-                  Visualizador de Prompt
-                </CardTitle>
-                <CardDescription>
-                  Vista previa del prompt que se enviará al AI
-                </CardDescription>
-              </div>
-              <Badge variant="secondary">
-                {countTokens(nuevoLorePrompt)} tokens / {countWords(nuevoLorePrompt)} palabras
-              </Badge>
-            </CardHeader>
-            <CardContent>
-              <ScrollArea className="h-[500px] pr-4">
-                <div className="space-y-3">
-                  {nuevoLoreSections.length === 0 ? (
-                    <div className="text-center text-muted-foreground py-8">
-                      Selecciona el alcance y completa los campos para ver el prompt
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Configuración de Nuevo Lore</CardTitle>
+                <CardDescription>Genera nuevo lore (rumores, eventos, cambios de estado) para el mundo, pueblo o edificio</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-3 gap-4">
+                  <div>
+                    <Label>Alcance</Label>
+                    <Select
+                      value={nuevoLoreForm.scope}
+                      onValueChange={(v: 'mundo' | 'pueblo' | 'edificio') => setNuevoLoreForm({ ...nuevoLoreForm, scope: v })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="mundo">Mundo</SelectItem>
+                        <SelectItem value="pueblo">Pueblo/Nación</SelectItem>
+                        <SelectItem value="edificio">Edificio</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {nuevoLoreForm.scope === 'mundo' && (
+                    <div className="col-span-2">
+                      <Label>Mundo</Label>
+                      <Select
+                        value={nuevoLoreForm.mundoid}
+                        onValueChange={(v) => setNuevoLoreForm({ ...nuevoLoreForm, mundoid: v })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecciona mundo" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {worlds.map((world) => (
+                            <SelectItem key={world.id} value={world.id}>
+                              {world.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
-                  ) : (
-                    nuevoLoreSections.map((section, index) => (
-                      <div key={index} className={`rounded-lg border ${section.bgColor}`}>
-                        <div className="border-b border-black/10 dark:border-white/10 bg-white/50 dark:bg-black/20 px-3 py-2">
-                          <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">
-                            {section.label}
-                          </span>
-                        </div>
-                        <pre className="text-sm p-4 whitespace-pre-wrap overflow-x-auto">
-                          {section.content}
-                        </pre>
-                      </div>
-                    ))
+                  )}
+
+                  {nuevoLoreForm.scope === 'pueblo' && (
+                    <div className="col-span-2">
+                      <Label>Pueblo/Nación</Label>
+                      <Select
+                        value={nuevoLoreForm.pueblid}
+                        onValueChange={(v) => setNuevoLoreForm({ ...nuevoLoreForm, pueblid: v })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecciona pueblo/nación" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {pueblos.map((pueblo) => (
+                            <SelectItem key={pueblo.id} value={pueblo.id}>
+                              {pueblo.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+
+                  {nuevoLoreForm.scope === 'edificio' && (
+                    <div className="col-span-2">
+                      <Label>Edificio</Label>
+                      <Select
+                        value={nuevoLoreForm.edificioid}
+                        onValueChange={(v) => setNuevoLoreForm({ ...nuevoLoreForm, edificioid: v })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecciona edificio" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {edificios.map((edificio) => (
+                            <SelectItem key={edificio.id} value={edificio.id}>
+                              {edificio.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
                   )}
                 </div>
-              </ScrollArea>
-              {nuevoLorePrompt && (
-                <div className="flex gap-2 mt-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => copyToClipboard(nuevoLorePrompt, 'Prompt copiado')}
-                  >
-                    <Copy className="h-4 w-4 mr-2" />
-                    Copiar
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => nuevoLorePayload && copyToClipboard(JSON.stringify(nuevoLorePayload, null, 2), 'JSON copiado')}
-                  >
-                    <Copy className="h-4 w-4 mr-2" />
-                    Copiar JSON
-                  </Button>
-                </div>
-              )}
-            </CardContent>
-          </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Nuevo Lore</CardTitle>
-              <CardDescription>Añade lore narrativo al mundo, pueblo o edificio</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div>
-                <Label>Alcance</Label>
-                <Select
-                  value={nuevoLoreForm.scope}
-                  onValueChange={(v: 'mundo' | 'pueblo' | 'edificio') => {
-                    setNuevoLoreForm({ ...nuevoLoreForm, scope: v, mundoid: '', pueblid: '', edificioid: '', loreType: '' });
-                  }}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="mundo">Mundo</SelectItem>
-                    <SelectItem value="pueblo">Pueblo</SelectItem>
-                    <SelectItem value="edificio">Edificio</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {nuevoLoreForm.scope === 'mundo' && (
                 <div>
-                  <Label>Mundo</Label>
+                  <Label>Tipo de Lore</Label>
                   <Select
-                    value={nuevoLoreForm.mundoid}
-                    onValueChange={(v) => setNuevoLoreForm({ ...nuevoLoreForm, mundoid: v })}
+                    value={nuevoLoreForm.loreType}
+                    onValueChange={(v) => setNuevoLoreForm({ ...nuevoLoreForm, loreType: v })}
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder="Selecciona mundo" />
+                      <SelectValue placeholder="Selecciona tipo de lore" />
                     </SelectTrigger>
-                    <SelectContent>
-                      {worlds.map((world) => (
-                        <SelectItem key={world.id} value={world.id}>
-                          {world.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
-
-              {nuevoLoreForm.scope === 'pueblo' && (
-                <div>
-                  <Label>Pueblo</Label>
-                  <Select
-                    value={nuevoLoreForm.pueblid}
-                    onValueChange={(v) => setNuevoLoreForm({ ...nuevoLoreForm, pueblid: v, mundoid: pueblos.find(p => p.id === nuevoLoreForm.pueblid)?.worldId || '' })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecciona pueblo" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {pueblos.map((pueblo) => (
-                        <SelectItem key={pueblo.id} value={pueblo.id}>
-                          {pueblo.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-              </div>
-              )}
-
-              {nuevoLoreForm.scope === 'edificio' && (
-                <div>
-                  <Label>Edificio</Label>
-                  <Select
-                    value={nuevoLoreForm.edificioid}
-                    onValueChange={(v) => setNuevoLoreForm({ ...nuevoLoreForm, edificioid: v, pueblid: pueblos.find(p => p.id === nuevoLoreForm.pueblid)?.worldId || '' })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecciona edificio" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {edificios.map((edificio) => (
-                        <SelectItem key={edificio.id} value={edificio.id}>
-                          {edificio.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
-
-              <div>
-                <Label>Tipo de Lore</Label>
-                <Select
-                  value={nuevoLoreForm.loreType}
-                  onValueChange={(v: string) => setNuevoLoreForm({ ...nuevoLoreForm, loreType: v })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecciona tipo de lore" />
-                  </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="rumores">Rumores</SelectItem>
-                      <SelectItem value="estado_mundo">Estado Mundo</SelectItem>
-                      <SelectItem value="estado_pueblo">Estado Pueblo</SelectItem>
-                      <SelectItem value="descripcion">Descripción Edificio</SelectItem>
-                      <SelectItem value="nuevo_evento">Nuevo Evento</SelectItem>
-                      <SelectItem value="nuevo_item">Nuevo Ítem</SelectItem>
+                      <SelectItem value="estado">Estado</SelectItem>
+                      <SelectItem value="evento">Evento</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
 
                 <div>
-                <Label>Contexto</Label>
-                <Textarea
-                  value={nuevoLoreForm.context}
-                  onChange={(e) => setNuevoLoreForm({ ...nuevoLoreForm, context: e.target.value })}
-                  placeholder="Ej: Una batalla reciente en las afueras de Meslajho..."
-                  rows={4}
-                />
-              </div>
+                  <Label>Contexto</Label>
+                  <Textarea
+                    value={nuevoLoreForm.context}
+                    onChange={(e) => setNuevoLoreForm({ ...nuevoLoreForm, context: e.target.value })}
+                    placeholder="Describe el contexto para generar el nuevo lore..."
+                    rows={6}
+                  />
+                </div>
+              </CardContent>
+            </Card>
 
-              <div>
-                <Label>System Prompt</Label>
-                <Textarea
-                  value={nuevoLoreForm.systemPrompt}
-                  onChange={(e) => setNuevoLoreForm({ ...nuevoLoreForm, systemPrompt: e.target.value })}
-                  placeholder="Instrucciones adicionales (puedes usar {KEY_EXAMPLE_1}npcid{KEY_EXAMPLE_2} y {KEY_EXAMPLE_1}playername{KEY_EXAMPLE_2}, etc.)"
-                  rows={3}
-                />
-              </div>
+            <div className="space-y-4">
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between">
+                  <div>
+                    <CardTitle className="flex items-center gap-2">
+                      <FileText className="h-5 w-5" />
+                      Visualizador de Prompt
+                    </CardTitle>
+                  </div>
+                  {previewLoading ? (
+                    <Badge variant="secondary">
+                      <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                      Cargando...
+                    </Badge>
+                  ) : (
+                    <Badge variant="secondary">
+                      {countTokens(nuevoLorePrompt)} tokens / {countWords(nuevoLorePrompt)} palabras
+                    </Badge>
+                  )}
+                </CardHeader>
+                <CardContent>
+                  <ScrollArea className="h-[500px] pr-4">
+                    <div className="space-y-3">
+                      {previewLoading ? (
+                        <div className="text-center py-8">
+                          <Loader2 className="h-8 w-8 animate-spin mx-auto mb-2" />
+                          <p className="text-muted-foreground">Cargando preview...</p>
+                        </div>
+                      ) : nuevoLoreSections.length === 0 ? (
+                        <div className="text-center text-muted-foreground py-8">
+                          Selecciona el alcance, el objetivo y completa los campos para ver el prompt
+                        </div>
+                      ) : (
+                        nuevoLoreSections.map((section, index) => (
+                          <div key={index} className={`rounded-lg border ${section.bgColor}`}>
+                            <div className="border-b border-black/10 dark:border-white/10 bg-white/50 dark:bg-black/20 px-3 py-2">
+                              <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">
+                                {section.label}
+                              </span>
+                            </div>
+                            <pre className="text-sm p-4 whitespace-pre-wrap overflow-x-auto">
+                              {section.content}
+                            </pre>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </ScrollArea>
+                  {nuevoLoreSections.length > 0 && (
+                    <div className="mt-4 flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => copyToClipboard(nuevoLorePrompt, 'Prompt copiado')}
+                        className="flex-1"
+                      >
+                        <Copy className="h-4 w-4 mr-2" />
+                        {copied ? 'Copiado' : 'Copiar'}
+                      </Button>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between">
+                  <div>
+                    <CardTitle className="flex items-center gap-2">
+                      <Globe className="h-5 w-5" />
+                      JSON de Request
+                    </CardTitle>
+                  </div>
+                  <Badge variant="secondary">
+                    {countTokens(JSON.stringify(nuevoLorePayload || {}, null, 2))} tokens
+                  </Badge>
+                </CardHeader>
+                <CardContent>
+                  <ScrollArea className="h-[200px] pr-4">
+                    <pre className="text-xs bg-muted p-4 rounded-lg overflow-x-auto">
+                      {JSON.stringify(nuevoLorePayload || {}, null, 2) || '{}'}
+                    </pre>
+                  </ScrollArea>
+                </CardContent>
+              </Card>
 
               <Button
                 className="w-full"
+                size="lg"
                 onClick={() => nuevoLorePayload && sendRequest('nuevo_lore', nuevoLorePayload)}
-                disabled={!(
-                  (nuevoLoreForm.scope === 'mundo' && nuevoLoreForm.mundoid) ||
-                  (nuevoLoreForm.scope === 'pueblo' && nuevoLoreForm.pueblid) ||
-                  (nuevoLoreForm.scope === 'edificio' && nuevoLoreForm.edificioid)
-                )}
+                disabled={!nuevoLoreForm.scope || !nuevoLoreForm.context}
               >
-                <Send className="h-4 w-4 mr-2" />
+                <Send className="h-5 w-5 mr-2" />
                 Generar Nuevo Lore
               </Button>
-
-              {nuevoLorePayload && nuevoLoreForm.scope !== 'mundo' && (
-                <div className="mt-4">
-                  <Label>JSON Preview:</Label>
-                  <pre className="text-xs bg-muted p-4 rounded-lg overflow-x-auto">
-                    {JSON.stringify(nuevoLorePayload, null, 2)}
-                  </pre>
-                  <Badge variant="secondary" className="mt-2">
-                    {countTokens(JSON.stringify(nuevoLorePayload, null, 2))} tokens
-                  </Badge>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         </TabsContent>
       </Tabs>
-
-      {/* Response Dialog */}
-      <Dialog open={responseDialogOpen} onOpenChange={setResponseDialogOpen}>
-          <DialogContent className="max-w-4xl max-h-[90vh]">
-            <DialogHeader>
-              <DialogTitle>Respuesta del Trigger</DialogTitle>
-              <DialogDescription>
-                Respuesta recibida del servidor
-              </DialogDescription>
-            </DialogHeader>
-            <ScrollArea className="max-h-[70vh] pr-4">
-              <div className="space-y-4">
-                <div>
-                  <h3 className="font-semibold mb-2">Request</h3>
-                  <pre className="text-xs bg-muted p-4 rounded-lg overflow-x-auto">
-                    {JSON.stringify(response?.request, null, 2)}
-                  </pre>
-                  <Badge variant="secondary" className="mt-2">
-                    {response?.request ? countTokens(JSON.stringify(response.request, null, 2)) : 0} tokens
-                  </Badge>
-                </div>
-
-                <Separator />
-
-                <div>
-                  <h3 className="font-semibold mb-2">Response</h3>
-                  <pre className="text-xs bg-muted p-4 rounded-lg overflow-x-auto">
-                    {JSON.stringify(response?.response, null, 2)}
-                  </pre>
-                  <Badge variant={response?.response?.success ? 'default' : 'destructive'} className="mt-2">
-                    {response?.response?.success ? countTokens(JSON.stringify(response.response, null, 2)) : 0} tokens
-                  </Badge>
-                </div>
-
-                {response?.timestamp && (
-                  <div className="text-xs text-muted-foreground">
-                    Timestamp: {new Date(response.timestamp).toLocaleString()}
-                  </div>
-                )}
-              </div>
-            </ScrollArea>
-            <DialogFooter>
-              <Button
-                variant="outline"
-                onClick={() => copyToClipboard(JSON.stringify(response, null, 2), 'Respuesta copiada')}
-              >
-                <Copy className="h-4 w-4 mr-2" />
-                Copiar Respuesta Completa
-              </Button>
-              <Button onClick={() => setResponseDialogOpen(false)}>
-                Cerrar
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-        </>
-      )}
     </div>
   );
 }
