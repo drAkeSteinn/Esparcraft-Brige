@@ -332,7 +332,7 @@ export async function handleChatTrigger(payload: ChatTriggerPayload): Promise<{ 
 
 // Resumen sesion trigger handler
 export async function handleResumenSesionTrigger(payload: ResumenSesionTriggerPayload): Promise<{ summary: string }> {
-  const { npcid, playersessionid, systemPrompt, lastSummary: payloadLastSummary, chatHistory, grimorioTemplates: payloadGrimorioTemplates } = payload;
+  const { npcid, playersessionid, systemPrompt, lastSummary: payloadLastSummary, chatHistory } = payload;
 
   // Get NPC and session
   const npc = npcManager.getById(npcid);
@@ -350,37 +350,47 @@ export async function handleResumenSesionTrigger(payload: ResumenSesionTriggerPa
   const pueblo = npc.location.puebloId ? puebloManager.getById(npc.location.puebloId) : undefined;
   const edificio = npc.location.edificioId ? edificioManager.getById(npc.location.edificioId) : undefined;
 
-  // ✅ OBTENER PLANTILLAS DE GRIMORIO DEL PAYLOAD O CARGAR DEL ARCHIVO
-  let grimorioTemplates = payloadGrimorioTemplates;
+  // ✅ LEER CONFIGURACIÓN DE SYSTEM PROMPT DEL ARCHIVO ESPECÍFICO
+  let configSystemPrompt = systemPrompt;
 
-  // Si no vienen plantillas en el payload, cargar configuración guardada
-  if (!grimorioTemplates || grimorioTemplates.length === 0) {
+  // Si no se proporciona systemPrompt en el payload, cargar del archivo de configuración
+  if (!configSystemPrompt) {
     try {
       const fs = await import('fs/promises');
       const path = await import('path');
-      const configPath = path.join(process.cwd(), 'db', 'chat-trigger-config.json');
+      const configPath = path.join(process.cwd(), 'db', 'resumen-sesion-trigger-config.json');
 
       try {
         const configContent = await fs.readFile(configPath, 'utf-8');
         const config = JSON.parse(configContent);
-        grimorioTemplates = config.grimorioTemplates || [];
-        console.log('[handleResumenSesionTrigger] Configuración de plantillas cargada del archivo:', grimorioTemplates.length, 'plantillas');
+        configSystemPrompt = config.systemPrompt || '';
+        console.log('[handleResumenSesionTrigger] System Prompt cargado del archivo de configuración');
       } catch (error) {
-        // El archivo no existe o hay error al leerlo, usar array vacío
-        console.log('[handleResumenSesionTrigger] No hay configuración de plantillas guardada, usando array vacío');
-        grimorioTemplates = [];
+        // El archivo no existe o hay error al leerlo, usar string vacío
+        console.log('[handleResumenSesionTrigger] No hay configuración de System Prompt guardada, usando vacío');
+        configSystemPrompt = '';
       }
     } catch (error) {
-      console.error('[handleResumenSesionTrigger] Error cargando configuración de plantillas:', error);
-      grimorioTemplates = [];
+      console.error('[handleResumenSesionTrigger] Error cargando configuración de System Prompt:', error);
+      configSystemPrompt = '';
     }
   }
 
-  // ✅ OBTENER TODAS LAS CARDS DEL GRIMORIO
-  const allGrimorioCards = grimorioManager.getAll();
-  console.log('[handleResumenSesionTrigger] Cards del Grimorio cargadas:', allGrimorioCards.length);
+  // ✅ CONSTRUIR EL PROMPT COMPLETO (SIN PLANTILLAS DE GRIMORIO)
+  const basePrompt = buildCompleteSessionSummaryPrompt({
+    world,
+    pueblo,
+    edificio,
+    npc,
+    session
+  }, {
+    systemPrompt: configSystemPrompt,
+    lastSummary: payloadLastSummary,
+    chatHistory: chatHistory || session.messages.map(m => `${m.role}: ${m.content}`).join('\n\n'),
+    grimorioTemplates: [] // ✅ NO USAR PLANTILLAS DE GRIMORIO EN EL MODO RESUMEN SESIÓN
+  });
 
-  // ✅ CONSTRUIR CONTEXTO DE VARIABLES PARA REEMPLAZO
+  // ✅ REEMPLAZAR VARIABLES PRIMARIAS (SIN PLANTILLAS DE GRIMORIO)
   const varContext: VariableContext = {
     npc,
     world,
@@ -390,33 +400,7 @@ export async function handleResumenSesionTrigger(payload: ResumenSesionTriggerPa
     char: getCardField(npc?.card, 'name', ''),
     lastSummary: payloadLastSummary
   };
-
-  // ✅ CONSTRUIR EL PROMPT COMPLETO CON VARIABLES DE GRIMORIO
-  const basePrompt = buildCompleteSessionSummaryPrompt({
-    world,
-    pueblo,
-    edificio,
-    npc,
-    session
-  }, {
-    systemPrompt,
-    lastSummary: payloadLastSummary,
-    chatHistory: chatHistory || session.messages.map(m => `${m.role}: ${m.content}`).join('\n\n'),
-    grimorioTemplates
-  });
-
-  console.log('[handleResumenSesionTrigger] DEBUG basePrompt antes de Grimorio:', basePrompt.substring(0, 200) + '...');
-
-  // ✅ REEMPLAZAR TODAS LAS VARIABLES (PRIMARIAS + PLANTILLAS DE GRIMORIO)
-  const resolvedPrompt = resolveAllVariablesWithCache(
-    basePrompt,
-    varContext,
-    allGrimorioCards,
-    'resumen-sesion-prompt', // Template ID para el cache
-    { verbose: false, useCache: true }
-  ).result;
-
-  console.log('[handleResumenSesionTrigger] DEBUG prompt después de Grimorio:', resolvedPrompt.substring(0, 300) + '...');
+  const resolvedPrompt = replaceVariables(basePrompt, varContext);
 
   // ✅ CONSTRUIR MENSAJES DIRECTAMENTE CON EL PROMPT RESUELTO
   const messages: ChatMessage[] = [
@@ -841,13 +825,35 @@ export async function previewTriggerPrompt(payload: AnyTriggerPayload): Promise<
 
       if (!npc || !session) throw new Error('NPC or session not found');
 
-      // ✅ DEBUG: Log para ver qué llega del payload
-      console.log('[previewTriggerPrompt] RESUMEN SESION PAYLOAD:', JSON.stringify(summaryPayload, null, 2));
-
       // Get context (world, pueblo, edificio)
       const world = worldManager.getById(npc.location.worldId);
       const pueblo = npc.location.puebloId ? puebloManager.getById(npc.location.puebloId) : undefined;
       const edificio = npc.location.edificioId ? edificioManager.getById(npc.location.edificioId) : undefined;
+
+      // ✅ LEER CONFIGURACIÓN DE SYSTEM PROMPT DEL ARCHIVO ESPECÍFICO
+      let configSystemPrompt = summaryPayload.systemPrompt;
+
+      // Si no se proporciona systemPrompt en el payload, cargar del archivo de configuración
+      if (!configSystemPrompt) {
+        try {
+          const fs = await import('fs/promises');
+          const path = await import('path');
+          const configPath = path.join(process.cwd(), 'db', 'resumen-sesion-trigger-config.json');
+
+          try {
+            const configContent = await fs.readFile(configPath, 'utf-8');
+            const config = JSON.parse(configContent);
+            configSystemPrompt = config.systemPrompt || '';
+            console.log('[previewTriggerPrompt] System Prompt cargado del archivo de configuración');
+          } catch (error) {
+            console.log('[previewTriggerPrompt] No hay configuración de System Prompt guardada, usando vacío');
+            configSystemPrompt = '';
+          }
+        } catch (error) {
+          console.error('[previewTriggerPrompt] Error cargando configuración de System Prompt:', error);
+          configSystemPrompt = '';
+        }
+      }
 
       // ✅ OBTENER TODAS LAS CARDS DEL GRIMORIO
       const allGrimorioCards = grimorioManager.getAll();
@@ -863,7 +869,7 @@ export async function previewTriggerPrompt(payload: AnyTriggerPayload): Promise<
         lastSummary: summaryPayload.lastSummary
       };
 
-      // ✅ CONSTRUIR EL PROMPT COMPLETO CON VARIABLES DE GRIMORIO
+      // ✅ CONSTRUIR EL PROMPT COMPLETO (SIN PLANTILLAS DE GRIMORIO)
       const basePrompt = buildCompleteSessionSummaryPrompt({
         world,
         pueblo,
@@ -871,20 +877,14 @@ export async function previewTriggerPrompt(payload: AnyTriggerPayload): Promise<
         npc,
         session
       }, {
-        systemPrompt: summaryPayload.systemPrompt,
+        systemPrompt: configSystemPrompt,
         lastSummary: summaryPayload.lastSummary,
         chatHistory: summaryPayload.chatHistory || session.messages.map(m => `${m.role}: ${m.content}`).join('\n\n'),
-        grimorioTemplates: summaryPayload.grimorioTemplates
+        grimorioTemplates: [] // ✅ NO USAR PLANTILLAS DE GRIMORIO EN EL MODO RESUMEN SESIÓN
       });
 
-      // ✅ REEMPLAZAR TODAS LAS VARIABLES (PRIMARIAS + PLANTILLAS DE GRIMORIO)
-      const resolvedPrompt = resolveAllVariablesWithCache(
-        basePrompt,
-        varContext,
-        allGrimorioCards,
-        'resumen-sesion-prompt-preview', // Template ID para el cache
-        { verbose: false, useCache: true }
-      ).result;
+      // ✅ REEMPLAZAR VARIABLES PRIMARIAS (SIN PLANTILLAS DE GRIMORIO)
+      const resolvedPrompt = replaceVariables(basePrompt, varContext);
 
       // ✅ CONSTRUIR MENSAJES DIRECTAMENTE CON EL PROMPT RESUELTO
       const messages: ChatMessage[] = [

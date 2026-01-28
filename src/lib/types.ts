@@ -213,14 +213,10 @@ export interface ResumenSesionTriggerPayload extends TriggerPayload {
   mode: 'resumen_sesion';
   npcid: string;
   playersessionid: string;
-  systemPrompt?: string; // System prompt personalizado (opcional)
+  systemPrompt?: string; // System prompt personalizado (opcional, se carga del archivo si no se proporciona)
   lastSummary?: string; // Último resumen de la sesión (opcional)
-  chatHistory?: string; // Historial de chat de la sesión
-  grimorioTemplates?: Array<{
-    enabled: boolean;
-    templateKey: string;
-    section: string;
-  }>; // Plantillas de Grimorio activas para insertar en el prompt
+  chatHistory?: string; // Historial de chat (opcional, se obtiene de la sesión si no se proporciona)
+  // ✅ EL MODO RESUMEN SESIÓN NO USA GRIMORIO TEMPLATES
 }
 
 export interface ResumenNPCTriggerPayload extends TriggerPayload {

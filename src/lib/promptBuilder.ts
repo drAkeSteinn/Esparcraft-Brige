@@ -513,11 +513,6 @@ export function buildCompleteSessionSummaryPrompt(
   const chatHistory = options?.chatHistory || '';
   const templates = options?.grimorioTemplates || [];
 
-  // ✅ DEBUG: Log para ver qué systemPrompt llega
-  console.log('[buildCompleteSessionSummaryPrompt] DEBUG systemPrompt:', JSON.stringify(systemPrompt));
-  console.log('[buildCompleteSessionSummaryPrompt] DEBUG systemPrompt.length:', systemPrompt.length);
-  console.log('[buildCompleteSessionSummaryPrompt] DEBUG systemPrompt trim:', systemPrompt.trim());
-
   let prompt = '';
 
   // ✅ PREPARAR PLANTILLAS DE GRIMORIO (antes de construir el prompt)

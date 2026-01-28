@@ -218,21 +218,24 @@ export default function RouterTab() {
   }, []);
 
   useEffect(() => {
-    // Cargar System Prompt de resumen de sesión del localStorage
-    const savedResumenTemplate = localStorage.getItem('resumenSesionTemplate');
+    // ✅ Cargar System Prompt de resumen de sesión de la API
+    const loadResumenSesionConfig = async () => {
+      try {
+        const response = await fetch('/api/resumen-sesion-trigger-config');
+        const result = await response.json();
 
-    // ✅ DEBUG: Ver qué se carga del localStorage
-    console.log('[useEffect resumenSesion] DEBUG savedResumenTemplate:', savedResumenTemplate);
-    console.log('[useEffect resumenSesion] DEBUG savedResumenTemplate.length:', savedResumenTemplate?.length);
-    console.log('[useEffect resumenSesion] DEBUG savedResumenTemplate.trim():', savedResumenTemplate?.trim());
+        if (result.success && result.data.systemPrompt) {
+          setResumenSesionForm(prev => ({ ...prev, systemPrompt: result.data.systemPrompt }));
+          setResumenSesionTemplateSaved(true);
+        } else {
+          setResumenSesionTemplateSaved(false);
+        }
+      } catch (error) {
+        console.error('[useEffect resumenSesion] Error cargando System Prompt de la API:', error);
+      }
+    };
 
-    if (savedResumenTemplate) {
-      console.log('[useEffect resumenSesion] Cargando template del localStorage');
-      setResumenSesionForm(prev => ({ ...prev, systemPrompt: savedResumenTemplate }));
-      setResumenSesionTemplateSaved(true);
-    } else {
-      console.log('[useEffect resumenSesion] No hay template guardado en localStorage');
-    }
+    loadResumenSesionConfig();
   }, []);
 
   // Cargar resumen de sesión cuando se selecciona una sesión en Resumen Sesión
@@ -801,18 +804,41 @@ export default function RouterTab() {
     nuevoLoreForm.context
   ]);
 
-  const handleSaveResumenSesionTemplate = () => {
-    // ✅ DEBUG: Ver qué se está guardando
-    console.log('[handleSaveResumenSesionTemplate] DEBUG resumenSesionForm.systemPrompt:', resumenSesionForm.systemPrompt);
-    console.log('[handleSaveResumenSesionTemplate] DEBUG length:', resumenSesionForm.systemPrompt.length);
-    console.log('[handleSaveResumenSesionTemplate] DEBUG trim:', resumenSesionForm.systemPrompt.trim());
+  const handleSaveResumenSesionTemplate = async () => {
+    try {
+      const response = await fetch('/api/resumen-sesion-trigger-config', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          systemPrompt: resumenSesionForm.systemPrompt
+        })
+      });
 
-    localStorage.setItem('resumenSesionTemplate', resumenSesionForm.systemPrompt);
-    setResumenSesionTemplateSaved(true);
-    toast({
-      title: 'Template de Resumen Guardado',
-      description: 'El system prompt de resumen de sesión se ha guardado correctamente'
-    });
+      const result = await response.json();
+
+      if (result.success) {
+        setResumenSesionTemplateSaved(true);
+        toast({
+          title: 'Template de Resumen Guardado',
+          description: 'El system prompt de resumen de sesión se ha guardado correctamente'
+        });
+      } else {
+        toast({
+          title: 'Error al Guardar',
+          description: result.error || 'No se pudo guardar el system prompt',
+          variant: 'destructive'
+        });
+      }
+    } catch (error) {
+      console.error('[handleSaveResumenSesionTemplate] Error:', error);
+      toast({
+        title: 'Error al Guardar',
+        description: 'No se pudo guardar el system prompt',
+        variant: 'destructive'
+      });
+    }
   };
 
   const handleSaveResumenNPCTemplate = () => {
@@ -1016,15 +1042,9 @@ export default function RouterTab() {
       systemPrompt: resumenSesionForm.systemPrompt,
       lastSummary: resumenSesionForm.lastSummary,
       // chatHistory no se incluye aquí, el backend lo obtiene automáticamente de la sesión
-      grimorioTemplates: plantillaRows.map(row => ({
-        enabled: row.enabled,
-        templateKey: row.templateKey,
-        section: row.section
-      }))
+      // ✅ NO ENVIAR grimorioTemplates EN EL MODO RESUMEN SESIÓN
+      // Este modo no usa plantillas de Grimorio, solo usa el System Prompt del archivo de configuración
     };
-
-    // ✅ DEBUG: Log para ver qué se envía
-    console.log('[buildResumenSesionPayload] DEBUG:', JSON.stringify(payload, null, 2));
 
     return payload;
   };
@@ -1706,14 +1726,43 @@ export default function RouterTab() {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => {
-                        localStorage.removeItem('resumenSesionTemplate');
-                        setResumenSesionForm(prev => ({ ...prev, systemPrompt: '' }));
-                        setResumenSesionTemplateSaved(false);
-                        toast({
-                          title: 'Template Eliminado',
-                          description: 'El system prompt de resumen de sesión ha sido eliminado'
-                        });
+                      onClick={async () => {
+                        try {
+                          // Guardar string vacío en la API
+                          const response = await fetch('/api/resumen-sesion-trigger-config', {
+                            method: 'POST',
+                            headers: {
+                              'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({
+                              systemPrompt: ''
+                            })
+                          });
+
+                          const result = await response.json();
+
+                          if (result.success) {
+                            setResumenSesionForm(prev => ({ ...prev, systemPrompt: '' }));
+                            setResumenSesionTemplateSaved(false);
+                            toast({
+                              title: 'Template Eliminado',
+                              description: 'El system prompt de resumen de sesión ha sido eliminado'
+                            });
+                          } else {
+                            toast({
+                              title: 'Error al Eliminar',
+                              description: result.error || 'No se pudo eliminar el system prompt',
+                              variant: 'destructive'
+                            });
+                          }
+                        } catch (error) {
+                          console.error('[Eliminar Template] Error:', error);
+                          toast({
+                            title: 'Error al Eliminar',
+                            description: 'No se pudo eliminar el system prompt',
+                            variant: 'destructive'
+                          });
+                        }
                       }}
                       className="flex-1"
                     >
