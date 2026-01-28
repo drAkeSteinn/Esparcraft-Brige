@@ -1,0 +1,10 @@
+{
+  "key": "dataedificio",
+  "nombre": "edificio xD",
+  "plantilla": "Edificio: {{edificio.name}}\nDescr: {{edificio.descripcion}}\nEventos: {{edificio.eventos}}\nType: {{edificio.type}}\nPuntos: {{edificio.poislist}}",
+  "categoria": "ubicacion",
+  "tipo": "plantilla",
+  "descripcion": "",
+  "id": "GRIMORIO_1769548185721",
+  "timestamp": "2026-01-27T21:11:58.231Z"
+}

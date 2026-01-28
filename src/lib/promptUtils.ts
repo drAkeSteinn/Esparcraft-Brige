@@ -18,6 +18,8 @@ export function extractPromptSections(prompt: string): Array<{
   // Mapeo de secciones a sus colores
   const sectionColors: Record<string, string> = {
     'Instrucción': 'bg-blue-50 dark:bg-blue-950',
+    'INSTRUCCIÓN INICIAL': 'bg-blue-50 dark:bg-blue-950',
+    'INSTRUCCIONES INICIALES': 'bg-blue-50 dark:bg-blue-950',
     'MAIN PROMPT': 'bg-green-50 dark:bg-green-950',
     'DESCRIPCIÓN': 'bg-emerald-50 dark:bg-emerald-950',
     'PERSONALIDAD': 'bg-teal-50 dark:bg-teal-950',
@@ -26,6 +28,7 @@ export function extractPromptSections(prompt: string): Array<{
     'LAST USER MESSAGE': 'bg-slate-50 dark:bg-slate-950',
     'INSTRUCCIONES POST-HISTORIAL': 'bg-red-50 dark:bg-red-950',
     'INSTRUCCIONES POST-HISTORY': 'bg-red-50 dark:bg-red-950',
+    'POST-HISTORY': 'bg-red-50 dark:bg-red-950',
     'TIPO DE LORE': 'bg-teal-50 dark:bg-teal-950',
     'CONTEXTO': 'bg-orange-50 dark:bg-orange-950',
     'RESUMENES': 'bg-yellow-50 dark:bg-yellow-950',
@@ -33,32 +36,58 @@ export function extractPromptSections(prompt: string): Array<{
     'SISTEMA': 'bg-indigo-50 dark:bg-indigo-950'
   };
 
-  // Dividir el prompt por los encabezados de sección
+  // ✅ Extraer la primera sección (instrucción inicial) antes del primer encabezado
   const sectionPattern = /===\s*(.+?)\s*===/g;
-  const matches = [...prompt.matchAll(sectionPattern)];
+  
+  // Buscar todos los encabezados de sección en el prompt
+  const allMatches = [...prompt.matchAll(sectionPattern)];
+  
+  if (allMatches.length === 0) {
+    // No hay encabezados, devolver el contenido completo como una sola sección
+    if (prompt.trim().length > 0) {
+      sections.push({
+        label: 'Prompt Completo',
+        content: prompt.trim(),
+        bgColor: 'bg-gray-50 dark:bg-gray-950'
+      });
+    }
+  } else {
+    // Hay encabezados, procesar cada sección
+    for (let i = 0; i < allMatches.length; i++) {
+      const match = allMatches[i];
+      const sectionLabel = match[1].trim();
+      const sectionStart = match.index!;
+      const sectionHeaderEnd = sectionStart + match[0].length;
+      const nextMatch = allMatches[i + 1];
+      const sectionEnd = nextMatch ? nextMatch.index : prompt.length;
 
-  let currentIndex = 0;
+      if (i === 0 && sectionStart > 0) {
+        // Primera sección: contenido antes del primer encabezado (Instrucción Inicial)
+        const beforeFirstHeader = prompt.slice(0, sectionStart).trim();
+        if (beforeFirstHeader.length > 0) {
+          sections.push({
+            label: 'Instrucción Inicial',
+            content: beforeFirstHeader,
+            bgColor: 'bg-blue-50 dark:bg-blue-950'
+          });
+        }
+      }
 
-  for (let i = 0; i < matches.length; i++) {
-    const match = matches[i];
-    const sectionLabel = match[1].trim();
-    const sectionStart = match.index!;
-    const sectionEnd = matches[i + 1]?.index || prompt.length;
+      // Obtener el contenido de la sección (después del encabezado, antes del siguiente)
+      const sectionContent = prompt.slice(sectionHeaderEnd, sectionEnd).trim();
 
-    // Obtener el contenido de la sección (después del encabezado)
-    const sectionContent = prompt.slice(sectionStart + match[0].length, sectionEnd).trim();
+      // Usar color conocido o un color por defecto
+      const bgColor = sectionColors[sectionLabel] || 'bg-gray-50 dark:bg-gray-950';
 
-    // Usar color conocido o un color por defecto
-    const bgColor = sectionColors[sectionLabel] || 'bg-gray-50 dark:bg-gray-950';
-
-    sections.push({
-      label: sectionLabel,
-      content: sectionContent,
-      bgColor
-    });
+      sections.push({
+        label: sectionLabel,
+        content: sectionContent,
+        bgColor
+      });
+    }
   }
 
-  // Si no hay secciones, devolver el contenido completo como una sola sección
+  // Si no se encontraron secciones válidas, devolver el contenido completo
   if (sections.length === 0) {
     sections.push({
       label: 'Prompt Completo',

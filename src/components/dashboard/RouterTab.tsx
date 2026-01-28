@@ -93,16 +93,16 @@ export default function RouterTab() {
     npcid: '',
     playersessionid: '',
     jugador: {
-      nombre: '',
-      raza: '',
-      nivel: '',
-      almakos: '',
-      deuda: '',
-      piedras_del_alma: '',
-      salud_actual: '',
-      reputacion: '',
-      hora: '',
-      clima: ''
+      nombre: 'Gerardo Lopez',  // ← Datos de prueba para preview
+      raza: 'Humano',
+      nivel: '10',
+      almakos: '1000',
+      deuda: '100',
+      piedras_del_alma: '5',
+      salud_actual: '10',
+      reputacion: '6',
+      hora: '10:30pm',
+      clima: 'soleado'
     },
     mensaje: '', // Mensaje del jugador (context por mensaje)
     historyLimit: 10, // Número de mensajes del historial a enviar
@@ -220,19 +220,20 @@ export default function RouterTab() {
   useEffect(() => {
     // Cargar System Prompt de resumen de sesión del localStorage
     const savedResumenTemplate = localStorage.getItem('resumenSesionTemplate');
+
+    // ✅ DEBUG: Ver qué se carga del localStorage
+    console.log('[useEffect resumenSesion] DEBUG savedResumenTemplate:', savedResumenTemplate);
+    console.log('[useEffect resumenSesion] DEBUG savedResumenTemplate.length:', savedResumenTemplate?.length);
+    console.log('[useEffect resumenSesion] DEBUG savedResumenTemplate.trim():', savedResumenTemplate?.trim());
+
     if (savedResumenTemplate) {
+      console.log('[useEffect resumenSesion] Cargando template del localStorage');
       setResumenSesionForm(prev => ({ ...prev, systemPrompt: savedResumenTemplate }));
       setResumenSesionTemplateSaved(true);
+    } else {
+      console.log('[useEffect resumenSesion] No hay template guardado en localStorage');
     }
   }, []);
-
-  useEffect(() => {
-    // Guardar System Prompt de resumen de sesión en localStorage cuando cambie
-    if (resumenSesionForm.systemPrompt) {
-      localStorage.setItem('resumenSesionTemplate', resumenSesionForm.systemPrompt);
-      setResumenSesionTemplateSaved(true);
-    }
-  }, [resumenSesionForm.systemPrompt]);
 
   // Cargar resumen de sesión cuando se selecciona una sesión en Resumen Sesión
   useEffect(() => {
@@ -506,40 +507,82 @@ export default function RouterTab() {
   }, [resumenMundoForm.mundoid]);
 
   // Cargar resumen de sesión cuando se selecciona una sesión existente
+  // ✅ También cargar datos del jugador de la sesión
   useEffect(() => {
-    const loadSessionSummary = async () => {
+    const loadSessionData = async () => {
       if (chatForm.playersessionid && chatForm.sessionType === 'exist') {
         try {
-          const response = await fetch(`/api/sessions/${chatForm.playersessionid}/summary`);
-          const result = await response.json();
-          if (result.success) {
+          // Cargar summary como antes
+          const summaryResponse = await fetch(`/api/sessions/${chatForm.playersessionid}/summary`);
+          const summaryResult = await summaryResponse.json();
+          if (summaryResult.success) {
             setChatForm(prev => ({
               ...prev,
-              lastSummary: result.data?.summary || ''
+              lastSummary: summaryResult.data?.summary || ''
             }));
           }
+
+          // ✅ NUEVO: Cargar sesión completa para obtener datos del jugador
+          const sessionResponse = await fetch(`/api/sessions/${chatForm.playersessionid}`);
+          const sessionResult = await sessionResponse.json();
+          if (sessionResult.success && sessionResult.data?.jugador) {
+            console.log('[RouterTab] Cargando datos del jugador de la sesión:', sessionResult.data.jugador);
+            setChatForm(prev => ({
+              ...prev,
+              jugador: {
+                nombre: sessionResult.data.jugador.nombre || prev.jugador.nombre,
+                raza: sessionResult.data.jugador.raza || prev.jugador.raza,
+                nivel: sessionResult.data.jugador.nivel || prev.jugador.nivel,
+                almakos: sessionResult.data.jugador.almakos || prev.jugador.almakos,
+                deuda: sessionResult.data.jugador.deuda || prev.jugador.deuda,
+                piedras_del_alma: sessionResult.data.jugador.piedras_del_alma || prev.jugador.piedras_del_alma,
+                salud_actual: sessionResult.data.jugador.salud_actual || prev.jugador.salud_actual,
+                reputacion: sessionResult.data.jugador.reputacion || prev.jugador.reputacion,
+                hora: sessionResult.data.jugador.hora || prev.jugador.hora,
+                clima: sessionResult.data.jugador.clima || prev.jugador.clima
+              }
+            }));
+          } else {
+            console.log('[RouterTab] La sesión no tiene datos del jugador, usando datos de prueba actuales');
+          }
         } catch (error) {
-          console.error('Error loading session summary:', error);
+          console.error('Error loading session data:', error);
         }
       } else {
         // Limpiar resumen si no hay sesión seleccionada o es nueva sesión
         setChatForm(prev => ({ ...prev, lastSummary: '' }));
+        // Para nueva sesión, mantener datos de prueba actuales (ya están definidos en el estado inicial)
       }
     };
-    loadSessionSummary();
+    loadSessionData();
   }, [chatForm.playersessionid, chatForm.sessionType]);
 
   // Debounced preview for chat trigger
   useEffect(() => {
     const loadChatPreview = async () => {
       const payload = buildChatPayload();
+
+      // ✅ Validaciones: verificar que haya datos mínimos antes de hacer el preview
       if (!payload) {
         setChatPreviewData(null);
         return;
       }
 
+      // Verificar que haya un NPC seleccionado
+      if (!payload.npcid || payload.npcid.trim() === '') {
+        setChatPreviewData(null);
+        return;
+      }
+
+      // Verificar que haya un mensaje (opcional, pero necesario para un preview significativo)
+      // if (!payload.message || payload.message.trim() === '') {
+      //   setChatPreviewData(null);
+      //   return;
+      // }
+
       try {
         const data = await previewPrompt(payload);
+        console.log('[RouterTab] CHAT PREVIEW DATA RECIBIDA:', data);
         setChatPreviewData(data);
       } catch (error) {
         console.error('Error loading chat preview:', error);
@@ -599,7 +642,7 @@ export default function RouterTab() {
     resumenSesionForm.npcid,
     resumenSesionForm.sessionid,
     resumenSesionForm.lastSummary,
-    resumenSesionForm.chatHistory
+    resumenSesionForm.systemPrompt
   ]);
 
   // Debounced preview for resumen NPC trigger
@@ -759,6 +802,11 @@ export default function RouterTab() {
   ]);
 
   const handleSaveResumenSesionTemplate = () => {
+    // ✅ DEBUG: Ver qué se está guardando
+    console.log('[handleSaveResumenSesionTemplate] DEBUG resumenSesionForm.systemPrompt:', resumenSesionForm.systemPrompt);
+    console.log('[handleSaveResumenSesionTemplate] DEBUG length:', resumenSesionForm.systemPrompt.length);
+    console.log('[handleSaveResumenSesionTemplate] DEBUG trim:', resumenSesionForm.systemPrompt.trim());
+
     localStorage.setItem('resumenSesionTemplate', resumenSesionForm.systemPrompt);
     setResumenSesionTemplateSaved(true);
     toast({
@@ -945,6 +993,7 @@ export default function RouterTab() {
     }
 
     return {
+      mode: 'chat',  // ← AGREGAR: campo mode obligatorio
       npcid: chatForm.npcid,
       playersessionid,
       jugador: chatForm.jugador,
@@ -960,12 +1009,24 @@ export default function RouterTab() {
   };
 
   const buildResumenSesionPayload = () => {
-    return {
+    const payload = {
+      mode: 'resumen_sesion',
       npcid: resumenSesionForm.npcid,
       playersessionid: resumenSesionForm.sessionid,
+      systemPrompt: resumenSesionForm.systemPrompt,
       lastSummary: resumenSesionForm.lastSummary,
-      chatHistory: resumenSesionForm.chatHistory
+      // chatHistory no se incluye aquí, el backend lo obtiene automáticamente de la sesión
+      grimorioTemplates: plantillaRows.map(row => ({
+        enabled: row.enabled,
+        templateKey: row.templateKey,
+        section: row.section
+      }))
     };
+
+    // ✅ DEBUG: Log para ver qué se envía
+    console.log('[buildResumenSesionPayload] DEBUG:', JSON.stringify(payload, null, 2));
+
+    return payload;
   };
 
   const buildResumenNPCPayload = () => {
@@ -1612,6 +1673,56 @@ export default function RouterTab() {
                 <CardDescription>Genera un resumen consolidado del historial de chat de una sesión</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <Label>System Prompt</Label>
+                    {resumenSesionTemplateSaved && (
+                      <div className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400">
+                        <RefreshCw className="h-3 w-3" />
+                        Guardado
+                      </div>
+                    )}
+                  </div>
+                  <Textarea
+                    value={resumenSesionForm.systemPrompt}
+                    onChange={(e) => setResumenSesionForm({ ...resumenSesionForm, systemPrompt: e.target.value })}
+                    placeholder="Escribe aquí el system prompt personalizado para generar el resumen de la sesión. Puedes usar variables como {{npc.name}}, {{mundo}}, etc..."
+                    rows={4}
+                    className="text-sm bg-muted/50"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Soporta variables primarias y plantillas de Grimorio. Si se deja vacío, se usará el system prompt por defecto.
+                  </p>
+                  <div className="flex gap-2 mt-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleSaveResumenSesionTemplate}
+                      className="flex-1"
+                    >
+                      <RefreshCw className="h-4 w-4 mr-2" />
+                      Guardar Template
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        localStorage.removeItem('resumenSesionTemplate');
+                        setResumenSesionForm(prev => ({ ...prev, systemPrompt: '' }));
+                        setResumenSesionTemplateSaved(false);
+                        toast({
+                          title: 'Template Eliminado',
+                          description: 'El system prompt de resumen de sesión ha sido eliminado'
+                        });
+                      }}
+                      className="flex-1"
+                    >
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Eliminar Template
+                    </Button>
+                  </div>
+                </div>
+
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <Label>NPC</Label>
@@ -1653,24 +1764,76 @@ export default function RouterTab() {
                 </div>
 
                 <div>
-                  <Label>Historial de Chat</Label>
-                  <Textarea
-                    value={resumenSesionForm.chatHistory}
-                    onChange={(e) => setResumenSesionForm({ ...resumenSesionForm, chatHistory: e.target.value })}
-                    placeholder="Pega aquí el historial de chat de la sesión..."
-                    rows={6}
-                  />
+                  <div className="flex items-center justify-between mb-2">
+                    <Label>Último Resumen</Label>
+                    {resumenSesionForm.lastSummary && (
+                      <Badge variant="secondary" className="text-xs">
+                        Resumen disponible
+                      </Badge>
+                    )}
+                  </div>
+                  {resumenSesionForm.lastSummary ? (
+                    <div className="border rounded-lg p-4 bg-muted/50">
+                      <p className="text-sm whitespace-pre-wrap">{resumenSesionForm.lastSummary}</p>
+                    </div>
+                  ) : (
+                    <div className="border rounded-lg p-4 bg-muted/30 text-center">
+                      <p className="text-sm text-muted-foreground">
+                        Esta sesión no tiene un resumen anterior.
+                      </p>
+                    </div>
+                  )}
                 </div>
 
                 <div>
-                  <Label>Último Resumen</Label>
-                  <Textarea
-                    value={resumenSesionForm.lastSummary}
-                    onChange={(e) => setResumenSesionForm({ ...resumenSesionForm, lastSummary: e.target.value })}
-                    placeholder="Último resumen de la sesión (si existe)..."
-                    rows={4}
-                    className="text-sm bg-muted/50"
-                  />
+                  <div className="flex items-center justify-between mb-2">
+                    <Label>Historial de Chat</Label>
+                    {resumenSesionForm.sessionid && (
+                      <Badge variant="secondary" className="text-xs">
+                        {sessions.find(s => s.id === resumenSesionForm.sessionid)?.messages.length || 0} mensajes
+                      </Badge>
+                    )}
+                  </div>
+                  {resumenSesionForm.sessionid ? (
+                    <ScrollArea className="border rounded-lg bg-muted/50">
+                      <div className="p-4 space-y-3">
+                        {(() => {
+                          const session = sessions.find(s => s.id === resumenSesionForm.sessionid);
+                          if (!session || session.messages.length === 0) {
+                            return (
+                              <p className="text-sm text-muted-foreground text-center py-4">
+                                Esta sesión no tiene mensajes de chat.
+                              </p>
+                            );
+                          }
+                          return session.messages.map((msg, index) => (
+                            <div key={index} className="border-l-2 border-muted-foreground/20 pl-3">
+                              <div className="flex items-center gap-2 mb-1">
+                                <Badge variant={msg.role === 'user' ? 'default' : 'secondary'} className="text-xs">
+                                  {msg.role === 'user' ? 'Usuario' : 'Asistente'}
+                                </Badge>
+                                {msg.timestamp && (
+                                  <span className="text-xs text-muted-foreground">
+                                    {new Date(msg.timestamp).toLocaleString()}
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+                            </div>
+                          ));
+                        })()}
+                      </div>
+                    </ScrollArea>
+                  ) : (
+                    <div className="border rounded-lg p-6 bg-muted/30 text-center">
+                      <p className="text-sm text-muted-foreground">
+                        {resumenSesionForm.npcid
+                          ? "Selecciona una sesión para ver su historial de chat."
+                          : "Selecciona un NPC primero para ver las sesiones disponibles."
+                        }
+                      </p>
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>

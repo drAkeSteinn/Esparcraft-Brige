@@ -12,7 +12,8 @@ import {
   NuevoLoreTriggerPayload,
   AnyTriggerPayload,
   ChatMessage,
-  getCardField
+  getCardField,
+  Jugador
 } from './types';
 import {
   npcManager,
@@ -30,6 +31,7 @@ import {
 import {
   buildChatMessagesWithOptions,
   buildCompleteChatPrompt,
+  buildCompleteSessionSummaryPrompt,
   buildSessionSummaryPrompt,
   buildNPCSummaryPrompt,
   buildEdificioSummaryPrompt,
@@ -75,6 +77,49 @@ async function callLLM(messages: ChatMessage[]): Promise<string> {
   }
 }
 
+/**
+ * Realiza un merge incremental de datos del jugador
+ * - Los nuevos datos sobrescriben los existentes
+ * - Los datos que no vienen se conservan
+ * - Los campos vacíos en el payload NO borran los existentes (solo null borra)
+ */
+function mergeJugadorData(
+  jugadorExistente: Jugador | undefined,
+  jugadorNuevo: Jugador | undefined
+): Jugador | undefined {
+  // Si no hay datos nuevos, conservar existentes
+  if (!jugadorNuevo || Object.keys(jugadorNuevo).length === 0) {
+    return jugadorExistente;
+  }
+
+  // Si no hay datos existentes, usar nuevos (filtrando vacíos)
+  if (!jugadorExistente) {
+    const jugadorFiltrado = Object.entries(jugadorNuevo)
+      .filter(([_, valor]) => valor !== undefined && valor !== '')
+      .reduce((obj, [key, valor]) => ({ ...obj, [key]: valor }), {});
+
+    return Object.keys(jugadorFiltrado).length > 0 ? jugadorFiltrado : undefined;
+  }
+
+  // Merge: nuevos sobrescriben existentes
+  // Campos vacíos en payload NO borran, conservan valor anterior
+  // null en payload SÍ borra explícitamente
+  const merged = { ...jugadorExistente };
+
+  for (const [key, valor] of Object.entries(jugadorNuevo)) {
+    if (valor === null) {
+      // null significa borrar explícitamente
+      delete (merged as any)[key];
+    } else if (valor !== undefined && valor !== '') {
+      // Solo actualizar si el nuevo valor no es vacío
+      (merged as any)[key] = valor;
+    }
+    // Si valor es "" o undefined, conservar el existente
+  }
+
+  return merged;
+}
+
 // Chat trigger handler
 export async function handleChatTrigger(payload: ChatTriggerPayload): Promise<{ response: string; sessionId: string }> {
   const { message, npcid, playersessionid, jugador, lastSummary: payloadLastSummary, grimorioTemplates: payloadGrimorioTemplates } = payload;
@@ -96,18 +141,41 @@ export async function handleChatTrigger(payload: ChatTriggerPayload): Promise<{ 
   const pueblo = npc.location.puebloId ? puebloManager.getById(npc.location.puebloId) : undefined;
   const edificio = npc.location.edificioId ? edificioManager.getById(npc.location.edificioId) : undefined;
 
-  // Get or create session
+  // Get or create session con merge incremental de jugador
   let session;
   if (playersessionid) {
+    // Sessión existente: hacer merge incremental de jugador
     session = sessionManager.getById(playersessionid);
     if (!session) {
       throw new Error(`Session ${playersessionid} not found`);
     }
+
+    // ✅ MERGE INCREMENTAL: mezclar datos nuevos con existentes
+    const jugadorMergeado = mergeJugadorData(session.jugador, jugador);
+
+    console.log('[handleChatTrigger] MERGE JUGADOR - Existente:', session.jugador);
+    console.log('[handleChatTrigger] MERGE JUGADOR - Nuevo:', jugador);
+    console.log('[handleChatTrigger] MERGE JUGADOR - Resultado:', jugadorMergeado);
+
+    // Actualizar sesión con datos mergeados
+    sessionManager.update(session.id, {
+      jugador: jugadorMergeado
+    });
+
+    // Usar datos mergeados para el contexto
+    session.jugador = jugadorMergeado;
   } else {
-    // Create new session
+    // Nueva sesión: usar datos del payload (filtrando vacíos)
+    const jugadorFiltrado = Object.entries(jugador || {})
+      .filter(([_, valor]) => valor !== undefined && valor !== '')
+      .reduce((obj, [key, valor]) => ({ ...obj, [key]: valor }), {});
+
+    console.log('[handleChatTrigger] NUEVA SESIÓN - Jugador filtrado:', jugadorFiltrado);
+
     session = sessionManager.create({
       npcId: npcid,
       playerId: jugador?.nombre || undefined,
+      jugador: Object.keys(jugadorFiltrado).length > 0 ? jugadorFiltrado : undefined,
       messages: []
     });
   }
@@ -147,12 +215,13 @@ export async function handleChatTrigger(payload: ChatTriggerPayload): Promise<{ 
   console.log('[handleChatTrigger] Cards del Grimorio cargadas:', allGrimorioCards.length);
 
   // ✅ CONSTRUIR CONTEXTO DE VARIABLES PARA REEMPLAZO
+  // Usar session.jugador (ya mergeado) en lugar de payload.jugador
   const varContext: VariableContext = {
     npc,
     world,
     pueblo,
     edificio,
-    jugador,
+    jugador: session.jugador,  // ← DATOS DEL JUGADOR MERGEADOS
     session,
     char: getCardField(npc?.card, 'name', ''),
     mensaje: message,
@@ -169,7 +238,7 @@ export async function handleChatTrigger(payload: ChatTriggerPayload): Promise<{ 
     npc,
     session
   }, {
-    jugador,
+    jugador: session.jugador,  // ← DATOS DEL JUGADOR MERGEADOS
     lastSummary,
     grimorioTemplates // Pasar las plantillas de Grimorio
   });
@@ -235,7 +304,11 @@ export async function handleChatTrigger(payload: ChatTriggerPayload): Promise<{ 
   const completePrompt = finalMessages.map(m => `[${m.role}]\n${m.content}`).join('\n\n');
 
   // Save the complete prompt to session (ahora incluye embeddings si existían)
-  sessionManager.update(session.id, { lastPrompt: completePrompt });
+  // ✅ También guardar snapshot del jugador mergeado
+  sessionManager.update(session.id, {
+    lastPrompt: completePrompt,
+    jugador: session.jugador  // ← Guardar snapshot mergeado
+  });
 
   // Call LLM
   const response = await callLLM(finalMessages);
@@ -259,7 +332,7 @@ export async function handleChatTrigger(payload: ChatTriggerPayload): Promise<{ 
 
 // Resumen sesion trigger handler
 export async function handleResumenSesionTrigger(payload: ResumenSesionTriggerPayload): Promise<{ summary: string }> {
-  const { npcid, playersessionid } = payload;
+  const { npcid, playersessionid, systemPrompt, lastSummary: payloadLastSummary, chatHistory, grimorioTemplates: payloadGrimorioTemplates } = payload;
 
   // Get NPC and session
   const npc = npcManager.getById(npcid);
@@ -272,8 +345,87 @@ export async function handleResumenSesionTrigger(payload: ResumenSesionTriggerPa
     throw new Error(`Session ${playersessionid} not found`);
   }
 
-  // Build prompt
-  const messages = buildSessionSummaryPrompt(session, npc);
+  // Get context (world, pueblo, edificio)
+  const world = worldManager.getById(npc.location.worldId);
+  const pueblo = npc.location.puebloId ? puebloManager.getById(npc.location.puebloId) : undefined;
+  const edificio = npc.location.edificioId ? edificioManager.getById(npc.location.edificioId) : undefined;
+
+  // ✅ OBTENER PLANTILLAS DE GRIMORIO DEL PAYLOAD O CARGAR DEL ARCHIVO
+  let grimorioTemplates = payloadGrimorioTemplates;
+
+  // Si no vienen plantillas en el payload, cargar configuración guardada
+  if (!grimorioTemplates || grimorioTemplates.length === 0) {
+    try {
+      const fs = await import('fs/promises');
+      const path = await import('path');
+      const configPath = path.join(process.cwd(), 'db', 'chat-trigger-config.json');
+
+      try {
+        const configContent = await fs.readFile(configPath, 'utf-8');
+        const config = JSON.parse(configContent);
+        grimorioTemplates = config.grimorioTemplates || [];
+        console.log('[handleResumenSesionTrigger] Configuración de plantillas cargada del archivo:', grimorioTemplates.length, 'plantillas');
+      } catch (error) {
+        // El archivo no existe o hay error al leerlo, usar array vacío
+        console.log('[handleResumenSesionTrigger] No hay configuración de plantillas guardada, usando array vacío');
+        grimorioTemplates = [];
+      }
+    } catch (error) {
+      console.error('[handleResumenSesionTrigger] Error cargando configuración de plantillas:', error);
+      grimorioTemplates = [];
+    }
+  }
+
+  // ✅ OBTENER TODAS LAS CARDS DEL GRIMORIO
+  const allGrimorioCards = grimorioManager.getAll();
+  console.log('[handleResumenSesionTrigger] Cards del Grimorio cargadas:', allGrimorioCards.length);
+
+  // ✅ CONSTRUIR CONTEXTO DE VARIABLES PARA REEMPLAZO
+  const varContext: VariableContext = {
+    npc,
+    world,
+    pueblo,
+    edificio,
+    session,
+    char: getCardField(npc?.card, 'name', ''),
+    lastSummary: payloadLastSummary
+  };
+
+  // ✅ CONSTRUIR EL PROMPT COMPLETO CON VARIABLES DE GRIMORIO
+  const basePrompt = buildCompleteSessionSummaryPrompt({
+    world,
+    pueblo,
+    edificio,
+    npc,
+    session
+  }, {
+    systemPrompt,
+    lastSummary: payloadLastSummary,
+    chatHistory: chatHistory || session.messages.map(m => `${m.role}: ${m.content}`).join('\n\n'),
+    grimorioTemplates
+  });
+
+  console.log('[handleResumenSesionTrigger] DEBUG basePrompt antes de Grimorio:', basePrompt.substring(0, 200) + '...');
+
+  // ✅ REEMPLAZAR TODAS LAS VARIABLES (PRIMARIAS + PLANTILLAS DE GRIMORIO)
+  const resolvedPrompt = resolveAllVariablesWithCache(
+    basePrompt,
+    varContext,
+    allGrimorioCards,
+    'resumen-sesion-prompt', // Template ID para el cache
+    { verbose: false, useCache: true }
+  ).result;
+
+  console.log('[handleResumenSesionTrigger] DEBUG prompt después de Grimorio:', resolvedPrompt.substring(0, 300) + '...');
+
+  // ✅ CONSTRUIR MENSAJES DIRECTAMENTE CON EL PROMPT RESUELTO
+  const messages: ChatMessage[] = [
+    {
+      role: 'system',
+      content: resolvedPrompt,
+      timestamp: new Date().toISOString()
+    }
+  ];
 
   // Call LLM
   const summary = await callLLM(messages);
@@ -591,8 +743,14 @@ export async function previewTriggerPrompt(payload: AnyTriggerPayload): Promise<
   switch (mode) {
     case 'chat': {
       const chatPayload = payload as ChatTriggerPayload;
+
+      // ✅ DEBUG: Log para ver qué llega del payload
+      console.log('[previewTriggerPrompt] CHAT PAYLOAD:', JSON.stringify(chatPayload, null, 2));
+
       const npc = npcManager.getById(chatPayload.npcid);
       if (!npc) throw new Error('NPC not found');
+
+      console.log('[previewTriggerPrompt] NPC encontrado:', npc.id, npc.card?.data?.name || npc.card?.name);
 
       const world = worldManager.getById(npc.location.worldId);
       const pueblo = npc.location.puebloId ? puebloManager.getById(npc.location.puebloId) : undefined;
@@ -628,8 +786,8 @@ export async function previewTriggerPrompt(payload: AnyTriggerPayload): Promise<
         session
       }, {
         jugador: chatPayload.jugador,
-        lastSummary
-        // No pasamos templateUser, será reemplazado por variables de Grimorio
+        lastSummary,
+        grimorioTemplates: chatPayload.grimorioTemplates // ✅ Pasar plantillas de Grimorio
       });
 
       // ✅ REEMPLAZAR TODAS LAS VARIABLES (PRIMARIAS + PLANTILLAS DE GRIMORIO)
@@ -640,6 +798,9 @@ export async function previewTriggerPrompt(payload: AnyTriggerPayload): Promise<
         'chat-prompt-preview', // Template ID para el cache
         { verbose: false, useCache: true }
       ).result;
+
+      console.log('[previewTriggerPrompt] RESOLVED PROMPT LENGTH:', resolvedPrompt.length);
+      console.log('[previewTriggerPrompt] RESOLVED PROMPT (primeros 200 chars):', resolvedPrompt.substring(0, 200));
 
       // ✅ CONSTRUIR MENSAJES DIRECTAMENTE CON EL PROMPT RESUELTO
       const messages: ChatMessage[] = [
@@ -660,12 +821,16 @@ export async function previewTriggerPrompt(payload: AnyTriggerPayload): Promise<
       const lastPrompt = messages.map(m => `[${m.role}]\n${m.content}`).join('\n\n');
       const systemPrompt = messages.find(m => m.role === 'system')?.content || '';
 
+      const sections = extractPromptSections(systemPrompt);
+      console.log('[previewTriggerPrompt] SECTIONS EXTRACTED:', sections.length);
+      console.log('[previewTriggerPrompt] SECTIONS:', sections.map(s => s.label));
+
       return {
         systemPrompt,
         messages,
         estimatedTokens: 0,
         lastPrompt,
-        sections: extractPromptSections(systemPrompt)
+        sections: sections
       };
     }
 
@@ -676,7 +841,60 @@ export async function previewTriggerPrompt(payload: AnyTriggerPayload): Promise<
 
       if (!npc || !session) throw new Error('NPC or session not found');
 
-      const messages = buildSessionSummaryPrompt(session, npc);
+      // ✅ DEBUG: Log para ver qué llega del payload
+      console.log('[previewTriggerPrompt] RESUMEN SESION PAYLOAD:', JSON.stringify(summaryPayload, null, 2));
+
+      // Get context (world, pueblo, edificio)
+      const world = worldManager.getById(npc.location.worldId);
+      const pueblo = npc.location.puebloId ? puebloManager.getById(npc.location.puebloId) : undefined;
+      const edificio = npc.location.edificioId ? edificioManager.getById(npc.location.edificioId) : undefined;
+
+      // ✅ OBTENER TODAS LAS CARDS DEL GRIMORIO
+      const allGrimorioCards = grimorioManager.getAll();
+
+      // ✅ CONSTRUIR CONTEXTO DE VARIABLES PARA REEMPLAZO
+      const varContext: VariableContext = {
+        npc,
+        world,
+        pueblo,
+        edificio,
+        session,
+        char: getCardField(npc?.card, 'name', ''),
+        lastSummary: summaryPayload.lastSummary
+      };
+
+      // ✅ CONSTRUIR EL PROMPT COMPLETO CON VARIABLES DE GRIMORIO
+      const basePrompt = buildCompleteSessionSummaryPrompt({
+        world,
+        pueblo,
+        edificio,
+        npc,
+        session
+      }, {
+        systemPrompt: summaryPayload.systemPrompt,
+        lastSummary: summaryPayload.lastSummary,
+        chatHistory: summaryPayload.chatHistory || session.messages.map(m => `${m.role}: ${m.content}`).join('\n\n'),
+        grimorioTemplates: summaryPayload.grimorioTemplates
+      });
+
+      // ✅ REEMPLAZAR TODAS LAS VARIABLES (PRIMARIAS + PLANTILLAS DE GRIMORIO)
+      const resolvedPrompt = resolveAllVariablesWithCache(
+        basePrompt,
+        varContext,
+        allGrimorioCards,
+        'resumen-sesion-prompt-preview', // Template ID para el cache
+        { verbose: false, useCache: true }
+      ).result;
+
+      // ✅ CONSTRUIR MENSAJES DIRECTAMENTE CON EL PROMPT RESUELTO
+      const messages: ChatMessage[] = [
+        {
+          role: 'system',
+          content: resolvedPrompt,
+          timestamp: new Date().toISOString()
+        }
+      ];
+
       const systemPrompt = messages[0]?.content || '';
 
       return {

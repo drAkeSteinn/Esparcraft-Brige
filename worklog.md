@@ -1662,3 +1662,111 @@ Stage Summary:
 - PLAN_REFACTORIZACION.md - Plan de refactorización en 5 fases
 - worklog.md - Registro completo de todas las tareas
 
+
+---
+Task ID: 6
+Agent: Z.ai Code
+Task: Implementar sistema de merge incremental de datos del jugador en sesiones
+
+Work Log:
+- Fase 1: Agregar datos de prueba por defecto en RouterTab
+  * Modificado estado inicial de chatForm con datos de prueba (Gerardo Lopez, Humano, nivel 10, etc.)
+  * Esto permite que el preview muestre un prompt completo inmediatamente
+  * Archivo: src/components/dashboard/RouterTab.tsx
+
+- Fase 2: Crear interfaz Jugador en types.ts
+  * Agregada nueva interfaz Jugador con todos los campos del jugador
+  * Modificada interfaz Session para incluir jugador?: Jugador
+  * Archivo: src/lib/types.ts
+  * Interfaz reutilizable en lugar de duplicar en múltiples lugares
+
+- Fase 3: Implementar merge incremental en triggerHandlers.ts
+  * Creada función mergeJugadorData() con lógica:
+    - Si no hay datos nuevos, conservar existentes
+    - Si no hay existentes, usar nuevos (filtrando vacíos)
+    - Merge: nuevos sobrescriben existentes
+    - Campos vacíos en payload NO borran, conservan valor anterior
+    - null en payload SÍ borra explícitamente
+  * Modificado handleChatTrigger() para:
+    - Sesión existente: merge y guardar jugador mergeado
+    - Nueva sesión: guardar jugador del payload filtrando vacíos
+    - Usar session.jugador (mergeado) para varContext y buildCompleteChatPrompt
+    - Actualizar session con jugador mergeado al guardar prompt
+  * Agregados logs de debug para verificar merge
+  * Archivo: src/lib/triggerHandlers.ts
+
+- Fase 4: Verificar API endpoint de sesiones
+  * Endpoint GET /api/sessions/[id]/route.ts ya devuelve sesión completa
+  * Ya incluye campo jugador (que agregamos en types.ts)
+  * No requiere cambios - ya funcional
+
+- Fase 5: Cargar datos de jugador en UI
+  * Modificado useEffect en RouterTab para cargar sesión completa
+  * Si la sesión tiene datos del jugador, se cargan en chatForm
+  * Si no tiene, se mantienen datos de prueba actuales
+  * Para nueva sesión, se mantienen datos de prueba del estado inicial
+  * Archivo: src/components/dashboard/RouterTab.tsx
+
+- Corrección adicional:
+  * Agregado campo "mode: 'chat'" en buildChatPayload()
+  * Esto corrige error "Missing field: mode" en preview
+
+Stage Summary:
+- Sistema de merge incremental completamente implementado
+- El cliente ahora puede enviar solo datos que cambiaron (payloads parciales)
+- Los datos del jugador se persisten en sesiones como snapshot evolutivo
+- El preview en UI muestra datos reales de sesiones existentes
+- Para nuevas sesiones, usa datos de prueba para preview completo
+- Validado con dev.log: variables resueltas correctamente
+  - Ejemplo: "Gerardo Lopez está a 10% de salud, tiene 5 piedras del alma, y debe 100 Almakos"
+  - Plantilla {{dataplayer}} se expande correctamente con todos los campos
+- Lógica de merge:
+  - Payload completo → Reemplaza todos los datos
+  - Payload parcial → Actualiza solo campos que vienen
+  - Payload vacío → Conserva todos los existentes
+  - Campos vacíos ("", undefined) → Conservan valor anterior
+  - Campos con null → Borran explícitamente
+
+---
+Task ID: 7
+Agent: Z.ai Code
+Task: Correcciones al visualizador de prompts y configuración de Grimorio
+
+Work Log:
+- Eliminado {{dataplayer}} del campo scenario del NPC
+  * El NPC tenía `----- template escenario -----\n{{dataplayer}}` al final del escenario
+  * Esto causaba que los datos del jugador aparecieran en la sección ESCENARIO
+  * Archivo: data-esparcraft/npcs/NPC_1768825922617.json
+
+- Eliminado {{dataplayer}} del campo post_history_instructions del NPC
+  * El NPC tenía `...{{dataplayer}}` al final de las instrucciones post-historial
+  * Esto causaba que los datos del jugador aparecieran también en POST-HISTORY
+  * Archivo: data-esparcraft/npcs/NPC_1768825922617.json
+
+- Configuración de Grimorio actualizada
+  * Habilitado {{dataplayer}} para la sección 8 (POST-HISTORY)
+  * Antes estaba deshabilitado para todas las secciones
+  * Archivo: db/chat-trigger-config.json
+
+- Modificado extractPromptSections para mostrar primera sección
+  * Agregada lógica para extraer contenido antes del primer encabezado `=== NOMBRE ===`
+  * Este contenido ahora se muestra como sección "Instrucción Inicial"
+  * Color: bg-blue-50 dark:bg-blue-950
+  * Archivo: src/lib/promptUtils.ts
+
+- Verificado en dev.log que el preview funciona correctamente
+  * Los datos del jugador aparecen en la sección INSTRUCCIONES POST-HISTORIAL
+  * Formato correcto con todos los campos del jugador
+  * La sección INSTRUCCIÓN INICIAL ahora debería aparecer en el visualizador
+
+Stage Summary:
+- Eliminadas referencias duplicadas de {{dataplayer}} del NPC
+- Configuración de Grimorio corregida para insertar datos del jugador en POST-HISTORY
+- Visualizador de prompts mejorado para mostrar la primera sección (instrucción inicial)
+- Preview funcionando correctamente con todos los datos resueltos
+- 0 errores de lint en código modificado
+
+Componentes creados:
+1. data-esparcraft/npcs/NPC_1768825922617.json - Eliminadas referencias de {{dataplayer}}
+2. db/chat-trigger-config.json - Configuración corregida
+3. src/lib/promptUtils.ts - extractPromptSections mejorado

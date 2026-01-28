@@ -9,8 +9,13 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
 
+    // ✅ DEBUG: Log para ver qué llega al endpoint
+    console.log('[/api/reroute] REQUEST BODY:', JSON.stringify(body, null, 2));
+    console.log('[/api/reroute] PREVIEW MODE:', preview);
+
     // Validate basic payload structure
     if (!body.mode) {
+      console.log('[/api/reroute] ERROR: Missing field: mode');
       return NextResponse.json(
         { error: 'Missing required field: mode' },
         { status: 400 }
@@ -21,14 +26,17 @@ export async function POST(request: NextRequest) {
 
     // If preview mode, return prompt preview without calling LLM
     if (preview) {
+      console.log('[/api/reroute] Starting preview for mode:', payload.mode);
       try {
         const previewData = await previewTriggerPrompt(payload);
+        console.log('[/api/reroute] PREVIEW SUCCESS:', previewData);
         return NextResponse.json({
           success: true,
           preview: true,
           data: previewData
         });
       } catch (error) {
+        console.error('[/api/reroute] PREVIEW ERROR:', error);
         return NextResponse.json(
           { error: `Preview error: ${error instanceof Error ? error.message : 'Unknown error'}` },
           { status: 400 }

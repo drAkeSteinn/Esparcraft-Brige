@@ -151,10 +151,25 @@ export interface ChatMessage {
   timestamp: string;
 }
 
+// Interfaz reutilizable para datos del jugador
+export interface Jugador {
+  nombre?: string;
+  raza?: string;
+  nivel?: string;
+  almakos?: string;
+  deuda?: string;
+  piedras_del_alma?: string;
+  salud_actual?: string;
+  reputacion?: string;
+  hora?: string;
+  clima?: string;
+}
+
 export interface Session {
   id: string;
   npcId: string;
   playerId?: string;
+  jugador?: Jugador;  // ← Snapshot del jugador en esta sesión
   startTime: string;
   lastActivity: string;
   messages: ChatMessage[];
@@ -198,6 +213,14 @@ export interface ResumenSesionTriggerPayload extends TriggerPayload {
   mode: 'resumen_sesion';
   npcid: string;
   playersessionid: string;
+  systemPrompt?: string; // System prompt personalizado (opcional)
+  lastSummary?: string; // Último resumen de la sesión (opcional)
+  chatHistory?: string; // Historial de chat de la sesión
+  grimorioTemplates?: Array<{
+    enabled: boolean;
+    templateKey: string;
+    section: string;
+  }>; // Plantillas de Grimorio activas para insertar en el prompt
 }
 
 export interface ResumenNPCTriggerPayload extends TriggerPayload {
