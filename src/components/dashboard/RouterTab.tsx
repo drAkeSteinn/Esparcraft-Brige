@@ -1976,7 +1976,7 @@ export default function RouterTab() {
                 className="w-full"
                 size="lg"
                 onClick={() => resumenSesionPayload && sendRequest('resumen_sesion', resumenSesionPayload)}
-                disabled={!resumenSesionForm.npcid || !resumenSesionForm.sessionid || !resumenSesionForm.chatHistory}
+                disabled={!resumenSesionForm.npcid || !resumenSesionForm.sessionid}
               >
                 <Send className="h-5 w-5 mr-2" />
                 Generar Resumen de Sesión
