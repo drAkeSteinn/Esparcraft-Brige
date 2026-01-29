@@ -446,6 +446,17 @@ export const VARIABLE_GLOSSARY: Record<string, VariableDefinition> = {
     nested: false
   },
 
+  'session.playerId': {
+    name: 'session.playerId',
+    aliases: ['session_player_id', 'player_id', 'playerId'],
+    description: 'ID/Nombre del jugador en esta sesión',
+    type: 'string',
+    example: 'Aldric',
+    category: 'session',
+    required: false,
+    nested: false
+  },
+
   'lastSummary': {
     name: 'lastSummary',
     aliases: ['ultimo_resumen', 'lastSummary'],

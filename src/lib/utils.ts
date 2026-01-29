@@ -63,6 +63,7 @@ export interface VariableContext {
     clima?: string;
   };
   session?: {
+    playerId?: string;
     messages?: Array<{ role: string; content: string }>;
   };
   mensaje?: string;
@@ -260,6 +261,12 @@ export function replaceVariables(text: string, context: VariableContext): string
       // Variable especial para el último resumen
       if (key === 'lastSummary' || key === 'ultimo_resumen') {
         return context.lastSummary || '(Sin último resumen)';
+      }
+
+      // Variables de sesión (session.playerId, etc.)
+      if (key === 'session.playerId' || key === 'session_player_id' || key === 'player_id' || key === 'playerId') {
+        // session.playerId se mapea a context.session?.playerId o al nombre del jugador
+        return (context as any).session?.playerId || context.jugador?.nombre || '';
       }
 
       // Variables para el mensaje del usuario y template
