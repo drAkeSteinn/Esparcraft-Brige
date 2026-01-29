@@ -276,7 +276,7 @@ export default function NPCConfig({ onConfigSaved }: NPCConfigProps) {
         {/* Avatar por defecto */}
         <div className="space-y-2">
           <div className="flex items-center gap-2">
-            <Image className="h-4 w-4 text-muted-foreground" />
+            <Image className="h-4 w-4 text-muted-foreground" alt="" />
             <Label htmlFor="default-avatar">Avatar por Defecto</Label>
           </div>
           <Input
