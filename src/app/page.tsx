@@ -23,7 +23,7 @@ export default function Dashboard() {
         <div className="container mx-auto px-4 py-6">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-3xl font-bold text-foreground">Bridge IA</h1>
+              <h1 className="text-3xl font-bold text-foreground">Esparcraft IA</h1>
               <p className="text-sm text-muted-foreground mt-1">
                 Gestor Narrativo - Servidor Esparcraft
               </p>
@@ -115,7 +115,7 @@ export default function Dashboard() {
       <footer className="border-t bg-card mt-auto">
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between text-sm text-muted-foreground">
-            <p>Bridge IA - Gestor Narrativo v1.0.0</p>
+            <p>Esparcraft IA - Gestor Narrativo v1.0.0</p>
             <p>Comunidad Tirano Estudios - Servidor Esparcraft</p>
           </div>
         </div>

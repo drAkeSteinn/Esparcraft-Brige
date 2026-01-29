@@ -26,8 +26,8 @@ export default function SessionsTab() {
   const [loading, setLoading] = useState(true);
   const [testDialogOpen, setTestDialogOpen] = useState(false);
   const [previewDialogOpen, setPreviewDialogOpen] = useState(false);
+  const [previewSession, setPreviewSession] = useState<Session | null>(null);
   const [selectedSession, setSelectedSession] = useState<Session | null>(null);
-  const [previewData, setPreviewData] = useState<any>(null);
   const [testForm, setTestForm] = useState({
     npcid: '',
     message: '',
@@ -123,70 +123,9 @@ export default function SessionsTab() {
     setTestDialogOpen(true);
   };
 
-  const handlePreviewPrompt = async (npcIdOverride?: string, sessionIdOverride?: string) => {
-    const npcid = npcIdOverride || testForm.npcid;
-    const playersessionid = sessionIdOverride || '';
-
-    if (!npcid) {
-      toast({
-        title: 'Error',
-        description: 'Selecciona un NPC',
-        variant: 'destructive'
-      });
-      return;
-    }
-
-    try {
-      const payload = {
-        mode: testForm.mode,
-        npcid: npcid,
-        message: testForm.message,
-        playersessionid: playersessionid
-      };
-
-      const response = await fetch(`/api/reroute?preview=true`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-
-      const result = await response.json();
-
-      if (result.success) {
-        setPreviewData(result.data);
-        setPreviewDialogOpen(true);
-      } else {
-        toast({
-          title: 'Error',
-          description: result.error || 'No se pudo generar la vista previa',
-          variant: 'destructive'
-        });
-        return;
-      }
-    } catch (error) {
-      console.error('Error previewing prompt:', error);
-      toast({
-        title: 'Error',
-        description: 'No se pudo generar la vista previa',
-        variant: 'destructive'
-      });
-      return;
-    }
-  };
-
-  const openPreviewDialog = async (npcIdOverride?: string, sessionIdOverride?: string) => {
-    await handlePreviewPrompt(npcIdOverride, sessionIdOverride);
-
-    // Solo abrir el diálogo si el preview data se cargó exitosamente
-    setTimeout(() => {
-      if (!previewData) {
-        toast({
-          title: 'Error',
-          description: 'No se pudo cargar el preview',
-          variant: 'destructive'
-        });
-      }
-    }, 100);
+  const openPreviewDialog = (session: Session) => {
+    setPreviewSession(session);
+    setPreviewDialogOpen(true);
   };
 
   const handleSendChat = async () => {
@@ -294,7 +233,7 @@ export default function SessionsTab() {
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => openPreviewDialog(session.npcId, session.id)}
+                      onClick={() => openPreviewDialog(session)}
                     >
                       <Eye className="h-4 w-4" />
                     </Button>
@@ -307,15 +246,26 @@ export default function SessionsTab() {
                     </Button>
                   </div>
                 </CardTitle>
-                <CardDescription className="space-y-2">
+                <CardDescription>
                   <Badge variant="secondary" className="text-xs font-mono">
                     ID: {session.id}
                   </Badge>
-                  <span>{getNpcLocation(session.npcId)}</span>
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="space-y-2">
+                <div className="space-y-3">
+                  {session.jugador && (
+                    <div className="text-xs p-2 bg-muted rounded-lg space-y-1">
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Nombre:</span>
+                        <span className="font-medium">{session.jugador.nombre || 'N/A'}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Raza:</span>
+                        <span className="font-medium">{session.jugador.raza || 'N/A'}</span>
+                      </div>
+                    </div>
+                  )}
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">Mensajes:</span>
                     <span className="font-medium">{session.messages.length}</span>
@@ -324,16 +274,8 @@ export default function SessionsTab() {
                     <p>Creada: {new Date(session.startTime).toLocaleString()}</p>
                     <p>Última actividad: {new Date(session.lastActivity).toLocaleString()}</p>
                   </div>
-                  {session.messages.length > 0 && (
-                    <div>
-                      <p className="text-sm font-medium mb-1">Último mensaje:</p>
-                      <p className="text-sm text-muted-foreground line-clamp-2">
-                        {session.messages[session.messages.length - 1].content}
-                      </p>
-                    </div>
-                  )}
                   {summaries[session.id] && (
-                    <div className="mt-3 p-3 bg-indigo-50 dark:bg-indigo-950/30 rounded-lg border border-indigo-200 dark:border-indigo-800">
+                    <div className="p-3 bg-indigo-50 dark:bg-indigo-950/30 rounded-lg border border-indigo-200 dark:border-indigo-800">
                       <p className="text-xs font-semibold mb-1 flex items-center gap-1 text-indigo-700 dark:text-indigo-300">
                         <MessageSquare className="h-3 w-3" />
                         Último Resumen:
@@ -343,17 +285,28 @@ export default function SessionsTab() {
                       </p>
                     </div>
                   )}
-                  <Button
-                    className="w-full mt-2"
-                    variant="outline"
-                    onClick={() => {
-                      setSelectedSession(session);
-                      setTestForm({ npcid: session.npcId, message: '', mode: 'chat' });
-                      setTestDialogOpen(true);
-                    }}
-                  >
-                    Continuar Chat
-                  </Button>
+                  {session.messages.length > 0 && (
+                    <div>
+                      <p className="text-sm font-medium mb-2">Historial del chat:</p>
+                      <ScrollArea className="h-32 border rounded-lg p-2">
+                        <div className="space-y-2">
+                          {session.messages.slice(-5).map((msg, i) => (
+                            <div
+                              key={i}
+                              className={`p-2 rounded text-xs ${
+                                msg.role === 'user' ? 'bg-primary/10 ml-4' : 'bg-secondary/10 mr-4'
+                              }`}
+                            >
+                              <div className="font-medium mb-1 capitalize">
+                                {msg.role === 'user' ? 'Jugador' : 'NPC'}
+                              </div>
+                              <p className="line-clamp-2">{msg.content}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </ScrollArea>
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -459,69 +412,45 @@ export default function SessionsTab() {
       </Dialog>
 
       <Dialog open={previewDialogOpen} onOpenChange={setPreviewDialogOpen}>
-        <DialogContent className="max-w-4xl max-h-[90vh]">
+        <DialogContent className="!w-[70vw] !max-w-[70vw] max-h-[85vh]">
           <DialogHeader>
-            <DialogTitle>Visualizador de Prompt</DialogTitle>
+            <DialogTitle>Último Prompt Enviado al LLM</DialogTitle>
             <DialogDescription>
-              Vista previa del prompt que se enviará al LLM
+              Visualización del último prompt enviado para esta sesión
             </DialogDescription>
           </DialogHeader>
-          <div className="flex gap-4 h-[calc(90vh-100px)]">
-            <div className="flex-1 overflow-y-auto space-y-4">
-              {previewData ? (
-                <>
-                  <div>
-                    <h3 className="font-semibold mb-2">System Prompt</h3>
+          <div className="overflow-y-auto h-[calc(85vh-130px)] space-y-4">
+            {previewSession && (
+              <>
+                {/* Sección informativa con el último resumen */}
+                {summaries[previewSession.id] && (
+                  <div className="p-4 bg-indigo-50 dark:bg-indigo-950/30 rounded-lg border border-indigo-200 dark:border-indigo-800">
+                    <h3 className="font-semibold mb-2 flex items-center gap-2 text-indigo-700 dark:text-indigo-300">
+                      <MessageSquare className="h-4 w-4" />
+                      Último Resumen de la Sesión
+                    </h3>
+                    <p className="text-sm text-muted-foreground">{summaries[previewSession.id]}</p>
+                  </div>
+                )}
+
+                {/* Último Prompt enviado al LLM */}
+                {lastPrompts[previewSession.id] ? (
+                  <div className="space-y-3">
                     <div className="bg-muted p-4 rounded-lg">
-                      <pre className="text-sm whitespace-pre-wrap">{previewData.systemPrompt}</pre>
+                      <pre className="text-xs whitespace-pre-wrap font-mono">{lastPrompts[previewSession.id]}</pre>
+                    </div>
+                    <div className="text-sm text-muted-foreground">
+                      <p>Tokens estimados: {Math.ceil(lastPrompts[previewSession.id].length / 4)}</p>
                     </div>
                   </div>
-                  <div>
-                    <h3 className="font-semibold mb-2">Messages ({previewData.messages.length})</h3>
-                    <div className="space-y-2">
-                      {previewData.messages.map((msg: any, i: number) => (
-                        <div key={i} className="bg-muted p-3 rounded-lg">
-                          <div className="text-xs font-medium text-muted-foreground mb-1 capitalize">
-                            {msg.role}
-                          </div>
-                          <p className="text-sm">{msg.content}</p>
-                        </div>
-                      ))}
-                    </div>
+                ) : (
+                  <div className="flex items-center justify-center py-8 text-muted-foreground">
+                    <p className="text-sm">No hay último prompt guardado para esta sesión</p>
                   </div>
-                  <div className="text-sm text-muted-foreground">
-                    <p>Tokens estimados: {previewData.estimatedTokens}</p>
-                  </div>
-                </>
-              ) : (
-                <div className="flex items-center justify-center h-full text-muted-foreground">
-                  <div className="text-center space-y-2">
-                    <p className="text-lg">Cargando preview...</p>
-                    <p className="text-sm">Por favor espera</p>
-                  </div>
-                </div>
-              )}
-            </div>
-            <div className="w-1/2 overflow-y-auto border-l pl-4">
-              {selectedSession?.id && lastPrompts[selectedSession.id] ? (
-                <div className="space-y-4">
-                  <h3 className="font-semibold mb-2 text-lg">Último Prompt Guardado</h3>
-                  <div className="bg-muted p-4 rounded-lg">
-                    <pre className="text-xs whitespace-pre-wrap font-mono">{lastPrompts[selectedSession.id]}</pre>
-                  </div>
-                </div>
-              ) : (
-                <div className="flex items-center justify-center h-full text-muted-foreground">
-                  <p className="text-sm">No hay último prompt guardado para esta sesión</p>
-                </div>
-              )}
-            </div>
+                )}
+              </>
+            )}
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setPreviewDialogOpen(false)}>
-              Cerrar
-            </Button>
-          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
