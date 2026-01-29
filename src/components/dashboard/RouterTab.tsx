@@ -607,7 +607,7 @@ export default function RouterTab() {
     chatForm.npcid,
     chatForm.playersessionid,
     chatForm.sessionType,
-    chatForm.jugador,
+    JSON.stringify(chatForm.jugador), // ✅ Cambiado para detectar cambios en propiedades del objeto
     chatForm.mensaje,
     chatForm.lastSummary,
     JSON.stringify(plantillaRows)
@@ -1421,6 +1421,33 @@ export default function RouterTab() {
 
               <Card>
                 <CardHeader>
+                  <CardTitle>Mensaje del Jugador</CardTitle>
+                  <CardDescription>Último mensaje enviado por el jugador (context por mensaje)</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <Textarea
+                    value={chatForm.mensaje}
+                    onChange={(e) => setChatForm({ ...chatForm, mensaje: e.target.value })}
+                    placeholder="Escribe aquí el mensaje del jugador..."
+                    rows={4}
+                  />
+                  {chatForm.lastSummary && (
+                    <div>
+                      <Label>Último Resumen de Sesión</Label>
+                      <Textarea
+                        value={chatForm.lastSummary}
+                        onChange={(e) => setChatForm({ ...chatForm, lastSummary: e.target.value })}
+                        placeholder="Resumen de la sesión anterior..."
+                        rows={3}
+                        className="text-sm bg-muted/50"
+                      />
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
                   <div className="flex items-center justify-between">
                     <div>
                       <CardTitle>Plantillas Grimorio</CardTitle>
@@ -1444,7 +1471,7 @@ export default function RouterTab() {
                   <div className="grid grid-cols-12 gap-2 text-xs font-semibold text-muted-foreground mb-2">
                     <div className="col-span-1">Habilitar</div>
                     <div className="col-span-5">Plantilla</div>
-                    <div className="col-span-6">Sección del Prompt</div>
+                    <div className="col-span-6">Sección</div>
                   </div>
 
                   {/* Filas para cada sección */}
@@ -1502,32 +1529,11 @@ export default function RouterTab() {
                             </Select>
                           </div>
 
-                          {/* Dropdown de secciones */}
+                          {/* Etiqueta informativa fija de la sección */}
                           <div className="col-span-6">
-                            <Select
-                              value={safeRow.section || section.id}
-                              onValueChange={(value) => {
-                                const newRows = [...plantillaRows];
-                                while (newRows.length <= index) {
-                                  newRows.push({ enabled: false, templateKey: undefined, section: PROMPT_SECTIONS[newRows.length].id });
-                                }
-                                newRows[index] = { ...newRows[index], section: value };
-                                setPlantillaRows(newRows);
-                                setPlantillaConfigSaved(false);
-                              }}
-                              disabled={!safeRow.enabled}
-                            >
-                              <SelectTrigger id={`section-select-${section.id}`}>
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {PROMPT_SECTIONS.map((s) => (
-                                  <SelectItem key={s.id} value={s.id}>
-                                    {s.name}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
+                            <Badge variant="outline" className="w-full justify-start">
+                              {section.name}
+                            </Badge>
                           </div>
                         </div>
                       );

@@ -1,8 +1,0 @@
-{
-  "key": "test",
-  "nombre": "Plantilla de Prueba",
-  "plantilla": "Hola {{jugador.nombre}}",
-  "categoria": "general",
-  "id": "GRIMORIO_1769383910425",
-  "timestamp": "2026-01-25T23:31:50.425Z"
-}

@@ -1,44 +1,44 @@
 {
   "grimorioTemplates": [
     {
-      "enabled": true,
+      "enabled": false,
       "templateKey": "dataplayer",
       "section": "1"
     },
     {
-      "enabled": true,
-      "templateKey": "dataedificio",
+      "enabled": false,
+      "templateKey": "dataplayer",
       "section": "2"
     },
     {
-      "enabled": true,
+      "enabled": false,
       "templateKey": "dataplayer",
       "section": "3"
     },
     {
-      "enabled": true,
-      "templateKey": "dataedificio",
+      "enabled": false,
+      "templateKey": "dataplayer",
       "section": "4"
     },
     {
-      "enabled": true,
+      "enabled": false,
       "templateKey": "dataplayer",
       "section": "5"
     },
     {
-      "enabled": true,
-      "templateKey": "dataedificio",
+      "enabled": false,
+      "templateKey": "dataplayer",
       "section": "6"
     },
     {
-      "enabled": true,
+      "enabled": false,
       "templateKey": "dataplayer",
       "section": "7"
     },
     {
-      "enabled": true,
+      "enabled": false,
       "section": "8",
-      "templateKey": "dataedificio"
+      "templateKey": "dataplayer"
     }
   ]
 }
