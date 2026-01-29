@@ -3,6 +3,90 @@ import { npcStateManager, sessionManager, edificioStateManager, puebloStateManag
 import { replaceVariables, VariableContext } from './utils';
 import { resolveGrimorioVariable } from './grimorioUtils';
 
+// ========= FUNCIONES COMPARTIDAS PARA TRIGGERS DE RESUMEN =========
+
+/**
+ * Crea un System Prompt compartido para resumenes
+ * Soporta variables primarias y plantillas de Grimorio
+ */
+function buildSharedSystemPrompt(
+  options: {
+    systemPrompt?: string;
+    npc?: NPC;
+    world?: World;
+    pueblo?: Pueblo;
+    edificio?: Edificio;
+    templates?: Array<{
+      enabled: boolean;
+      templateKey: string;
+      section: string;
+    }>;
+  }
+): string {
+  let prompt = '';
+  const systemPrompt = options?.systemPrompt || '';
+  const templates = options?.templates || [];
+
+  console.log('[buildSharedSystemPrompt] systemPrompt recibido:', systemPrompt?.substring(0, 50) || '(vacío)');
+  console.log('[buildSharedSystemPrompt] templates.length:', templates.length);
+
+  if (systemPrompt && systemPrompt.trim()) {
+    // Usar System Prompt personalizado
+    prompt += `=== SYSTEM PROMPT ===\n${systemPrompt}\n\n`;
+    console.log('[buildSharedSystemPrompt] Usando System Prompt personalizado');
+  } else {
+    // System Prompt por defecto si no se proporciona uno
+    prompt += `=== SYSTEM PROMPT ===\n`;
+    prompt += `Eres un asistente experto en análisis narrativo. Tu tarea es generar un resumen conciso pero completo.\n\n`;
+    prompt += `INSTRUCCIONES:\n`;
+    prompt += `- Resume la información proporcionada de forma clara y organizada\n`;
+    prompt += `- Identifica elementos clave y patrones importantes\n`;
+    prompt += `- Mantén la coherencia y consistencia narrativa\n\n`;
+    prompt += `Formato esperado:\n`;
+    prompt += `[RESUMEN_GENERADO]: Tu resumen aquí\n\n`;
+    console.log('[buildSharedSystemPrompt] Usando System Prompt por defecto');
+  }
+
+  return prompt;
+}
+
+/**
+ * Inserta plantillas de Grimorio en una sección específica
+ */
+function insertTemplatesForSection(
+  sectionId: string,
+  sectionName: string,
+  templates: Array<{ enabled: boolean; templateKey: string; section: string }>,
+  allGrimorioCards: GrimorioCard[],
+  varContext: VariableContext
+): string {
+  let expandedContent = '';
+
+  const templateKeys = templates
+    .filter(t => t.enabled && t.templateKey && t.section === sectionId)
+    .map(t => t.templateKey);
+
+  console.log(`[insertTemplatesForSection] Sección ${sectionName} (${sectionId}) - Plantillas:`, templateKeys);
+
+  if (templateKeys.length > 0) {
+    templateKeys.forEach(templateKey => {
+      const templateCard = allGrimorioCards.find(card => card.key === templateKey);
+
+      if (templateCard && templateCard.tipo === 'plantilla') {
+        console.log(`[insertTemplatesForSection] Insertando plantilla ${templateKey} en sección ${sectionName}`);
+        const expanded = replaceVariables(templateCard.plantilla || '', varContext);
+        expandedContent += `${expanded}\n\n`;
+      }
+    });
+
+    console.log(`[insertTemplatesForSection] Contenido insertado en ${sectionName}:`, expandedContent.substring(0, 100));
+  }
+
+  return expandedContent;
+}
+
+// ========= FIN FUNCIONES COMPARTIDAS =========
+
 // Token estimation (roughly 4 characters per token for English/Spanish)
 export function estimateTokens(text: string): number {
   return Math.ceil(text.length / 4);
