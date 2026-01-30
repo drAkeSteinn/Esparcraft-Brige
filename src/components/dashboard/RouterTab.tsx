@@ -185,21 +185,25 @@ export default function RouterTab() {
   }, [resumenSesionForm.sessionid]);
 
   useEffect(() => {
-    // Cargar System Prompt de resumen NPC del localStorage
-    const savedResumenNPCTemplate = localStorage.getItem('resumenNPCTemplate');
-    if (savedResumenNPCTemplate) {
-      setResumenNPCForm(prev => ({ ...prev, systemPrompt: savedResumenNPCTemplate }));
-      setResumenNPCTemplateSaved(true);
-    }
-  }, []);
+    // ✅ Cargar System Prompt de resumen NPC de la API
+    const loadResumenNPCConfig = async () => {
+      try {
+        const response = await fetch('/api/resumen-npc-trigger-config');
+        const result = await response.json();
 
-  useEffect(() => {
-    // Guardar System Prompt de resumen NPC en localStorage cuando cambie
-    if (resumenNPCForm.systemPrompt) {
-      localStorage.setItem('resumenNPCTemplate', resumenNPCForm.systemPrompt);
-      setResumenNPCTemplateSaved(true);
-    }
-  }, [resumenNPCForm.systemPrompt]);
+        if (result.success && result.data.systemPrompt) {
+          setResumenNPCForm(prev => ({ ...prev, systemPrompt: result.data.systemPrompt }));
+          setResumenNPCTemplateSaved(true);
+        } else {
+          setResumenNPCTemplateSaved(false);
+        }
+      } catch (error) {
+        console.error('[useEffect resumenNPC] Error cargando System Prompt de la API:', error);
+      }
+    };
+
+    loadResumenNPCConfig();
+  }, []);
 
   // Cargar resúmenes de sesiones del NPC automáticamente cuando se selecciona un NPC
   useEffect(() => {
@@ -246,21 +250,25 @@ export default function RouterTab() {
   }, [resumenNPCForm.npcid]);
 
   useEffect(() => {
-    // Cargar System Prompt de resumen de edificio del localStorage
-    const savedResumenEdificioTemplate = localStorage.getItem('resumenEdificioTemplate');
-    if (savedResumenEdificioTemplate) {
-      setResumenEdificioForm(prev => ({ ...prev, systemPrompt: savedResumenEdificioTemplate }));
-      setResumenEdificioTemplateSaved(true);
-    }
-  }, []);
+    // ✅ Cargar System Prompt de resumen de edificio de la API
+    const loadResumenEdificioConfig = async () => {
+      try {
+        const response = await fetch('/api/resumen-edificio-trigger-config');
+        const result = await response.json();
 
-  useEffect(() => {
-    // Guardar System Prompt de resumen de edificio en localStorage cuando cambie
-    if (resumenEdificioForm.systemPrompt) {
-      localStorage.setItem('resumenEdificioTemplate', resumenEdificioForm.systemPrompt);
-      setResumenEdificioTemplateSaved(true);
-    }
-  }, [resumenEdificioForm.systemPrompt]);
+        if (result.success && result.data.systemPrompt) {
+          setResumenEdificioForm(prev => ({ ...prev, systemPrompt: result.data.systemPrompt }));
+          setResumenEdificioTemplateSaved(true);
+        } else {
+          setResumenEdificioTemplateSaved(false);
+        }
+      } catch (error) {
+        console.error('[useEffect resumenEdificio] Error cargando System Prompt de la API:', error);
+      }
+    };
+
+    loadResumenEdificioConfig();
+  }, []);
 
   // Cargar resúmenes de NPCs del edificio automáticamente cuando se selecciona un edificio
   useEffect(() => {
@@ -308,30 +316,46 @@ export default function RouterTab() {
   }, [resumenEdificioForm.edificioid]);
 
   useEffect(() => {
-    // Cargar System Prompt de resumen de pueblo del localStorage
-    const savedResumenPuebloTemplate = localStorage.getItem('resumenPuebloTemplate');
-    if (savedResumenPuebloTemplate) {
-      setResumenPuebloForm(prev => ({ ...prev, systemPrompt: savedResumenPuebloTemplate }));
-      setResumenPuebloTemplateSaved(true);
-    }
+    // ✅ Cargar System Prompt de resumen de pueblo de la API
+    const loadResumenPuebloConfig = async () => {
+      try {
+        const response = await fetch('/api/resumen-pueblo-trigger-config');
+        const result = await response.json();
+
+        if (result.success && result.data.systemPrompt) {
+          setResumenPuebloForm(prev => ({ ...prev, systemPrompt: result.data.systemPrompt }));
+          setResumenPuebloTemplateSaved(true);
+        } else {
+          setResumenPuebloTemplateSaved(false);
+        }
+      } catch (error) {
+        console.error('[useEffect resumenPueblo] Error cargando System Prompt de la API:', error);
+      }
+    };
+
+    loadResumenPuebloConfig();
   }, []);
 
   useEffect(() => {
-    // Cargar System Prompt de resumen de mundo del localStorage
-    const savedResumenMundoTemplate = localStorage.getItem('resumenMundoTemplate');
-    if (savedResumenMundoTemplate) {
-      setResumenMundoForm(prev => ({ ...prev, systemPrompt: savedResumenMundoTemplate }));
-      setResumenMundoTemplateSaved(true);
-    }
-  }, []);
+    // ✅ Cargar System Prompt de resumen de mundo de la API
+    const loadResumenMundoConfig = async () => {
+      try {
+        const response = await fetch('/api/resumen-mundo-trigger-config');
+        const result = await response.json();
 
-  useEffect(() => {
-    // Guardar System Prompt de resumen de pueblo en localStorage cuando cambie
-    if (resumenPuebloForm.systemPrompt) {
-      localStorage.setItem('resumenPuebloTemplate', resumenPuebloForm.systemPrompt);
-      setResumenPuebloTemplateSaved(true);
-    }
-  }, [resumenPuebloForm.systemPrompt]);
+        if (result.success && result.data.systemPrompt) {
+          setResumenMundoForm(prev => ({ ...prev, systemPrompt: result.data.systemPrompt }));
+          setResumenMundoTemplateSaved(true);
+        } else {
+          setResumenMundoTemplateSaved(false);
+        }
+      } catch (error) {
+        console.error('[useEffect resumenMundo] Error cargando System Prompt de la API:', error);
+      }
+    };
+
+    loadResumenMundoConfig();
+  }, []);
 
   // Cargar resúmenes de edificios del pueblo automáticamente cuando se selecciona un pueblo
   useEffect(() => {
@@ -762,40 +786,152 @@ export default function RouterTab() {
     }
   };
 
-  const handleSaveResumenNPCTemplate = () => {
-    localStorage.setItem('resumenNPCTemplate', resumenNPCForm.systemPrompt);
-    setResumenNPCTemplateSaved(true);
-    toast({
-      title: 'Template de Resumen NPC Guardado',
-      description: 'El system prompt de resumen NPC se ha guardado correctamente'
-    });
+  const handleSaveResumenNPCTemplate = async () => {
+    try {
+      const response = await fetch('/api/resumen-npc-trigger-config', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          systemPrompt: resumenNPCForm.systemPrompt
+        })
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        setResumenNPCTemplateSaved(true);
+        toast({
+          title: 'Template de Resumen NPC Guardado',
+          description: 'El system prompt de resumen NPC se ha guardado correctamente'
+        });
+      } else {
+        toast({
+          title: 'Error al Guardar',
+          description: result.error || 'No se pudo guardar el system prompt',
+          variant: 'destructive'
+        });
+      }
+    } catch (error) {
+      console.error('[handleSaveResumenNPCTemplate] Error:', error);
+      toast({
+        title: 'Error al Guardar',
+        description: 'No se pudo guardar el system prompt',
+        variant: 'destructive'
+      });
+    }
   };
 
-  const handleSaveResumenEdificioTemplate = () => {
-    localStorage.setItem('resumenEdificioTemplate', resumenEdificioForm.systemPrompt);
-    setResumenEdificioTemplateSaved(true);
-    toast({
-      title: 'Template de Resumen Edificio Guardado',
-      description: 'El system prompt de resumen de edificio se ha guardado correctamente'
-    });
+  const handleSaveResumenEdificioTemplate = async () => {
+    try {
+      const response = await fetch('/api/resumen-edificio-trigger-config', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          systemPrompt: resumenEdificioForm.systemPrompt
+        })
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        setResumenEdificioTemplateSaved(true);
+        toast({
+          title: 'Template de Resumen Edificio Guardado',
+          description: 'El system prompt de resumen de edificio se ha guardado correctamente'
+        });
+      } else {
+        toast({
+          title: 'Error al Guardar',
+          description: result.error || 'No se pudo guardar el system prompt',
+          variant: 'destructive'
+        });
+      }
+    } catch (error) {
+      console.error('[handleSaveResumenEdificioTemplate] Error:', error);
+      toast({
+        title: 'Error al Guardar',
+        description: 'No se pudo guardar el system prompt',
+        variant: 'destructive'
+      });
+    }
   };
 
-  const handleSaveResumenPuebloTemplate = () => {
-    localStorage.setItem('resumenPuebloTemplate', resumenPuebloForm.systemPrompt);
-    setResumenPuebloTemplateSaved(true);
-    toast({
-      title: 'Template de Resumen Pueblo Guardado',
-      description: 'El system prompt de resumen de pueblo se ha guardado correctamente'
-    });
+  const handleSaveResumenPuebloTemplate = async () => {
+    try {
+      const response = await fetch('/api/resumen-pueblo-trigger-config', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          systemPrompt: resumenPuebloForm.systemPrompt
+        })
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        setResumenPuebloTemplateSaved(true);
+        toast({
+          title: 'Template de Resumen Pueblo Guardado',
+          description: 'El system prompt de resumen de pueblo se ha guardado correctamente'
+        });
+      } else {
+        toast({
+          title: 'Error al Guardar',
+          description: result.error || 'No se pudo guardar el system prompt',
+          variant: 'destructive'
+        });
+      }
+    } catch (error) {
+      console.error('[handleSaveResumenPuebloTemplate] Error:', error);
+      toast({
+        title: 'Error al Guardar',
+        description: 'No se pudo guardar el system prompt',
+        variant: 'destructive'
+      });
+    }
   };
 
-  const handleSaveResumenMundoTemplate = () => {
-    localStorage.setItem('resumenMundoTemplate', resumenMundoForm.systemPrompt);
-    setResumenMundoTemplateSaved(true);
-    toast({
-      title: 'Template de Resumen Mundo Guardado',
-      description: 'El system prompt de resumen de mundo se ha guardado correctamente'
-    });
+  const handleSaveResumenMundoTemplate = async () => {
+    try {
+      const response = await fetch('/api/resumen-mundo-trigger-config', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          systemPrompt: resumenMundoForm.systemPrompt
+        })
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        setResumenMundoTemplateSaved(true);
+        toast({
+          title: 'Template de Resumen Mundo Guardado',
+          description: 'El system prompt de resumen de mundo se ha guardado correctamente'
+        });
+      } else {
+        toast({
+          title: 'Error al Guardar',
+          description: result.error || 'No se pudo guardar el system prompt',
+          variant: 'destructive'
+        });
+      }
+    } catch (error) {
+      console.error('[handleSaveResumenMundoTemplate] Error:', error);
+      toast({
+        title: 'Error al Guardar',
+        description: 'No se pudo guardar el system prompt',
+        variant: 'destructive'
+      });
+    }
   };
 
   const fetchData = async () => {
@@ -1777,6 +1913,85 @@ export default function RouterTab() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <Label>System Prompt</Label>
+                    {resumenNPCTemplateSaved && (
+                      <div className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400">
+                        <RefreshCw className="h-3 w-3" />
+                        Guardado
+                      </div>
+                    )}
+                  </div>
+                  <Textarea
+                    value={resumenNPCForm.systemPrompt}
+                    onChange={(e) => setResumenNPCForm({ ...resumenNPCForm, systemPrompt: e.target.value })}
+                    placeholder="Escribe aquí el system prompt personalizado para generar el resumen consolidado del NPC. Puedes usar variables como {{npc.name}}, {{mundo}}, etc..."
+                    rows={4}
+                    className="text-sm bg-muted/50"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Soporta variables primarias y plantillas de Grimorio. Si se deja vacío, se usará el system prompt por defecto.
+                  </p>
+                  <div className="flex gap-2 mt-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleSaveResumenNPCTemplate}
+                      className="flex-1"
+                    >
+                      <RefreshCw className="h-4 w-4 mr-2" />
+                      Guardar Template
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={async () => {
+                        try {
+                          // Guardar string vacío en la API
+                          const response = await fetch('/api/resumen-npc-trigger-config', {
+                            method: 'POST',
+                            headers: {
+                              'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({
+                              systemPrompt: ''
+                            })
+                          });
+
+                          const result = await response.json();
+
+                          if (result.success) {
+                            setResumenNPCForm(prev => ({ ...prev, systemPrompt: '' }));
+                            setResumenNPCTemplateSaved(false);
+                            toast({
+                              title: 'Template Eliminado',
+                              description: 'El system prompt de resumen NPC ha sido eliminado'
+                            });
+                          } else {
+                            toast({
+                              title: 'Error al Eliminar',
+                              description: result.error || 'No se pudo eliminar el system prompt',
+                              variant: 'destructive'
+                            });
+                          }
+                        } catch (error) {
+                          console.error('[Eliminar Template NPC] Error:', error);
+                          toast({
+                            title: 'Error al Eliminar',
+                            description: 'No se pudo eliminar el system prompt',
+                            variant: 'destructive'
+                          });
+                        }
+                      }}
+                      className="flex-1"
+                    >
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Eliminar Template
+                    </Button>
+                  </div>
+                </div>
+
+                <div>
                   <Label>NPC</Label>
                   <Select
                     value={resumenNPCForm.npcid}
@@ -1981,9 +2196,13 @@ export default function RouterTab() {
                   <Textarea
                     value={resumenEdificioForm.systemPrompt}
                     onChange={(e) => setResumenEdificioForm({ ...resumenEdificioForm, systemPrompt: e.target.value })}
-                    placeholder="Instrucciones para generar el resumen del edificio (puedes usar {{edificio.name}}, {{edificio.lore}}, {{npcs_count}}, etc.)"
-                    rows={6}
+                    placeholder="Escribe aquí el system prompt personalizado para generar el resumen consolidado del edificio. Puedes usar variables como {{edificio.name}}, {{npcs_count}}, etc..."
+                    rows={4}
+                    className="text-sm bg-muted/50"
                   />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Soporta variables primarias y plantillas de Grimorio. Si se deja vacío, se usará el system prompt por defecto.
+                  </p>
                   <div className="flex gap-2 mt-2">
                     <Button
                       variant="outline"
@@ -1997,17 +2216,48 @@ export default function RouterTab() {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => {
-                        localStorage.removeItem('resumenEdificioTemplate');
-                        setResumenEdificioForm(prev => ({ ...prev, systemPrompt: '' }));
-                        setResumenEdificioTemplateSaved(false);
-                        toast({
-                          title: 'Template Eliminado',
-                          description: 'El system prompt de resumen de edificio ha sido eliminado'
-                        });
+                      onClick={async () => {
+                        try {
+                          // Guardar string vacío en la API
+                          const response = await fetch('/api/resumen-edificio-trigger-config', {
+                            method: 'POST',
+                            headers: {
+                              'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({
+                              systemPrompt: ''
+                            })
+                          });
+
+                          const result = await response.json();
+
+                          if (result.success) {
+                            setResumenEdificioForm(prev => ({ ...prev, systemPrompt: '' }));
+                            setResumenEdificioTemplateSaved(false);
+                            toast({
+                              title: 'Template Eliminado',
+                              description: 'El system prompt de resumen de edificio ha sido eliminado'
+                            });
+                          } else {
+                            toast({
+                              title: 'Error al Eliminar',
+                              description: result.error || 'No se pudo eliminar el system prompt',
+                              variant: 'destructive'
+                            });
+                          }
+                        } catch (error) {
+                          console.error('[Eliminar Template Edificio] Error:', error);
+                          toast({
+                            title: 'Error al Eliminar',
+                            description: 'No se pudo eliminar el system prompt',
+                            variant: 'destructive'
+                          });
+                        }
                       }}
+                      className="flex-1"
                     >
-                      <Trash2 className="h-4 w-4" />
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Eliminar Template
                     </Button>
                   </div>
                 </div>
@@ -2233,9 +2483,13 @@ export default function RouterTab() {
                   <Textarea
                     value={resumenPuebloForm.systemPrompt}
                     onChange={(e) => setResumenPuebloForm({ ...resumenPuebloForm, systemPrompt: e.target.value })}
-                    placeholder="Instrucciones para generar el resumen del pueblo/nación (puedes usar {{pueblo.name}}, {{pueblo.type}}, {{edificios_count}}, etc.)"
-                    rows={6}
+                    placeholder="Escribe aquí el system prompt personalizado para generar el resumen consolidado del pueblo/nación. Puedes usar variables como {{pueblo.name}}, {{edificios_count}}, etc..."
+                    rows={4}
+                    className="text-sm bg-muted/50"
                   />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Soporta variables primarias y plantillas de Grimorio. Si se deja vacío, se usará el system prompt por defecto.
+                  </p>
                   <div className="flex gap-2 mt-2">
                     <Button
                       variant="outline"
@@ -2249,17 +2503,48 @@ export default function RouterTab() {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => {
-                        localStorage.removeItem('resumenPuebloTemplate');
-                        setResumenPuebloForm(prev => ({ ...prev, systemPrompt: '' }));
-                        setResumenPuebloTemplateSaved(false);
-                        toast({
-                          title: 'Template Eliminado',
-                          description: 'El system prompt de resumen de pueblo ha sido eliminado'
-                        });
+                      onClick={async () => {
+                        try {
+                          // Guardar string vacío en la API
+                          const response = await fetch('/api/resumen-pueblo-trigger-config', {
+                            method: 'POST',
+                            headers: {
+                              'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({
+                              systemPrompt: ''
+                            })
+                          });
+
+                          const result = await response.json();
+
+                          if (result.success) {
+                            setResumenPuebloForm(prev => ({ ...prev, systemPrompt: '' }));
+                            setResumenPuebloTemplateSaved(false);
+                            toast({
+                              title: 'Template Eliminado',
+                              description: 'El system prompt de resumen de pueblo ha sido eliminado'
+                            });
+                          } else {
+                            toast({
+                              title: 'Error al Eliminar',
+                              description: result.error || 'No se pudo eliminar el system prompt',
+                              variant: 'destructive'
+                            });
+                          }
+                        } catch (error) {
+                          console.error('[Eliminar Template Pueblo] Error:', error);
+                          toast({
+                            title: 'Error al Eliminar',
+                            description: 'No se pudo eliminar el system prompt',
+                            variant: 'destructive'
+                          });
+                        }
                       }}
+                      className="flex-1"
                     >
-                      <Trash2 className="h-4 w-4" />
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Eliminar Template
                     </Button>
                   </div>
                 </div>
@@ -2485,9 +2770,13 @@ export default function RouterTab() {
                   <Textarea
                     value={resumenMundoForm.systemPrompt}
                     onChange={(e) => setResumenMundoForm({ ...resumenMundoForm, systemPrompt: e.target.value })}
-                    placeholder="Instrucciones para generar el resumen del mundo (puedes usar {{mundo.name}}, {{mundo.estado}}, {{pueblos_count}}, etc.)"
-                    rows={6}
+                    placeholder="Escribe aquí el system prompt personalizado para generar el resumen consolidado del mundo. Puedes usar variables como {{mundo.name}}, {{pueblos_count}}, etc..."
+                    rows={4}
+                    className="text-sm bg-muted/50"
                   />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Soporta variables primarias y plantillas de Grimorio. Si se deja vacío, se usará el system prompt por defecto.
+                  </p>
                   <div className="flex gap-2 mt-2">
                     <Button
                       variant="outline"
@@ -2501,17 +2790,48 @@ export default function RouterTab() {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => {
-                        localStorage.removeItem('resumenMundoTemplate');
-                        setResumenMundoForm(prev => ({ ...prev, systemPrompt: '' }));
-                        setResumenMundoTemplateSaved(false);
-                        toast({
-                          title: 'Template Eliminado',
-                          description: 'El system prompt de resumen de mundo ha sido eliminado'
-                        });
+                      onClick={async () => {
+                        try {
+                          // Guardar string vacío en la API
+                          const response = await fetch('/api/resumen-mundo-trigger-config', {
+                            method: 'POST',
+                            headers: {
+                              'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({
+                              systemPrompt: ''
+                            })
+                          });
+
+                          const result = await response.json();
+
+                          if (result.success) {
+                            setResumenMundoForm(prev => ({ ...prev, systemPrompt: '' }));
+                            setResumenMundoTemplateSaved(false);
+                            toast({
+                              title: 'Template Eliminado',
+                              description: 'El system prompt de resumen de mundo ha sido eliminado'
+                            });
+                          } else {
+                            toast({
+                              title: 'Error al Eliminar',
+                              description: result.error || 'No se pudo eliminar el system prompt',
+                              variant: 'destructive'
+                            });
+                          }
+                        } catch (error) {
+                          console.error('[Eliminar Template Mundo] Error:', error);
+                          toast({
+                            title: 'Error al Eliminar',
+                            description: 'No se pudo eliminar el system prompt',
+                            variant: 'destructive'
+                          });
+                        }
                       }}
+                      className="flex-1"
                     >
-                      <Trash2 className="h-4 w-4" />
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Eliminar Template
                     </Button>
                   </div>
                 </div>
