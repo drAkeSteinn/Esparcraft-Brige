@@ -244,16 +244,22 @@ export interface ResumenNPCTriggerPayload extends TriggerPayload {
 export interface ResumenEdificioTriggerPayload extends TriggerPayload {
   mode: 'resumen_edificio';
   edificioid: string;
+  systemPrompt?: string; // System prompt personalizado (opcional, se carga del archivo si no se proporciona)
+  allSummaries?: string; // Lista formateada de resúmenes de NPCs del edificio (opcional, se obtiene automáticamente si no se proporciona)
 }
 
 export interface ResumenPuebloTriggerPayload extends TriggerPayload {
   mode: 'resumen_pueblo';
   pueblid: string;
+  systemPrompt?: string; // ✅ NUEVO: System prompt personalizado (opcional, se carga del archivo si no se proporciona)
+  allSummaries?: string; // ✅ NUEVO: Lista formateada de resúmenes de edificios del pueblo (opcional, se obtiene automáticamente si no se proporciona)
 }
 
 export interface ResumenMundoTriggerPayload extends TriggerPayload {
   mode: 'resumen_mundo';
   mundoid: string;
+  systemPrompt?: string; // ✅ NUEVO: System prompt personalizado (opcional, se carga del archivo si no se proporciona)
+  allSummaries?: string; // ✅ NUEVO: Lista formateada de resúmenes de pueblos/naciones del mundo (opcional, se obtiene automáticamente si no se proporciona)
 }
 
 export interface NuevoLoreTriggerPayload extends TriggerPayload {

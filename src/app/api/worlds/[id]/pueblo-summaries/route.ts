@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { puebloManager, puebloStateManager } from '@/lib/fileManager';
+import { puebloManager } from '@/lib/fileManager';
 
 // GET World Pueblo summaries
 export async function GET(
@@ -9,22 +9,22 @@ export async function GET(
   try {
     const { id } = await params;
 
-    // Get all pueblos for this world
+    // ✅ Get all pueblos for this world
     const pueblos = puebloManager.getByWorldId(id);
 
-    // Get summaries for each pueblo
+    // ✅ Get rumores from each pueblo
     const pueblosWithSummaries = pueblos
       .map(pueblo => {
-        const memory = puebloStateManager.getMemory(pueblo.id);
-        const consolidatedSummary = memory?.consolidatedSummary || null;
-        
+        const rumores = pueblo.lore.rumores || [];
+        const consolidatedSummary = rumores.length > 0 ? rumores.join('\n') : '';
+
         return {
           puebloId: pueblo.id,
           puebloName: pueblo.name,
           consolidatedSummary: consolidatedSummary
         };
       })
-      .filter(p => p.consolidatedSummary !== null);
+      .filter(p => p.consolidatedSummary !== '');
 
     return NextResponse.json({
       success: true,

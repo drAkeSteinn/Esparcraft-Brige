@@ -752,16 +752,22 @@ INSTRUCCIONES:
 export function buildEdificioSummaryPrompt(
   edificio: Edificio,
   npcSummaries: Array<{ npcId: string; npcName: string; consolidatedSummary: string }>,
-  edificioMemory?: Record<string, any>
+  edificioMemory?: Record<string, any>,
+  options?: {
+    systemPrompt?: string; // ✅ NUEVO: System prompt personalizado
+  }
 ): ChatMessage[] {
-  const messages: ChatMessage[] = [
-    {
-      role: 'system',
-      content: `Eres un asistente experto en consolidación de memoria narrativa de ubicaciones. Tu tarea es crear una memoria consolidada de un edificio.
+  // ✅ Usar system prompt personalizado o el default (SIN header ===)
+  // El system prompt puede incluir keys de plantilla como {{edificio.name}}, {{edificio.descripcion}}, etc.
+  const customSystemPrompt = options?.systemPrompt;
+
+  const systemPromptContent = customSystemPrompt && customSystemPrompt.trim()
+    ? customSystemPrompt
+    : `Eres un asistente experto en consolidación de memoria narrativa de ubicaciones. Tu tarea es crear una memoria consolidada del edificio {{edificio.name}}.
 
 INSTRUCCIONES:
 - Crea un resumen que capture la esencia y evolución del edificio
-- Incluye eventos importantes que han ocurrido en el edificio
+- Incluye eventos importantes que hayan ocurrido en el edificio
 - Identifica patrones en las interacciones de los NPCs del edificio
 - Mantén la coherencia con el propósito y naturaleza del edificio
 - El resumen debe servir como memoria a largo plazo del edificio
@@ -770,27 +776,26 @@ Formato esperado:
 RESUMEN_CONSOLIDADO: [Resumen completo del edificio y su evolución]
 EVENTOS_IMPORTANTES: [Lista de eventos importantes]
 ACTIVIDAD_NPCS: [Patrones de interacción de NPCs]
-ESTADO_ACTUAL: [Estado actual del edificio]`,
+ESTADO_ACTUAL: [Estado actual del edificio]`;
+
+  const messages: ChatMessage[] = [
+    {
+      role: 'system',
+      content: systemPromptContent,
       timestamp: new Date().toISOString()
     }
   ];
 
-  let prompt = `Edificio: ${edificio.name}\n`;
-  prompt += `Descripción: ${edificio.lore || 'Sin descripción'}\n\n`;
-
-  if (edificioMemory && edificioMemory.consolidatedSummary) {
-    prompt += `Memoria anterior: ${edificioMemory.consolidatedSummary}\n`;
-  }
+  // ✅ SOLO incluir las memorias de los NPCs (formato simple)
+  let prompt = '';
 
   if (npcSummaries.length > 0) {
-    prompt += `Resúmenes consolidados de NPCs del edificio:\n`;
-    npcSummaries.forEach((npc, index) => {
-      prompt += `${index + 1}. ${npc.npcName}:\n${npc.consolidatedSummary}\n`;
-    });
-    prompt += '\n';
+    prompt = npcSummaries
+      .map((npc, index) =>
+        `NPC ${index + 1}: ${npc.npcName} (ID: ${npc.npcId})\n${npc.consolidatedSummary}`
+      )
+      .join('\n\n');
   }
-
-  prompt += `\nGenera la memoria consolidada actualizada del edificio:`;
 
   messages.push({
     role: 'user',
@@ -805,16 +810,22 @@ ESTADO_ACTUAL: [Estado actual del edificio]`,
 export function buildPuebloSummaryPrompt(
   pueblo: Pueblo,
   edificioSummaries: Array<{ edificioId: string; edificioName: string; consolidatedSummary: string }>,
-  puebloMemory?: Record<string, any>
+  puebloMemory?: Record<string, any>,
+  options?: {
+    systemPrompt?: string; // ✅ NUEVO: System prompt personalizado
+  }
 ): ChatMessage[] {
-  const messages: ChatMessage[] = [
-    {
-      role: 'system',
-      content: `Eres un asistente experto en consolidación de memoria narrativa de regiones. Tu tarea es crear una memoria consolidada de un pueblo/nación.
+  // ✅ Usar system prompt personalizado o el default (SIN header ===)
+  // El system prompt puede incluir keys de plantilla como {{pueblo.name}}, {{pueblo.descripcion}}, {{mundo}}, etc.
+  const customSystemPrompt = options?.systemPrompt;
+
+  const systemPromptContent = customSystemPrompt && customSystemPrompt.trim()
+    ? customSystemPrompt
+    : `Eres un asistente experto en consolidación de memoria narrativa de regiones. Tu tarea es crear una memoria consolidada del pueblo/nación {{pueblo.name}}.
 
 INSTRUCCIONES:
 - Crea un resumen que capture la esencia y evolución del pueblo/nación
-- Incluye eventos importantes que han ocurrido en el pueblo
+- Incluye eventos importantes que hayan ocurrido en el pueblo
 - Identifica patrones en la actividad de los edificios del pueblo
 - Mantén la coherencia con el rol y naturaleza del pueblo
 - El resumen debe servir como memoria a largo plazo del pueblo
@@ -823,32 +834,26 @@ Formato esperado:
 RESUMEN_CONSOLIDADO: [Resumen completo del pueblo/nación y su evolución]
 EVENTOS_IMPORTANTES: [Lista de eventos importantes]
 ACTIVIDAD_EDIFICIOS: [Patrones de actividad en edificios]
-ESTADO_ACTUAL: [Estado actual del pueblo/nación]`,
+ESTADO_ACTUAL: [Estado actual del pueblo/nación]`;
+
+  const messages: ChatMessage[] = [
+    {
+      role: 'system',
+      content: systemPromptContent,
       timestamp: new Date().toISOString()
     }
   ];
 
-  let prompt = `Pueblo/Nación: ${pueblo.name}\n`;
-  prompt += `Tipo: ${pueblo.tipo || 'Sin especificar'}\n`;
-  prompt += `Estado: ${pueblo.lore.estado_pueblo || 'Sin especificado'}\n`;
-  if (pueblo.lore.rumors && pueblo.lore.rumors.length > 0) {
-    prompt += `Rumores: ${pueblo.lore.rumors.join(', ')}\n`;
-  }
-  prompt += '\n';
-
-  if (puebloMemory && puebloMemory.consolidatedSummary) {
-    prompt += `Memoria anterior: ${puebloMemory.consolidatedSummary}\n`;
-  }
+  // ✅ SOLO incluir los resúmenes de los edificios (formato simple)
+  let prompt = '';
 
   if (edificioSummaries.length > 0) {
-    prompt += `Resúmenes consolidados de edificios del pueblo:\n`;
-    edificioSummaries.forEach((edificio, index) => {
-      prompt += `${index + 1}. ${edificio.edificioName}:\n${edificio.consolidatedSummary}\n`;
-    });
-    prompt += '\n';
+    prompt = edificioSummaries
+      .map((edificio, index) =>
+        `Edificio ${index + 1}: ${edificio.edificioName} (ID: ${edificio.edificioId})\n${edificio.consolidatedSummary}`
+      )
+      .join('\n\n');
   }
-
-  prompt += `\nGenera la memoria consolidada actualizada del pueblo/nación:`;
 
   messages.push({
     role: 'user',
@@ -863,12 +868,18 @@ ESTADO_ACTUAL: [Estado actual del pueblo/nación]`,
 export function buildWorldSummaryPrompt(
   world: World,
   puebloSummaries: Array<{ puebloId: string; puebloName: string; consolidatedSummary: string }>,
-  worldMemory?: Record<string, any>
+  worldMemory?: Record<string, any>,
+  options?: {
+    systemPrompt?: string; // ✅ NUEVO: System prompt personalizado
+  }
 ): ChatMessage[] {
-  const messages: ChatMessage[] = [
-    {
-      role: 'system',
-      content: `Eres un asistente experto en consolidación de memoria narrativa de mundos. Tu tarea es crear una memoria consolidada de un mundo.
+  // ✅ Usar system prompt personalizado o el default (SIN header ===)
+  // El system prompt puede incluir keys de plantilla como {{mundo.name}}, {{mundo.descripcion}}, etc.
+  const customSystemPrompt = options?.systemPrompt;
+
+  const systemPromptContent = customSystemPrompt && customSystemPrompt.trim()
+    ? customSystemPrompt
+    : `Eres un asistente experto en consolidación de memoria narrativa de mundos. Tu tarea es crear una memoria consolidada del mundo {{mundo.name}}.
 
 INSTRUCCIONES:
 - Crea un resumen que capture la esencia y evolución del mundo
@@ -881,31 +892,26 @@ Formato esperado:
 RESUMEN_CONSOLIDADO: [Resumen completo del mundo y su evolución]
 EVENTOS_IMPORTANTES: [Lista de eventos globales]
 TENDENCIAS_GLOBALES: [Patrones y tendencias entre pueblos/naciones]
-ESTADO_ACTUAL: [Estado actual del mundo]`,
+ESTADO_ACTUAL: [Estado actual del mundo]`;
+
+  const messages: ChatMessage[] = [
+    {
+      role: 'system',
+      content: systemPromptContent,
       timestamp: new Date().toISOString()
     }
   ];
 
-  let prompt = `Mundo: ${world.name}\n`;
-  prompt += `Estado actual: ${world.lore.estado_mundo}\n`;
-  if (world.lore.rumors && world.lore.rumors.length > 0) {
-    prompt += `Rumores: ${world.lore.rumors.join(', ')}\n`;
-  }
-  prompt += '\n';
-
-  if (worldMemory && worldMemory.consolidatedSummary) {
-    prompt += `Memoria anterior: ${worldMemory.consolidatedSummary}\n`;
-  }
+  // ✅ SOLO incluir los resúmenes de los pueblos (formato simple)
+  let prompt = '';
 
   if (puebloSummaries.length > 0) {
-    prompt += `Resúmenes consolidados de pueblos/naciones:\n`;
-    puebloSummaries.forEach((pueblo, index) => {
-      prompt += `${index + 1}. ${pueblo.puebloName}:\n${pueblo.consolidatedSummary}\n`;
-    });
-    prompt += '\n';
+    prompt = puebloSummaries
+      .map((pueblo, index) =>
+        `Pueblo/Nación ${index + 1}: ${pueblo.puebloName} (ID: ${pueblo.puebloId})\n${pueblo.consolidatedSummary}`
+      )
+      .join('\n\n');
   }
-
-  prompt += `\nGenera la memoria consolidada actualizada del mundo:`;
 
   messages.push({
     role: 'user',

@@ -1770,3 +1770,44 @@ Componentes creados:
 1. data-esparcraft/npcs/NPC_1768825922617.json - Eliminadas referencias de {{dataplayer}}
 2. db/chat-trigger-config.json - Configuración corregida
 3. src/lib/promptUtils.ts - extractPromptSections mejorado
+
+---
+Task ID: 2
+Agent: Z.ai Code
+Task: Implementar trigger "Resumen de Mundo" con patrón simplificado
+
+Work Log:
+- Corregido typo en /home/z/my-project/src/app/api/worlds/[id]/pueblo-summaries/route.ts
+  * Cambiado 'rumors' por 'rumores' en línea 19
+
+- Actualizado buildWorldSummaryPrompt en promptBuilder.ts
+  * Agregado parámetro options.systemPrompt
+  * Simplificado system prompt sin headers (=== SYSTEM PROMPT ===)
+  * System prompt soporta variables primarias como {{mundo.name}}
+  * User message solo contiene resúmenes de pueblos (formato simple)
+
+- Actualizado ResumenMundoTriggerPayload en types.ts
+  * Ya tenía systemPrompt y allSummaries agregados previamente
+
+- Actualizado handleResumenMundoTrigger en triggerHandlers.ts
+  * Corregido typo 'rumors' por 'rumores' en línea 852
+  * Implementado carga de systemPrompt desde resumen-mundo-trigger-config.json
+  * Implementado procesamiento de variables con resolveAllVariables()
+  * Obtenidos rumores de pueblos desde pueblo.lore.rumores
+  * Resumen guardado en world.lore.rumores reemplazando array completo
+
+- Actualizado buildResumenMundoPayload en RouterTab.tsx
+  * Agregado mode: 'resumen_mundo'
+  * Agregado systemPrompt al payload
+
+- Actualizado previewTriggerPrompt caso 'resumen_mundo' en triggerHandlers.ts
+  * Implementado carga de systemPrompt desde archivo de configuración
+  * Implementado procesamiento de variables con resolveAllVariables()
+  * Obtenidos rumores de pueblos desde pueblo.lore.rumores
+  * Formato simplificado consistente con resumen_edificio y resumen_pueblo
+
+Stage Summary:
+- El trigger "Resumen de Mundo" ahora sigue el mismo patrón simplificado que los triggers de NPC, Edificio y Pueblo
+- System prompts personalizables sin headers, con soporte de variables primarias y plantillas de Grimorio
+- User messages contienen solo los datos relevantes (resúmenes de pueblos)
+- Data source chain completa: Session summaries → NPC creator_notes → Building eventos_recientes → Town rumores → World rumores

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { npcManager, summaryManager } from '@/lib/fileManager';
+import { npcManager } from '@/lib/fileManager';
 
 // GET Edificio NPC summaries
 export async function GET(
@@ -12,19 +12,18 @@ export async function GET(
     // Get all NPCs for this edificio
     const npcs = npcManager.getByEdificioId(id);
 
-    // Get summaries for each NPC
+    // ✅ Get creator_notes from each NPC (consolidated summaries)
     const npcsWithSummaries = npcs
       .map(npc => {
-        const memory = npcManager.getById(npc.id);
-        const consolidatedSummary = memory?.id ? npc.id : null;
-        
+        const creatorNotes = npc?.card?.data?.creator_notes || '';
+
         return {
           npcId: npc.id,
           npcName: npc.card?.data?.name || npc.card?.name || 'Unknown',
-          consolidatedSummary: consolidatedSummary
+          consolidatedSummary: creatorNotes
         };
       })
-      .filter(n => n.consolidatedSummary !== null);
+      .filter(n => n.consolidatedSummary !== '');
 
     return NextResponse.json({
       success: true,

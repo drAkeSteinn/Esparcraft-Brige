@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { edificioManager, edificioStateManager } from '@/lib/fileManager';
+import { edificioManager } from '@/lib/fileManager';
 
 // GET Pueblo Edificio summaries
 export async function GET(
@@ -12,19 +12,21 @@ export async function GET(
     // Get all edificios for this pueblo
     const edificios = edificioManager.getByPuebloId(id);
 
-    // Get summaries for each edificio
+    // ✅ Get eventos_recientes from each edificio
     const edificiosWithSummaries = edificios
       .map(edificio => {
-        const memory = edificioStateManager.getMemory(edificio.id);
-        const consolidatedSummary = memory?.consolidatedSummary || null;
-        
+        const eventosRecientes = edificio.eventos_recientes || [];
+        const consolidatedSummary = eventosRecientes.length > 0
+          ? eventosRecientes.join('\n')
+          : '';
+
         return {
           edificioId: edificio.id,
           edificioName: edificio.name,
           consolidatedSummary: consolidatedSummary
         };
       })
-      .filter(e => e.consolidatedSummary !== null);
+      .filter(e => e.consolidatedSummary !== '');
 
     return NextResponse.json({
       success: true,

@@ -302,11 +302,11 @@ ${memoriesSections.join('\n')}
             // Guardar los NPCs con resúmenes
             setEdificioNPCSummaries(result.data.npcs);
 
-            // Construir string con todos los resúmenes numerados
+            // ✅ Formatear las memorias de los NPCs (sin === NPC N: ===)
             const summariesText = result.data.npcs
               .filter((n: any) => n.consolidatedSummary)
               .map((n: any, index: number) =>
-                `=== NPC ${index + 1}: ${n.npcName} (ID: ${n.npcId}) ===\n${n.consolidatedSummary}`
+                `NPC ${index + 1}: ${n.npcName} (ID: ${n.npcId})\n${n.consolidatedSummary}`
               )
               .join('\n\n');
             setResumenEdificioForm(prev => ({
@@ -389,11 +389,11 @@ ${memoriesSections.join('\n')}
             // Guardar los edificios con resúmenes
             setPuebloEdificioSummaries(result.data.edificios);
 
-            // Construir string con todos los resúmenes numerados
+            // ✅ Formatear las memorias de los edificios (sin === ===)
             const summariesText = result.data.edificios
               .filter((e: any) => e.consolidatedSummary)
               .map((e: any, index: number) =>
-                `=== Edificio ${index + 1}: ${e.edificioName} (ID: ${e.edificioId}) ===\n${e.consolidatedSummary}`
+                `Edificio ${index + 1}: ${e.edificioName} (ID: ${e.edificioId})\n${e.consolidatedSummary}`
               )
               .join('\n\n');
             setResumenPuebloForm(prev => ({
@@ -1104,22 +1104,27 @@ ${memoriesSections.join('\n')}
 
   const buildResumenEdificioPayload = () => {
     return {
-      triggertype: 'resumen_edificio',
+      mode: 'resumen_edificio',  // ✅ CORREGIDO: 'mode' en lugar de 'triggertype'
       edificioid: resumenEdificioForm.edificioid,
-      allSummaries: resumenEdificioForm.allSummaries // NUEVO: Resúmenes de todos los NPCs del edificio
+      systemPrompt: resumenEdificioForm.systemPrompt,  // ✅ NUEVO: Agregar systemPrompt
+      allSummaries: resumenEdificioForm.allSummaries // Resúmenes de todos los NPCs del edificio
     };
   };
 
   const buildResumenPuebloPayload = () => {
     return {
+      mode: 'resumen_pueblo',  // ✅ CORREGIDO: 'mode' en lugar de missing
       pueblid: resumenPuebloForm.pueblid,
+      systemPrompt: resumenPuebloForm.systemPrompt,  // ✅ NUEVO: Agregar systemPrompt
       allSummaries: resumenPuebloForm.allSummaries // Resúmenes de todos los edificios del pueblo/nación
     };
   };
 
   const buildResumenMundoPayload = () => {
     return {
+      mode: 'resumen_mundo',  // ✅ NUEVO: Agregar mode
       mundoid: resumenMundoForm.mundoid,
+      systemPrompt: resumenMundoForm.systemPrompt,  // ✅ NUEVO: Agregar systemPrompt
       allSummaries: resumenMundoForm.allSummaries // Resúmenes de todos los pueblos/naciones del mundo
     };
   };
