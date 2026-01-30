@@ -36,7 +36,8 @@ export async function POST(request: NextRequest) {
       name: body.name,
       lore: {
         estado_mundo: body.lore.estado_mundo,
-        rumores: body.lore.rumores || []
+        rumores: body.lore.rumores || [],
+        eventos: body.lore.eventos || []
       }
     };
 

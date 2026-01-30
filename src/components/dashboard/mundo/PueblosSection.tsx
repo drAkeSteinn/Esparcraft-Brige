@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, MapPin } from 'lucide-react';
+import { Plus, Edit2, Trash2, MapPin, ScrollText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
@@ -11,6 +11,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
 import { Pueblo, World, Edificio } from '@/lib/types';
 import { toast } from '@/hooks/use-toast';
+import { Slider } from '@/components/ui/slider';
 
 interface FormData {
   worldId: string;
@@ -19,6 +20,7 @@ interface FormData {
   description: string;
   estado_pueblo: string;
   rumores: string;
+  eventos: string;
 }
 
 export default function PueblosSection() {
@@ -35,7 +37,8 @@ export default function PueblosSection() {
     type: 'pueblo',
     description: '',
     estado_pueblo: '',
-    rumores: ''
+    rumores: '',
+    eventos: ''
   });
 
   useEffect(() => {
@@ -90,24 +93,29 @@ export default function PueblosSection() {
   };
 
   const handleCreate = () => {
+    setEditingPueblo(null);
     setFormData({
       worldId: '',
       name: '',
       type: 'pueblo' as 'pueblo',
       description: '',
       estado_pueblo: '',
-      rumores: []
+      rumores: '',
+      eventos: ''
     });
+    setDialogOpen(true);
   };
 
   const handleEdit = (pueblo: Pueblo) => {
+    setEditingPueblo(pueblo);
     setFormData({
       worldId: pueblo.worldId,
       name: pueblo.name,
       type: pueblo.type,
       description: pueblo.description,
       estado_pueblo: pueblo.lore.estado_pueblo,
-      rumores: pueblo.lore.rumores.join('\n')
+      rumores: pueblo.lore.rumores.join('\n'),
+      eventos: pueblo.lore.eventos?.join('\n') || ''
     });
     setDialogOpen(true);
   };
@@ -147,11 +155,12 @@ export default function PueblosSection() {
         description: formData.description,
         lore: {
           estado_pueblo: formData.estado_pueblo,
-          rumores: formData.rumores.split('\n').filter(r => r.trim())
+          rumores: formData.rumores.split('\n').filter(r => r.trim()),
+          eventos: formData.eventos.split('\n').filter(e => e.trim())
         }
       };
 
-      const url = editingPueblo ? `/api/pueblos/${editingPueblo.id}` : '/api/pificios';
+      const url = editingPueblo ? `/api/pueblos/${editingPueblo.id}` : '/api/pueblos';
       const method = editingPueblo ? 'PUT' : 'POST';
 
       const response = await fetch(url, {
@@ -168,6 +177,7 @@ export default function PueblosSection() {
           description: editingPueblo ? 'Región actualizada' : 'Región creada'
         });
         setDialogOpen(false);
+        setEditingPueblo(null);
         fetchData();
       }
     } catch (error) {
@@ -230,11 +240,17 @@ export default function PueblosSection() {
                     </div>
                   </CardTitle>
                 </CardHeader>
-                <CardDescription>
-                  {world?.name || 'Mundo desconocido'} • {pueblo.id}
+                <CardDescription className="pt-2">
+                  <div className="flex items-center gap-2 text-sm">
+                    <span className="text-muted-foreground leading-tight">{world?.name || 'Mundo desconocido'}</span>
+                    <span className="text-muted-foreground/60 mt-0.5">•</span>
+                    <span className="font-mono text-xs bg-muted/50 px-2 py-0.5 rounded border-2 border-[#2C2923] text-[#83673D] leading-tight">
+                      {pueblo.id}
+                    </span>
+                  </div>
                 </CardDescription>
-                <CardContent>
-                  <div className="space-y-3">
+                <CardContent className="overflow-hidden">
+                  <div className="max-h-96 overflow-y-auto space-y-3 pr-1 custom-scrollbar">
                     <div className="text-sm font-medium">Descripción:</div>
                     <div className="text-sm text-muted-foreground line-clamp-2">
                       {pueblo.description || 'Sin descripción'}
@@ -244,10 +260,48 @@ export default function PueblosSection() {
                       <div>
                         <p className="text-sm font-medium">Rumores:</p>
                         <ul className="text-sm text-muted-foreground list-disc list-inside">
-                          {pueblo.lore.rumores.map((rumor, i) => (
+                          {pueblo.lore.rumores.slice(0, 3).map((rumor, i) => (
                             <li key={i}>{rumor}</li>
                           ))}
+                          {pueblo.lore.rumores.length > 3 && (
+                            <li className="text-xs">...y {pueblo.lore.rumores.length - 3} más</li>
+                          )}
                         </ul>
+                      </div>
+                    )}
+                    {pueblo.lore.eventos && pueblo.lore.eventos.length > 0 && (
+                      <div>
+                        <div className="flex items-center justify-between mb-2">
+                          <p className="text-sm font-medium flex items-center gap-2">
+                            <ScrollText className="h-3.5 w-3.5 text-[#83673D]" />
+                            Eventos:
+                          </p>
+                          <span className="text-xs text-muted-foreground">
+                            {pueblo.lore.eventos.length} {pueblo.lore.eventos.length === 1 ? 'evento' : 'eventos'}
+                          </span>
+                        </div>
+                        <Slider
+                          defaultValue={[0]}
+                          max={Math.max(pueblo.lore.eventos.length - 1, 0)}
+                          step={1}
+                          value={[Math.floor((pueblo.lore.eventos.length - 1) / 2)]}
+                          onValueChange={([value]) => {
+                            // Solo para visualización - el slider muestra todos los eventos
+                          }}
+                          className="w-full"
+                        />
+                        <div className="mt-2 max-h-32 overflow-y-auto border-2 border-[#2C2923] bg-[#100F11] p-3 rounded">
+                          <ul className="space-y-1.5">
+                            {pueblo.lore.eventos.map((evento, i) => (
+                              <li key={i} className="text-sm text-[#B8B8B8] flex items-start gap-2">
+                                <span className="flex-shrink-0 w-5 h-5 flex items-center justify-center bg-[#2C2923] text-[#83673D] text-xs font-mono rounded">
+                                  {i + 1}
+                                </span>
+                                <span className="break-words">{evento}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
                       </div>
                     )}
 
@@ -402,6 +456,16 @@ export default function PueblosSection() {
                 value={formData.rumores}
                 onChange={(e) => setFormData({ ...formData, rumores: e.target.value })}
                 placeholder="Rumores de la región (uno por línea)"
+                rows={5}
+              />
+            </div>
+            <div>
+              <Label htmlFor="eventos">Eventos (uno por línea)</Label>
+              <Textarea
+                id="eventos"
+                value={formData.eventos}
+                onChange={(e) => setFormData({ ...formData, eventos: e.target.value })}
+                placeholder="Eventos de la región (uno por línea)"
                 rows={5}
               />
             </div>

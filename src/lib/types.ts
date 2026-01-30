@@ -6,6 +6,7 @@ export interface World {
   lore: {
     estado_mundo: string;
     rumores: string[];
+    eventos: string[];
   };
   area?: Area; // Área calculada a partir de las regiones (pueblos) que contiene
 }
@@ -19,6 +20,7 @@ export interface Pueblo {
   lore: {
     estado_pueblo: string;
     rumores: string[];
+    eventos: string[];
   };
   area?: Area; // Área calculada a partir de las edificaciones que contiene
 }

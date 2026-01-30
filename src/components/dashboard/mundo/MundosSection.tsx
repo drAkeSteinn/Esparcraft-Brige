@@ -22,7 +22,8 @@ export default function MundosSection() {
   const [formData, setFormData] = useState({
     name: '',
     estado_mundo: '',
-    rumores: ''
+    rumores: '',
+    eventos: ''
   });
 
   useEffect(() => {
@@ -72,7 +73,7 @@ export default function MundosSection() {
 
   const handleCreate = () => {
     setEditingWorld(null);
-    setFormData({ name: '', estado_mundo: '', rumores: '' });
+    setFormData({ name: '', estado_mundo: '', rumores: '', eventos: '' });
     setDialogOpen(true);
   };
 
@@ -81,7 +82,8 @@ export default function MundosSection() {
     setFormData({
       name: world.name,
       estado_mundo: world.lore.estado_mundo,
-      rumores: world.lore.rumores.join('\n')
+      rumores: world.lore.rumores.join('\n'),
+      eventos: world.lore.eventos?.join('\n') || ''
     });
     setDialogOpen(true);
   };
@@ -153,7 +155,8 @@ export default function MundosSection() {
         name: formData.name,
         lore: {
           estado_mundo: formData.estado_mundo,
-          rumores: formData.rumores.split('\n').filter(r => r.trim())
+          rumores: formData.rumores.split('\n').filter(r => r.trim()),
+          eventos: formData.eventos.split('\n').filter(e => e.trim())
         }
       };
 
@@ -257,6 +260,19 @@ export default function MundosSection() {
                     </ul>
                   </div>
                 )}
+                {world.lore.eventos && world.lore.eventos.length > 0 && (
+                  <div>
+                    <p className="text-sm font-medium">Eventos:</p>
+                    <ul className="text-sm text-muted-foreground list-disc list-inside">
+                      {world.lore.eventos.slice(0, 3).map((evento, i) => (
+                        <li key={i}>{evento}</li>
+                      ))}
+                      {world.lore.eventos.length > 3 && (
+                        <li className="text-xs">...y {world.lore.eventos.length - 3} más</li>
+                      )}
+                    </ul>
+                  </div>
+                )}
                 {(() => {
                   const regionesEnMundo = pueblos.filter(p => p.worldId === world.id);
                   if (regionesEnMundo.length > 0) {
@@ -349,6 +365,15 @@ export default function MundosSection() {
                 value={formData.rumores}
                 onChange={(e) => setFormData({ ...formData, rumores: e.target.value })}
                 placeholder="Cada rumor en una línea nueva"
+              />
+            </div>
+            <div>
+              <Label htmlFor="eventos">Eventos (uno por línea)</Label>
+              <Textarea
+                id="eventos"
+                value={formData.eventos}
+                onChange={(e) => setFormData({ ...formData, eventos: e.target.value })}
+                placeholder="Cada evento en una línea nueva"
               />
             </div>
           </div>

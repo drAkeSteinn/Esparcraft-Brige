@@ -11,6 +11,10 @@
       "El herrero ha recibido pedidos de armas en grandes cantidades",
       "Los niños hablan de sombras que bailan en el cementerio",
       "El alcalde no ha salido de su casa desde la última luna llena"
+    ],
+    "eventos": [
+      "evento1",
+      "evento2"
     ]
   },
   "id": "PUEBLO_1768819105950",

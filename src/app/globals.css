@@ -279,6 +279,31 @@
   }
 }
 
+/* Custom Scrollbar para cards */
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: #423C2E #100F11;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: #100F11;
+  border: 1px solid #2C2923;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #423C2E;
+  border: 2px solid #2C2923;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #60553A;
+}
+
 /* Override de componentes de shadcn/ui */
 .bg-card {
   background: #100F11 !important;

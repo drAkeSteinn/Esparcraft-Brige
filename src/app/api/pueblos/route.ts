@@ -55,7 +55,8 @@ export async function POST(request: NextRequest) {
       description: body.description,
       lore: {
         estado_pueblo: body.lore.estado_pueblo,
-        rumores: body.lore.rumores || []
+        rumores: body.lore.rumores || [],
+        eventos: body.lore.eventos || []
       }
     };
 
