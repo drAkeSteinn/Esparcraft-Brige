@@ -14,11 +14,11 @@ export function PixelPanel({
   children,
 }: PixelPanelProps) {
   const baseClasses = 'pixel-panel';
-  
+
   const variantClasses = {
     default: '',
     bronze: 'pixel-panel-bronze',
-    gold: '',
+    gold: 'pixel-panel-gold',
   };
 
   const paddingClasses = {

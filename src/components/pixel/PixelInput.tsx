@@ -14,8 +14,8 @@ export function PixelInput({
   id,
   ...props
 }: PixelInputProps) {
-  const baseInputClasses = 'pixel-input bg-background border-2 border-border text-foreground font-vt323 focus:border-primary focus:outline-none';
-  
+  const baseInputClasses = 'pixel-input bg-fantasy-charcoal border-2 border-fantasy-textured text-foreground font-vt323 focus:outline-none resize-none placeholder:text-fantasy-bronze';
+
   const errorClasses = error ? 'border-[#8B3A3A]' : '';
 
   return (

@@ -418,3 +418,24 @@ tr:hover td {
   background: #C89E5B;
   border-color: #F8E097;
 }
+
+/* Pixel Panel Gold variant */
+.pixel-panel-gold {
+  background: linear-gradient(135deg, #83673D 0%, #C89E5B 50%, #83673D 100%);
+  border: 2px solid #F8E097;
+  box-shadow:
+    2px 2px 0px rgba(0, 0, 0, 1),
+    0 0 20px rgba(200, 158, 91, 0.3);
+}
+
+/* Pixel Button Destructive variant */
+.pixel-button-destructive {
+  background: linear-gradient(180deg, #8B3A3A 0%, #602020 100%);
+  border: 2px solid #B84A4A;
+  color: #B8B8B8;
+}
+
+.pixel-button-destructive:hover {
+  background: linear-gradient(180deg, #B84A4A 0%, #8B3A3A 100%);
+}
+

@@ -165,6 +165,25 @@ export interface Jugador {
   clima?: string;
 }
 
+// Session Summary: Resumen de sesión con metadata completa
+export interface SessionSummary {
+  sessionId: string;
+  npcId: string;
+  playerId?: string;
+  playerName?: string;
+  npcName?: string;
+  summary: string;
+  timestamp: string;
+  version: number;
+}
+
+// Session Summary Entry: Entrada en el historial de resúmenes de una sesión
+export interface SessionSummaryEntry {
+  summary: string;
+  timestamp: string;
+  version: number;
+}
+
 export interface Session {
   id: string;
   npcId: string;
@@ -175,6 +194,7 @@ export interface Session {
   messages: ChatMessage[];
   summary?: string;
   lastPrompt?: string;
+  summaryHistory?: SessionSummaryEntry[];  // ← Historial de resúmenes de esta sesión
 }
 
 export type TriggerMode = 'chat' | 'resumen_sesion' | 'resumen_npc' | 'resumen_edificio' | 'resumen_pueblo' | 'resumen_mundo' | 'nuevo_lore';

@@ -1,4 +1,5 @@
 import React from 'react';
+import { Loader2 } from 'lucide-react';
 
 interface PixelButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: 'default' | 'primary' | 'destructive';
@@ -16,28 +17,31 @@ export function PixelButton({
   className = '',
   ...props
 }: PixelButtonProps) {
-  const baseClasses = 'pixel-button font-press-start cursor-pointer transition-all';
-  
+  const baseClasses = 'pixel-button font-press-start uppercase tracking-wider transition-all duration-100';
+
   const variantClasses = {
     default: '',
     primary: 'pixel-button-primary',
-    destructive: 'border-[#8B3A3A] hover:bg-[#8B3A3A]',
+    destructive: 'pixel-button-destructive',
   };
 
   const sizeClasses = {
-    sm: 'px-2 py-1 text-xs',
+    sm: 'px-3 py-1.5 text-xs',
     md: 'px-4 py-2 text-sm',
     lg: 'px-6 py-3 text-base',
   };
 
   return (
     <button
-      className={`${baseClasses} ${variantClasses[variant]} ${sizeClasses[size]} ${className}`}
+      className={`${baseClasses} ${variantClasses[variant]} ${sizeClasses[size]} ${className} ${isLoading || disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
       disabled={disabled || isLoading}
       {...props}
     >
       {isLoading ? (
-        <span className="inline-block animate-pulse">Cargando...</span>
+        <span className="inline-flex items-center gap-2">
+          <Loader2 className="w-4 h-4 animate-spin" />
+          Cargando...
+        </span>
       ) : (
         children
       )}

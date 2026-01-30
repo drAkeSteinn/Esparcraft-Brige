@@ -373,8 +373,23 @@ export async function handleResumenSesionTrigger(payload: ResumenSesionTriggerPa
   // Call LLM
   const summary = await callLLM(messages);
 
-  // Save summary
-  summaryManager.saveSummary(session.id, summary);
+  // ✅ OBTENER METADATA PARA EL RESUMEN
+  const npcName = getCardField(npc?.card, 'name', '');
+  const playerName = session.playerId || session.jugador?.nombre || 'Unknown';
+  const nextVersion = sessionManager.getNextSummaryVersion(session.id);
+
+  // ✅ GUARDAR RESUMEN CON METADATA COMPLETA (Opción 3: Híbrida)
+  summaryManager.saveSummary(
+    session.id,
+    npcid,
+    playerName,
+    npcName,
+    summary,
+    nextVersion
+  );
+
+  // ✅ AGREGAR RESUMEN AL HISTORIAL DE LA SESIÓN
+  sessionManager.addSummaryToHistory(session.id, summary, nextVersion);
 
   // Clear messages from session after summary is generated
   sessionManager.clearMessages(session.id);

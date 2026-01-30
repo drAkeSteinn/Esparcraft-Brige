@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { World, Pueblo, Edificio, NPC, Session, SillyTavernCard, PlaceType, PointOfInterest, GrimorioCard, GrimorioCardType, GrimorioCardCategory } from './types';
+import { World, Pueblo, Edificio, NPC, Session, SillyTavernCard, PlaceType, PointOfInterest, GrimorioCard, GrimorioCardType, GrimorioCardCategory, SessionSummary, SessionSummaryEntry } from './types';
 
 const DATA_DIR = path.join(process.cwd(), 'data-esparcraft');
 
@@ -458,6 +458,45 @@ export const sessionManager = {
     };
     writeJSON(this.getFilePath(id), updated);
     return updated;
+  },
+
+  /**
+   * Agrega un resumen al historial de resúmenes de la sesión
+   */
+  addSummaryToHistory(id: string, summary: string, version: number): Session | null {
+    const existing = this.getById(id);
+    if (!existing) return null;
+
+    const summaryEntry: SessionSummaryEntry = {
+      summary,
+      timestamp: new Date().toISOString(),
+      version
+    };
+
+    const summaryHistory = existing.summaryHistory || [];
+    const updated = {
+      ...existing,
+      summaryHistory: [...summaryHistory, summaryEntry],
+      lastActivity: new Date().toISOString()
+    };
+    writeJSON(this.getFilePath(id), updated);
+    return updated;
+  },
+
+  /**
+   * Obtiene el historial de resúmenes de una sesión
+   */
+  getSummaryHistory(id: string): SessionSummaryEntry[] {
+    const session = this.getById(id);
+    return session?.summaryHistory || [];
+  },
+
+  /**
+   * Obtiene la siguiente versión de resumen para una sesión
+   */
+  getNextSummaryVersion(id: string): number {
+    const history = this.getSummaryHistory(id);
+    return history.length + 1;
   }
 };
 
@@ -483,13 +522,146 @@ export const npcStateManager = {
 export const summaryManager = {
   getFilePath: (sessionId: string) => path.join(DATA_DIR, 'sessions', 'summaries', `${sessionId}.json`),
 
+  /**
+   * Obtiene solo el texto del resumen (mantiene compatibilidad con código existente)
+   */
   getSummary(sessionId: string): string | null {
-    const data = readJSON<{ summary: string }>(this.getFilePath(sessionId));
-    return data?.summary || null;
+    // Primero intentar leer como SessionSummary (nuevo formato)
+    const newData = readJSON<SessionSummary>(this.getFilePath(sessionId));
+    if (newData?.summary) {
+      return newData.summary;
+    }
+
+    // Si falla, intentar leer como formato antiguo
+    const oldData = readJSON<{ summary: string; timestamp: string }>(this.getFilePath(sessionId));
+    return oldData?.summary || null;
   },
 
-  saveSummary(sessionId: string, summary: string): void {
-    writeJSON(this.getFilePath(sessionId), { summary, timestamp: new Date().toISOString() });
+  /**
+   * Obtiene los datos completos del resumen con metadata
+   * Soporta formato antiguo (migración automática) y nuevo
+   */
+  getSummaryData(sessionId: string): SessionSummary | null {
+    const filePath = this.getFilePath(sessionId);
+
+    // Primero intentar leer como SessionSummary (nuevo formato)
+    const newData = readJSON<SessionSummary>(filePath);
+    if (newData && newData.sessionId) {
+      // Es el nuevo formato con todos los campos
+      return newData;
+    }
+
+    // Si no tiene sessionId, puede ser formato antiguo o corrupto
+    if (newData && newData.summary) {
+      // Migración automática: formato antiguo
+      // No tenemos sessionId, npcId, etc., pero devolvemos lo que tenemos
+      // El código que lo usa debe manejar campos opcionales nulos
+      return {
+        sessionId: sessionId,
+        npcId: '',  // No disponible en formato antiguo
+        playerId: undefined,
+        playerName: undefined,
+        npcName: undefined,
+        summary: newData.summary,
+        timestamp: newData.timestamp || new Date().toISOString(),
+        version: 1
+      };
+    }
+
+    return null;
+  },
+
+  /**
+   * Guarda un resumen con metadata completa (npcId, playerId, playerName, npcName, version)
+   */
+  saveSummary(
+    sessionId: string,
+    npcId: string,
+    playerName: string,
+    npcName: string,
+    summary: string,
+    version?: number
+  ): void {
+    ensureDir(path.join(DATA_DIR, 'sessions', 'summaries'));
+    const summaryData: SessionSummary = {
+      sessionId,
+      npcId,
+      playerName,
+      npcName,
+      summary,
+      timestamp: new Date().toISOString(),
+      version: version || 1
+    };
+    writeJSON(this.getFilePath(sessionId), summaryData);
+  },
+
+  /**
+   * Obtiene todos los resúmenes de un NPC específico
+   * Soporta formato antiguo y nuevo
+   */
+  getSummariesByNPC(npcId: string): SessionSummary[] {
+    const summaryDir = path.join(DATA_DIR, 'sessions', 'summaries');
+    ensureDir(summaryDir);
+    const files = listFiles(summaryDir);
+
+    return files
+      .map(f => {
+        const filePath = path.join(summaryDir, f);
+        // Primero intentar leer como nuevo formato
+        const newData = readJSON<SessionSummary>(filePath);
+
+        if (newData && newData.sessionId) {
+          // Nuevo formato - filtrar por npcId
+          if (newData.npcId === npcId) {
+            return newData;
+          }
+          return null;
+        }
+
+        // Formato antiguo - no tiene npcId, devolver null (no se puede filtrar)
+        return null;
+      })
+      .filter((s): s is SessionSummary => s !== null);
+  },
+
+  /**
+   * Obtiene todos los resúmenes del sistema
+   * Soporta formato antiguo y nuevo
+   */
+  getAllSummaries(): SessionSummary[] {
+    const summaryDir = path.join(DATA_DIR, 'sessions', 'summaries');
+    ensureDir(summaryDir);
+    const files = listFiles(summaryDir);
+
+    return files
+      .map(f => {
+        const filePath = path.join(summaryDir, f);
+        // Primero intentar leer como nuevo formato
+        const newData = readJSON<SessionSummary>(filePath);
+
+        if (newData && newData.sessionId) {
+          // Nuevo formato con todos los campos
+          return newData;
+        }
+
+        // Formato antiguo - migrar a nuevo formato
+        if (newData && newData.summary) {
+          const sessionId = f.replace('.json', '');
+          return {
+            sessionId: sessionId,
+            npcId: '',  // No disponible en formato antiguo
+            playerId: undefined,
+            playerName: undefined,
+            npcName: undefined,
+            summary: newData.summary,
+            timestamp: newData.timestamp || new Date().toISOString(),
+            version: 1
+          };
+        }
+
+        return null;
+      })
+      .filter((s): s is SessionSummary => s !== null);
   }
 };
 
