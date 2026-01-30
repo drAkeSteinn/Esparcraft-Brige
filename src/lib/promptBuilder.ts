@@ -166,25 +166,25 @@ export function buildCompleteChatPrompt(
   // 2. Main Prompt (DEL NPC)
   const mainPrompt = getCardField(npc?.card, 'system_prompt', '');
   if (mainPrompt) {
-    prompt += `=== MAIN PROMPT ===\n{{npc.system_prompt}}\n\n`;
+    prompt += `{{npc.system_prompt}}\n\n`;
   }
 
   // 3. Descripción (DEL NPC)
   const description = getCardField(npc?.card, 'description', '');
   if (description) {
-    prompt += `=== DESCRIPCIÓN ===\n{{npc.description}}\n\n`;
+    prompt += `{{npc.description}}\n\n`;
   }
 
   // 4. Personalidad (DEL NPC)
   const personality = getCardField(npc?.card, 'personality', '');
   if (personality) {
-    prompt += `=== PERSONALIDAD ===\n{{npc.personality}}\n\n`;
+    prompt += `{{npc.personality}}\n\n`;
   }
 
   // 5. Scenario (DEL NPC)
   const scenario = getCardField(npc?.card, 'scenario', '');
   if (scenario) {
-    prompt += `=== ESCENARIO ===\n{{npc.scenario}}\n\n`;
+    prompt += `{{npc.scenario}}\n\n`;
   }
 
   // 6. Chat Examples (DEL NPC)
@@ -194,7 +194,6 @@ export function buildCompleteChatPrompt(
   }
 
   // 7. Last User Message (se eliminó la sección Template del Usuario, ahora se usan variables de Grimorio directamente)
-  prompt += `=== LAST USER MESSAGE ===\n`;
 
   // 7.1. Último resumen (si existe)
   if (options?.lastSummary && options.lastSummary.trim()) {
@@ -209,7 +208,7 @@ export function buildCompleteChatPrompt(
   // 8. POST-HISTORY (DEL NPC)
   const postHistory = getCardField(npc?.card, 'post_history_instructions', '');
   if (postHistory) {
-    prompt += `=== INSTRUCCIONES POST-HISTORIAL ===\n{{npc.post_history_instructions}}\n\n`;
+    prompt += `{{npc.post_history_instructions}}\n\n`;
   }
 
   // Construir contexto de variables para reemplazo
