@@ -629,16 +629,24 @@ export function buildCompleteSessionSummaryPrompt(
 export function buildNPCSummaryPrompt(
   npc: NPC,
   sessionSummaries: string[],
-  npcMemory?: Record<string, any>
+  npcMemory?: Record<string, any>,
+  options?: {
+    systemPrompt?: string; // System prompt personalizado (puede incluir keys de plantilla como {{npc.name}}, {{npc.personality}}, etc.)
+    allSummaries?: string; // Lista formateada de resúmenes de sesiones del NPC
+  }
 ): ChatMessage[] {
-  const messages: ChatMessage[] = [
-    {
-      role: 'system',
-      content: `Eres un asistente experto en consolidación de memoria narrativa. Tu tarea es crear una memoria consolidada de un NPC.
+  // Usar system prompt personalizado o el default
+  // El system prompt NO debe incluir headers, solo el contenido
+  // El usuario puede usar keys de plantilla como {{npc.name}}, {{npc.personality}}, {{npc.scenario}}, etc.
+  const customSystemPrompt = options?.systemPrompt;
+
+  const systemPromptContent = customSystemPrompt && customSystemPrompt.trim()
+    ? customSystemPrompt
+    : `Eres un asistente experto en consolidación de memoria narrativa. Tu tarea es crear una memoria consolidada del NPC {{npc.name}}.
 
 INSTRUCCIONES:
 - Crea un resumen que capture la esencia y evolución del personaje
-- Incluye eventos importantes que han moldeado al NPC
+- Incluye eventos importantes que hayan moldeado al NPC
 - Identifica relaciones y conexiones significativas
 - Mantén la coherencia con la personalidad del NPC
 - El resumen debe servir como memoria a largo plazo
@@ -647,24 +655,24 @@ Formato esperado:
 RESUMEN_CONSOLIDADO: [Resumen completo del personaje y su evolución]
 EVENTOS_IMPORTANTES: [Lista de eventos importantes]
 RELACIONES: [Relaciones importantes con otros personajes o jugadores]
-PERSPECTIVA_ACTUAL: [Cómo el NPC ve el mundo actualmente]`,
+PERSPECTIVA_ACTUAL: [Cómo el NPC ve el mundo actualmente]`;
+
+  const messages: ChatMessage[] = [
+    {
+      role: 'system',
+      content: systemPromptContent,
       timestamp: new Date().toISOString()
     }
   ];
 
-  let prompt = `Personaje: ${getCardField(npc.card, 'name', 'Unknown')}\n`;
-  prompt += `Personalidad: ${getCardField(npc.card, 'personality', 'No especificada')}\n`;
-  prompt += `Escenario: ${getCardField(npc.card, 'scenario', 'No especificado')}\n\n`;
+  // Solo incluir las memorias de los aventureros
+  let prompt = '';
 
-  if (npcMemory && npcMemory.consolidatedSummary) {
-    prompt += `Memoria anterior: ${npcMemory.consolidatedSummary}\n`;
+  if (options?.allSummaries && options.allSummaries.trim()) {
+    prompt = options.allSummaries;
+  } else if (sessionSummaries.length > 0) {
+    prompt = sessionSummaries.join('\n');
   }
-
-  if (sessionSummaries.length > 0) {
-    prompt += `Resúmenes de sesiones recientes:\n${sessionSummaries.map((s, i) => `${i + 1}. ${s}`).join('\n')}\n`;
-  }
-
-  prompt += `\nGenera la memoria consolidada actualizada:`;
 
   messages.push({
     role: 'user',

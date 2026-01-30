@@ -45,7 +45,7 @@ const PRIMARY_VARIABLE_PATTERNS = [
   // Variables abreviadas comunes
   /^(nombre|raza|nivel|salud|reputacion|almakos|deuda|piedras|hora|clima)$/,
   // Aliases específicos
-  /^(playername|npcid|npc_name|npc_description|player_race|player_raza|player_level|player_nivel|player_health|player_salud|player_reputation|player_reputacion|player_time|player_hora|player_weather|player_clima)$/,
+  /^(playername|npcid|npc_name|npc_description|npc_notes|player_race|player_raza|player_level|player_nivel|player_health|player_salud|player_reputation|player_reputacion|player_time|player_hora|player_weather|player_clima)$/,
   // Variables simples (sin punto) - variables abreviadas del sistema
   /^(npc|mundo|pueblo|edificio|session|playername|mensaje)$/,
   // Variables de template (en minúsculas porque identifyVariableType normaliza a minúsculas)

@@ -112,6 +112,8 @@ export function replaceVariables(text: string, context: VariableContext): string
           value = context.npc?.card?.data?.mes_example || context.npc?.card?.mes_example || '';
         } else if (npcKey === 'post_history_instructions') {
           value = context.npc?.card?.data?.post_history_instructions || context.npc?.card?.post_history_instructions || '';
+        } else if (npcKey === 'notes' || npcKey === 'creator_notes' || npcKey === 'notas_creador') {
+          value = context.npc?.card?.data?.creator_notes || context.npc?.card?.creator_notes || '';
         }
 
         // Importante: Reemplazar variables recursivas dentro del valor del NPC
@@ -132,6 +134,9 @@ export function replaceVariables(text: string, context: VariableContext): string
       }
       if (key === 'npc_personality' || key === 'npc.personality') {
         return context.npc?.card?.data?.personality || '';
+      }
+      if (key === 'npc_notes' || key === 'npc.notes' || key === 'notas_creador' || key === 'creator_notes') {
+        return context.npc?.card?.data?.creator_notes || context.npc?.card?.creator_notes || '';
       }
 
       // Historial del NPC (session history)

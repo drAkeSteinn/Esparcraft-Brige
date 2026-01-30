@@ -13,7 +13,8 @@ import {
   AnyTriggerPayload,
   ChatMessage,
   getCardField,
-  Jugador
+  Jugador,
+  SessionSummary
 } from './types';
 import {
   npcManager,
@@ -25,7 +26,8 @@ import {
   summaryManager,
   edificioStateManager,
   puebloStateManager,
-  worldStateManager
+  worldStateManager,
+  grimorioManager
 } from './fileManager';
 import {
   buildChatMessagesWithOptions,
@@ -41,6 +43,7 @@ import {
 import { EmbeddingTriggers } from './embedding-triggers';
 import { replaceVariables, replaceVariablesWithCache, VariableContext } from './utils';
 import { extractPromptSections } from './promptUtils';
+import { resolveAllVariables } from './grimorioUtils';
 
 // LLM Configuration
 const LLM_API_URL = process.env.LLM_API_URL || 'http://127.0.0.1:5000/v1/chat/completions';
@@ -401,7 +404,7 @@ export async function handleResumenSesionTrigger(payload: ResumenSesionTriggerPa
 
 // Resumen NPC trigger handler
 export async function handleResumenNPCTrigger(payload: ResumenNPCTriggerPayload): Promise<{ success: boolean; memory: Record<string, any> }> {
-  const { npcid } = payload;
+  const { npcid, systemPrompt: payloadSystemPrompt, allSummaries: payloadAllSummaries } = payload;
 
   // Get NPC
   const npc = npcManager.getById(npcid);
@@ -409,35 +412,139 @@ export async function handleResumenNPCTrigger(payload: ResumenNPCTriggerPayload)
     throw new Error(`NPC with id ${npcid} not found`);
   }
 
-  // Get all sessions for this NPC
-  const sessions = sessionManager.getByNPCId(npcid);
+  // ✅ LEER CONFIGURACIÓN DE SYSTEM PROMPT DEL ARCHIVO ESPECÍFICO
+  let configSystemPrompt = payloadSystemPrompt;
 
-  // Get summaries for all sessions
-  const summaries = sessions
-    .map(s => summaryManager.getSummary(s.id))
-    .filter((s): s is string => s !== null);
+  // Si no se proporciona systemPrompt en el payload, cargar del archivo de configuración
+  if (!configSystemPrompt) {
+    try {
+      const fs = await import('fs/promises');
+      const path = await import('path');
+      const configPath = path.join(process.cwd(), 'db', 'resumen-npc-trigger-config.json');
+
+      try {
+        const configContent = await fs.readFile(configPath, 'utf-8');
+        const config = JSON.parse(configContent);
+        configSystemPrompt = config.systemPrompt || '';
+        console.log('[handleResumenNPCTrigger] System Prompt cargado del archivo de configuración');
+      } catch (error) {
+        // El archivo no existe o hay error al leerlo, usar string vacío
+        console.log('[handleResumenNPCTrigger] No hay configuración de System Prompt guardada, usando default');
+        configSystemPrompt = '';
+      }
+    } catch (error) {
+      console.error('[handleResumenNPCTrigger] Error cargando configuración de System Prompt:', error);
+      configSystemPrompt = '';
+    }
+  }
+
+  // ✅ OBTENER RESÚMENES DE SESIONES DEL NPC CON METADATA
+  const npcSummaries = summaryManager.getSummariesByNPC(npcid);
+  console.log(`[handleResumenNPCTrigger] Obtenidos ${npcSummaries.length} resúmenes para el NPC ${npcid}`);
+
+  // ✅ FORMATEAR LA LISTA DE RESÚMENES CON EL NUEVO FORMATO
+  let allSummariesFormatted = payloadAllSummaries;
+
+  if (!allSummariesFormatted && npcSummaries.length > 0) {
+    // Agrupar resúmenes por nombre de jugador
+    const summariesByPlayer = npcSummaries.reduce((acc, s) => {
+      const playerName = s.playerName || 'Unknown';
+      if (!acc[playerName]) {
+        acc[playerName] = [];
+      }
+      acc[playerName].push(s);
+      return acc;
+    }, {} as Record<string, SessionSummary[]>);
+
+    // Construir el formato especificado
+    const memoriesSections: string[] = [];
+    for (const [playerName, summaries] of Object.entries(summariesByPlayer)) {
+      memoriesSections.push(`Memoria de ${playerName}`);
+      summaries.forEach(s => {
+        memoriesSections.push(s.summary);
+      });
+    }
+
+    allSummariesFormatted = `***
+MEMORIAS DE LOS AVENTUREROS
+${memoriesSections.join('\n')}
+***`;
+    console.log('[handleResumenNPCTrigger] Resúmenes formateados correctamente');
+  }
 
   // Get existing memory
   const existingMemory = npcStateManager.getMemory(npcid) || {};
 
-  // Build prompt
-  const messages = buildNPCSummaryPrompt(npc, summaries, existingMemory);
+  // ✅ CONSTRUIR EL SYSTEM PROMPT PARA RESUMEN NPC (SIN HEADERS)
+  // El system prompt puede incluir keys de plantilla como {{npc.name}}, {{npc.personality}}, etc.
+  const npcName = getCardField(npc?.card, 'name', '');
+
+  // Construir contexto de variables para reemplazo
+  const varContext: VariableContext = {
+    npc,
+    world,
+    pueblo,
+    edificio,
+    char: npcName
+  };
+
+  // Build prompt con system prompt personalizado y resúmenes formateados
+  let messages = buildNPCSummaryPrompt(
+    npc,
+    [], // No necesitamos summaries antiguos como array, usamos allSummaries
+    existingMemory,
+    {
+      systemPrompt: configSystemPrompt,
+      allSummaries: allSummariesFormatted
+    }
+  );
+
+  // ✅ REEMPLAZAR VARIABLES PRIMARIAS Y PLANTILLAS DE GRIMORIO EN EL SYSTEM PROMPT
+  const grimorioCards = grimorioManager.getAll();
+  const systemPromptRaw = messages[0]?.content || '';
+  const { result: systemPromptResolved } = resolveAllVariables(systemPromptRaw, varContext, grimorioCards);
+
+  // Actualizar el mensaje system con las variables reemplazadas
+  messages = [
+    {
+      role: 'system',
+      content: systemPromptResolved,
+      timestamp: new Date().toISOString()
+    },
+    ...messages.slice(1) // Mantener el mensaje user con las memorias
+  ];
+
+  console.log('[handleResumenNPCTrigger] System Prompt procesado con variables y plantillas');
 
   // Call LLM
   const response = await callLLM(messages);
 
-  // Parse response and save memory
-  const memory: Record<string, any> = {
-    consolidatedSummary: response,
-    lastUpdated: new Date().toISOString(),
-    sessionCount: sessions.length
-  };
+  // ✅ GUARDAR RESUMEN EN creator_notes DE LA CARD DEL NPC
+  // Reemplazar siempre el contenido de creator_notes con el resumen generado
+  if (npc?.card) {
+    const updatedCard: any = {
+      ...npc.card
+    };
 
-  npcStateManager.saveMemory(npcid, memory);
+    // Actualizar creator_notes en data si existe data, sino crearlo
+    if (updatedCard.data) {
+      updatedCard.data = {
+        ...updatedCard.data,
+        creator_notes: response
+      };
+    } else {
+      updatedCard.data = {
+        creator_notes: response
+      };
+    }
+
+    npcManager.update(npcid, { card: updatedCard });
+    console.log('[handleResumenNPCTrigger] Resumen guardado en creator_notes de la Card del NPC');
+  }
 
   return {
     success: true,
-    memory
+    summary: response
   };
 }
 
@@ -860,31 +967,137 @@ export async function previewTriggerPrompt(payload: AnyTriggerPayload): Promise<
 
       const systemPrompt = messages[0]?.content || '';
 
+      const lastPrompt = messages.map(m => `[${m.role}]\n${m.content}`).join('\n\n');
+
       return {
         systemPrompt,
         messages,
         estimatedTokens: 0,
-        sections: extractPromptSections(systemPrompt)
+        lastPrompt,
+        sections: extractPromptSections(lastPrompt)
       };
     }
 
     case 'resumen_npc': {
       const npcPayload = payload as ResumenNPCTriggerPayload;
       const npc = npcManager.getById(npcPayload.npcid);
-      const sessions = sessionManager.getByNPCId(npcPayload.npcid);
-      const summaries = sessions
-        .map(s => summaryManager.getSummary(s.id))
-        .filter((s): s is string => s !== null);
-      const existingMemory = npcStateManager.getMemory(npcPayload.npcid);
+      if (!npc) {
+        throw new Error(`NPC with id ${npcPayload.npcid} not found`);
+      }
 
-      const messages = buildNPCSummaryPrompt(npc, summaries, existingMemory);
-      const systemPrompt = messages[0]?.content || '';
+      // Get context (world, pueblo, edificio)
+      const world = worldManager.getById(npc.location.worldId);
+      const pueblo = npc.location.puebloId ? puebloManager.getById(npc.location.puebloId) : undefined;
+      const edificio = npc.location.edificioId ? edificioManager.getById(npc.location.edificioId) : undefined;
+
+      // ✅ LEER CONFIGURACIÓN DE SYSTEM PROMPT DEL ARCHIVO ESPECÍFICO
+      let configSystemPrompt = npcPayload.systemPrompt;
+
+      // Si no se proporciona systemPrompt en el payload, cargar del archivo de configuración
+      if (!configSystemPrompt) {
+        try {
+          const fs = await import('fs/promises');
+          const path = await import('path');
+          const configPath = path.join(process.cwd(), 'db', 'resumen-npc-trigger-config.json');
+
+          try {
+            const configContent = await fs.readFile(configPath, 'utf-8');
+            const config = JSON.parse(configContent);
+            configSystemPrompt = config.systemPrompt || '';
+            console.log('[previewTriggerPrompt] System Prompt cargado del archivo de configuración');
+          } catch (error) {
+            console.log('[previewTriggerPrompt] No hay configuración de System Prompt guardada, usando default');
+            configSystemPrompt = '';
+          }
+        } catch (error) {
+          console.error('[previewTriggerPrompt] Error cargando configuración de System Prompt:', error);
+          configSystemPrompt = '';
+        }
+      }
+
+      // ✅ OBTENER RESÚMENES DE SESIONES DEL NPC CON METADATA
+      const npcSummaries = summaryManager.getSummariesByNPC(npcPayload.npcid);
+
+      // ✅ FORMATEAR LA LISTA DE RESÚMENES CON EL NUEVO FORMATO
+      let allSummariesFormatted = npcPayload.allSummaries;
+
+      if (!allSummariesFormatted && npcSummaries.length > 0) {
+        // Agrupar resúmenes por nombre de jugador
+        const summariesByPlayer = npcSummaries.reduce((acc, s) => {
+          const playerName = s.playerName || 'Unknown';
+          if (!acc[playerName]) {
+            acc[playerName] = [];
+          }
+          acc[playerName].push(s);
+          return acc;
+        }, {} as Record<string, SessionSummary[]>);
+
+        // Construir el formato especificado
+        const memoriesSections: string[] = [];
+        for (const [playerName, summaries] of Object.entries(summariesByPlayer)) {
+          memoriesSections.push(`Memoria de ${playerName}`);
+          summaries.forEach(s => {
+            memoriesSections.push(s.summary);
+          });
+        }
+
+        allSummariesFormatted = `***
+MEMORIAS DE LOS AVENTUREROS
+${memoriesSections.join('\n')}
+***`;
+      }
+
+      const existingMemory = npcStateManager.getMemory(npcPayload.npcid) || {};
+
+      // ✅ CONSTRUIR EL SYSTEM PROMPT PARA RESUMEN NPC (SIN HEADERS)
+      // El system prompt puede incluir keys de plantilla como {{npc.name}}, {{npc.personality}}, etc.
+      const npcName = getCardField(npc?.card, 'name', '');
+
+      // Construir contexto de variables para reemplazo
+      const varContext: VariableContext = {
+        npc,
+        world,
+        pueblo,
+        edificio,
+        char: npcName
+      };
+
+      // Build prompt con system prompt personalizado y resúmenes formateados
+      let messages = buildNPCSummaryPrompt(
+        npc,
+        [], // No necesitamos summaries antiguos como array, usamos allSummaries
+        existingMemory,
+        {
+          systemPrompt: configSystemPrompt,
+          allSummaries: allSummariesFormatted
+        }
+      );
+
+      // ✅ REEMPLAZAR VARIABLES PRIMARIAS Y PLANTILLAS DE GRIMORIO EN EL SYSTEM PROMPT
+      const grimorioCards = grimorioManager.getAll();
+      const systemPromptRaw = messages[0]?.content || '';
+      const { result: systemPromptResolved } = resolveAllVariables(systemPromptRaw, varContext, grimorioCards);
+
+      // Actualizar el mensaje system con las variables reemplazadas
+      messages = [
+        {
+          role: 'system',
+          content: systemPromptResolved,
+          timestamp: new Date().toISOString()
+        },
+        ...messages.slice(1) // Mantener el mensaje user con las memorias
+      ];
+
+      console.log('[previewTriggerPrompt] System Prompt procesado con variables y plantillas');
+
+      const lastPrompt = messages.map(m => `[${m.role}]\n${m.content}`).join('\n\n');
 
       return {
-        systemPrompt,
+        systemPrompt: systemPromptResolved,
         messages,
         estimatedTokens: 0,
-        sections: extractPromptSections(systemPrompt)
+        lastPrompt,
+        sections: extractPromptSections(lastPrompt)
       };
     }
 
@@ -912,11 +1125,14 @@ export async function previewTriggerPrompt(payload: AnyTriggerPayload): Promise<
       });
       const systemPrompt = messages[0]?.content || '';
 
+      const lastPrompt = messages.map(m => `[${m.role}]\n${m.content}`).join('\n\n');
+
       return {
         systemPrompt,
         messages,
         estimatedTokens: 0,
-        sections: extractPromptSections(systemPrompt)
+        lastPrompt,
+        sections: extractPromptSections(lastPrompt)
       };
     }
 
@@ -941,11 +1157,14 @@ export async function previewTriggerPrompt(payload: AnyTriggerPayload): Promise<
       const messages = buildEdificioSummaryPrompt(edificio, npcSummaries, existingMemory);
       const systemPrompt = messages[0]?.content || '';
 
+      const lastPrompt = messages.map(m => `[${m.role}]\n${m.content}`).join('\n\n');
+
       return {
         systemPrompt,
         messages,
         estimatedTokens: 0,
-        sections: extractPromptSections(systemPrompt)
+        lastPrompt,
+        sections: extractPromptSections(lastPrompt)
       };
     }
 
@@ -970,11 +1189,14 @@ export async function previewTriggerPrompt(payload: AnyTriggerPayload): Promise<
       const messages = buildPuebloSummaryPrompt(pueblo, edificioSummaries, existingMemory);
       const systemPrompt = messages[0]?.content || '';
 
+      const lastPrompt = messages.map(m => `[${m.role}]\n${m.content}`).join('\n\n');
+
       return {
         systemPrompt,
         messages,
         estimatedTokens: 0,
-        sections: extractPromptSections(systemPrompt)
+        lastPrompt,
+        sections: extractPromptSections(lastPrompt)
       };
     }
 
@@ -999,11 +1221,14 @@ export async function previewTriggerPrompt(payload: AnyTriggerPayload): Promise<
       const messages = buildWorldSummaryPrompt(world, puebloSummaries, existingMemory);
       const systemPrompt = messages[0]?.content || '';
 
+      const lastPrompt = messages.map(m => `[${m.role}]\n${m.content}`).join('\n\n');
+
       return {
         systemPrompt,
         messages,
         estimatedTokens: 0,
-        sections: extractPromptSections(systemPrompt)
+        lastPrompt,
+        sections: extractPromptSections(lastPrompt)
       };
     }
 

@@ -210,18 +210,39 @@ export default function RouterTab() {
     const loadNPCSessionSummaries = async () => {
       if (resumenNPCForm.npcid) {
         try {
-          const response = await fetch(`/api/npcs/${resumenNPCForm.npcid}/session-summaries`);
+          // ✅ Usar endpoint correcto que incluye playerName
+          const response = await fetch(`/api/npcs/${resumenNPCForm.npcid}/summaries`);
           const result = await response.json();
-          if (result.success && result.data.sessions.length > 0) {
-            // Guardar las sesiones con resúmenes
-            setNpcSessionSummaries(result.data.sessions);
 
-            // Construir string con todos los resúmenes numerados
-            const summariesText = result.data.sessions
-              .map((s: any, index: number) =>
-                `=== Sesión ${index + 1} (${s.sessionId}) ===\n${s.summary}`
-              )
-              .join('\n\n');
+          if (result.success && result.data.summaries.length > 0) {
+            // Guardar los resúmenes con metadata completa
+            setNpcSessionSummaries(result.data.summaries);
+
+            // ✅ Formatear los resúmenes con el nuevo formato especificado
+            // Agrupar resúmenes por nombre de jugador
+            const summariesByPlayer = result.data.summaries.reduce((acc: Record<string, any[]>, s: any) => {
+              const playerName = s.playerName || 'Unknown';
+              if (!acc[playerName]) {
+                acc[playerName] = [];
+              }
+              acc[playerName].push(s);
+              return acc;
+            }, {});
+
+            // Construir el formato especificado
+            const memoriesSections: string[] = [];
+            for (const [playerName, summaries] of Object.entries(summariesByPlayer)) {
+              memoriesSections.push(`Memoria de ${playerName}`);
+              summaries.forEach((s: any) => {
+                memoriesSections.push(s.summary);
+              });
+            }
+
+            const summariesText = `***
+MEMORIAS DE LOS AVENTUREROS
+${memoriesSections.join('\n')}
+***`;
+
             setResumenNPCForm(prev => ({
               ...prev,
               allSummaries: summariesText
@@ -621,7 +642,7 @@ export default function RouterTab() {
         clearTimeout(resumenNPCTimeoutRef.current);
       }
     };
-  }, [resumenNPCForm.npcid, resumenNPCForm.allSummaries]);
+  }, [resumenNPCForm.npcid, resumenNPCForm.allSummaries, resumenNPCForm.systemPrompt]);
 
   // Debounced preview for resumen edificio trigger
   useEffect(() => {
@@ -1074,7 +1095,9 @@ export default function RouterTab() {
 
   const buildResumenNPCPayload = () => {
     return {
+      mode: 'resumen_npc',
       npcid: resumenNPCForm.npcid,
+      systemPrompt: resumenNPCForm.systemPrompt,
       allSummaries: resumenNPCForm.allSummaries
     };
   };
@@ -1163,31 +1186,31 @@ export default function RouterTab() {
   };
 
   // Computed values for UI
-  const chatPrompt = chatPreviewData?.text || '';
+  const chatPrompt = chatPreviewData?.lastPrompt || '';
   const chatPromptSections = chatPreviewData?.sections || [];
   const chatPayload = buildChatPayload();
 
-  const resumenSesionPrompt = resumenSesionPreviewData?.text || '';
+  const resumenSesionPrompt = resumenSesionPreviewData?.lastPrompt || '';
   const resumenSesionSections = resumenSesionPreviewData?.sections || [];
   const resumenSesionPayload = buildResumenSesionPayload();
 
-  const resumenNPCPrompt = resumenNPCPreviewData?.text || '';
+  const resumenNPCPrompt = resumenNPCPreviewData?.lastPrompt || '';
   const resumenNPCSections = resumenNPCPreviewData?.sections || [];
   const resumenNPCPayload = buildResumenNPCPayload();
 
-  const resumenEdificioPrompt = resumenEdificioPreviewData?.text || '';
+  const resumenEdificioPrompt = resumenEdificioPreviewData?.lastPrompt || '';
   const resumenEdificioSections = resumenEdificioPreviewData?.sections || [];
   const resumenEdificioPayload = buildResumenEdificioPayload();
 
-  const resumenPuebloPrompt = resumenPuebloPreviewData?.text || '';
+  const resumenPuebloPrompt = resumenPuebloPreviewData?.lastPrompt || '';
   const resumenPuebloSections = resumenPuebloPreviewData?.sections || [];
   const resumenPuebloPayload = buildResumenPuebloPayload();
 
-  const resumenMundoPrompt = resumenMundoPreviewData?.text || '';
+  const resumenMundoPrompt = resumenMundoPreviewData?.lastPrompt || '';
   const resumenMundoSections = resumenMundoPreviewData?.sections || [];
   const resumenMundoPayload = buildResumenMundoPayload();
 
-  const nuevoLorePrompt = nuevoLorePreviewData?.text || '';
+  const nuevoLorePrompt = nuevoLorePreviewData?.lastPrompt || '';
   const nuevoLoreSections = nuevoLorePreviewData?.sections || [];
   const nuevoLorePayload = buildNuevoLorePayload();
 
@@ -2085,11 +2108,11 @@ export default function RouterTab() {
                           <Loader2 className="h-8 w-8 animate-spin mx-auto mb-2" />
                           <p className="text-muted-foreground">Cargando preview...</p>
                         </div>
-                      ) : resumenNPCSections.length === 0 ? (
+                      ) : resumenNPCSections.length === 0 && !resumenNPCPrompt ? (
                         <div className="text-center text-muted-foreground py-8">
                           Selecciona un NPC y completa los campos para ver el prompt
                         </div>
-                      ) : (
+                      ) : resumenNPCSections.length > 0 ? (
                         resumenNPCSections.map((section, index) => (
                           <div key={index} className={`rounded-lg border ${section.bgColor}`}>
                             <div className="border-b border-black/10 dark:border-white/10 bg-white/50 dark:bg-black/20 px-3 py-2">
@@ -2102,10 +2125,21 @@ export default function RouterTab() {
                             </pre>
                           </div>
                         ))
+                      ) : (
+                        <div className="rounded-lg border bg-white/50 dark:bg-black/20">
+                          <div className="border-b border-black/10 dark:border-white/10 bg-white/50 dark:bg-black/20 px-3 py-2">
+                            <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">
+                              Prompt Completo
+                            </span>
+                          </div>
+                          <pre className="text-sm p-4 whitespace-pre-wrap overflow-x-auto">
+                            {resumenNPCPrompt}
+                          </pre>
+                        </div>
                       )}
                     </div>
                   </ScrollArea>
-                  {resumenNPCSections.length > 0 && (
+                  {(resumenNPCSections.length > 0 || resumenNPCPrompt) && (
                     <div className="mt-4 flex gap-2">
                       <Button
                         variant="outline"

@@ -33,7 +33,13 @@ export function extractPromptSections(prompt: string): Array<{
     'CONTEXTO': 'bg-orange-50 dark:bg-orange-950',
     'RESUMENES': 'bg-yellow-50 dark:bg-yellow-950',
     'NOMBRE': 'bg-blue-50 dark:bg-blue-950',
-    'SISTEMA': 'bg-indigo-50 dark:bg-indigo-950'
+    'SISTEMA': 'bg-indigo-50 dark:bg-indigo-950',
+    'SYSTEM PROMPT': 'bg-slate-700 dark:bg-slate-800',
+    'DATOS DEL PERSONAJE': 'bg-emerald-50 dark:bg-emerald-950',
+    'MEMORIA ANTERIOR': 'bg-orange-50 dark:bg-orange-950',
+    'MEMORIAS DE LOS AVENTUREROS': 'bg-purple-50 dark:bg-purple-950',
+    'INSTRUCCIÓN': 'bg-pink-50 dark:bg-pink-950',
+    'INSTRUCCION': 'bg-pink-50 dark:bg-pink-950'
   };
 
   // ✅ Extraer la primera sección (instrucción inicial) antes del primer encabezado

@@ -237,6 +237,8 @@ export interface ResumenSesionTriggerPayload extends TriggerPayload {
 export interface ResumenNPCTriggerPayload extends TriggerPayload {
   mode: 'resumen_npc';
   npcid: string;
+  systemPrompt?: string; // System prompt personalizado (opcional, se carga del archivo si no se proporciona)
+  allSummaries?: string; // Lista formateada de resúmenes de sesiones del NPC (opcional, se obtiene automáticamente si no se proporciona)
 }
 
 export interface ResumenEdificioTriggerPayload extends TriggerPayload {
