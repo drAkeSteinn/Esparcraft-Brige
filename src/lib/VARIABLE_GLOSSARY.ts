@@ -258,6 +258,17 @@ export const VARIABLE_GLOSSARY: Record<string, VariableDefinition> = {
     nested: false
   },
 
+  'npc.notes': {
+    name: 'npc.notes',
+    aliases: ['npc_notes', 'notas_creador', 'creator_notes'],
+    description: 'Notas del creador sobre el NPC (pensamientos, ideas, aclaraciones)',
+    type: 'string',
+    example: 'Este NPC tiene un pasado misterioso que se revela lentamente. Preferable usar tono melancólico pero esperanzador.',
+    category: 'npc',
+    required: true,
+    nested: false
+  },
+
   // ============================================================================
   // VARIABLES DEL MUNDO
   // ============================================================================
