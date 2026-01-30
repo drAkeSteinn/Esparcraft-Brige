@@ -48,10 +48,8 @@ const PRIMARY_VARIABLE_PATTERNS = [
   /^(playername|npcid|npc_name|npc_description|player_race|player_raza|player_level|player_nivel|player_health|player_salud|player_reputation|player_reputacion|player_time|player_hora|player_weather|player_clima)$/,
   // Variables simples (sin punto) - variables abreviadas del sistema
   /^(npc|mundo|pueblo|edificio|session|playername|mensaje)$/,
-  // Variables de template
-  /^(userMessage|user_message|lastSummary|ultimo_resumen|chatHistory|chat_history|char|CHAR|templateUser|template_user)$/,
-  // Variables especiales
-  /^(mensaje)$/,
+  // Variables de template (en minúsculas porque identifyVariableType normaliza a minúsculas)
+  /^(usermessage|user_message|lastsummary|ultimo_resumen|chathistory|chat_history|char|templateuser|template_user|mensaje)$/,
 ];
 
 /**
@@ -392,27 +390,50 @@ export function resolveAllVariables(
 
   // Extraer todas las variables del texto
   const variablePattern = /\{\{\s*([a-zA-Z0-9_.-]+)\s*\}\}/g;
+
+  // Hacer múltiples pasadas hasta que no haya más variables
   let result = text;
+  let maxPasses = 10; // Evitar loops infinitos
+  let currentPass = 0;
 
-  let match;
-  while ((match = variablePattern.exec(text)) !== null) {
-    const [fullMatch, variableName] = match;
+  while (currentPass < maxPasses) {
+    currentPass++;
 
-    // Resolver la variable
-    const resolution = resolveGrimorioVariable(variableName, context, grimorioCards, { verbose });
+    // Encontrar todas las variables en el resultado actual
+    const matches = [...result.matchAll(variablePattern)];
 
-    if (resolution.errors.length > 0) {
-      stats.errors += resolution.errors.length;
+    if (matches.length === 0) {
+      // No hay más variables que resolver
+      break;
     }
 
-    if (resolution.value === '') {
-      stats.emptyReturned++;
-    } else {
-      stats.resolved++;
+    // Procesar cada variable encontrada
+    let hasChanges = false;
+    for (const match of matches) {
+      const [fullMatch, variableName] = match;
+
+      // Resolver la variable
+      const resolution = resolveGrimorioVariable(variableName, context, grimorioCards, { verbose });
+
+      if (resolution.errors.length > 0) {
+        stats.errors += resolution.errors.length;
+      }
+
+      if (resolution.value === '') {
+        stats.emptyReturned++;
+      } else {
+        stats.resolved++;
+        hasChanges = true;
+      }
+
+      // Reemplazar en el resultado
+      result = result.replace(fullMatch, resolution.value);
     }
 
-    // Reemplazar en el resultado
-    result = result.replace(fullMatch, resolution.value);
+    // Si no hubo cambios en esta pasada, salir para evitar loops infinitos
+    if (!hasChanges) {
+      break;
+    }
   }
 
   return { result, stats };

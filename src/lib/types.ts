@@ -202,11 +202,6 @@ export interface ChatTriggerPayload extends TriggerPayload {
   };
   templateUser?: string; // Plantilla del usuario opcional
   lastSummary?: string; // Último resumen de la sesión (opcional)
-  grimorioTemplates?: Array<{
-    enabled: boolean;
-    templateKey: string;
-    section: string;
-  }>; // Plantillas de Grimorio activas para insertar en el prompt
 }
 
 export interface ResumenSesionTriggerPayload extends TriggerPayload {

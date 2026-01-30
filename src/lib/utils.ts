@@ -142,7 +142,7 @@ export function replaceVariables(text: string, context: VariableContext): string
             return `${role}: ${msg.content}`;
           }).join('\n');
         }
-        return '(Sin historial)';
+        return ''; // ✅ Dejar vacío si no hay historial
       }
 
       // Player keys (nombre, playername, player_name)
@@ -214,7 +214,7 @@ export function replaceVariables(text: string, context: VariableContext): string
           if (context.edificio?.eventos_recientes && context.edificio.eventos_recientes.length > 0) {
             return context.edificio.eventos_recientes.map(e => `- ${e}`).join('\n');
           }
-          return '(Sin eventos)';
+          return ''; // ✅ Dejar vacío si no hay eventos
         }
         if (edificioKey === 'type') return context.edificio?.type || '';
         if (edificioKey === 'poislist' || edificioKey === 'puntos_de_interes_list') {
@@ -226,7 +226,7 @@ export function replaceVariables(text: string, context: VariableContext): string
               return `- ${nombre} (${descripcion}) {"coordenadas": {"x": ${coords.x},"y": ${coords.y},"z": ${coords.z}}}`;
             }).join('\n');
           }
-          return '(Sin puntos de interés)';
+          return ''; // ✅ Dejar vacío si no hay puntos de interés
         }
       }
 
@@ -241,7 +241,7 @@ export function replaceVariables(text: string, context: VariableContext): string
           if (context.pueblo?.lore?.rumores && context.pueblo.lore.rumores.length > 0) {
             return context.pueblo.lore.rumores.map(r => `- ${r}`).join('\n');
           }
-          return '(Sin rumores)';
+          return ''; // ✅ Dejar vacío si no hay rumores
         }
       }
 
@@ -254,13 +254,13 @@ export function replaceVariables(text: string, context: VariableContext): string
           if (context.world?.lore?.rumors && context.world.lore.rumors.length > 0) {
             return context.world.lore.rumors.map(r => `- ${r}`).join('\n');
           }
-          return '(Sin rumores)';
+          return ''; // ✅ Dejar vacío si no hay rumores
         }
       }
 
       // Variable especial para el último resumen
       if (key === 'lastSummary' || key === 'ultimo_resumen') {
-        return context.lastSummary || '(Sin último resumen)';
+        return context.lastSummary || ''; // ✅ Dejar vacío si no hay resumen
       }
 
       // Variables de sesión (session.playerId, etc.)
@@ -274,7 +274,11 @@ export function replaceVariables(text: string, context: VariableContext): string
         return context.userMessage || context.mensaje || '';
       }
       if (key === 'chatHistory' || key === 'chat_history') {
-        return (context as any).chatHistory || '(Sin historial)';
+        // ✅ Construir chat history a partir de session.messages
+        if (context.session && context.session.messages && context.session.messages.length > 0) {
+          return context.session.messages.map(m => `${m.role}: ${m.content}`).join('\n\n');
+        }
+        return ''; // ✅ Dejar vacío si no hay historial
       }
       if (key === 'templateUser' || key === 'template_user') {
         return context.templateUser || '';

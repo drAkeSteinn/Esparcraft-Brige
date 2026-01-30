@@ -1,7 +1,7 @@
 import { World, Pueblo, Edificio, NPC, Session, ChatMessage, PromptBuildContext, getCardField } from './types';
 import { npcStateManager, sessionManager, edificioStateManager, puebloStateManager, worldStateManager, grimorioManager } from './fileManager';
 import { replaceVariables, VariableContext } from './utils';
-import { resolveGrimorioVariable } from './grimorioUtils';
+import { resolveAllVariables } from './grimorioUtils';
 
 // ========= FUNCIONES COMPARTIDAS PARA TRIGGERS DE RESUMEN =========
 
@@ -157,139 +157,60 @@ export function buildCompleteChatPrompt(
 ): string {
   const { world, pueblo, edificio, npc, session } = context;
   const jugador = options?.jugador;
-  const templates = options?.grimorioTemplates || [];
 
   let prompt = '';
 
-  // ✅ PREPARAR PLANTILLAS DE GRIMORIO (antes de construir el prompt)
-  let templatesBySection: Record<string, string[]> = {};
-  let allGrimorioCards: GrimorioCard[] = [];
-
-  if (templates && templates.length > 0) {
-    // Cargar todas las plantillas de Grimorio
-    allGrimorioCards = grimorioManager.getAll();
-
-    // Agrupar plantillas activas por sección
-    templatesBySection = {};
-    templates.filter(t => t.enabled && t.templateKey).forEach(template => {
-      if (!templatesBySection[template.section]) {
-        templatesBySection[template.section] = [];
-      }
-      templatesBySection[template.section].push(template.templateKey);
-    });
-  }
-
-  // Mapeo de secciones a sus secciones del prompt
-  const sectionMap: Record<string, string> = {
-    '1': 'Instrucción Inicial',
-    '2': 'MAIN PROMPT',
-    '3': 'DESCRIPCIÓN',
-    '4': 'PERSONALIDAD',
-    '5': 'ESCENARIO',
-    '6': 'EJEMPLOS DE CHAT',
-    '7': 'LAST USER MESSAGE',
-    '8': 'INSTRUCCIONES POST-HISTORIAL'
-  };
-
-  // ✅ FUNCIÓN HELPER: Insertar plantillas de una sección específica
-  const insertTemplatesForSection = (sectionId: string) => {
-    const templateKeys = templatesBySection[sectionId];
-    if (!templateKeys || templateKeys.length === 0) return;
-
-    const sectionName = sectionMap[sectionId];
-    if (!sectionName) return;
-
-    // Construir contexto de variables para la expansión
-    const varContext: VariableContext = {
-      npc,
-      world,
-      pueblo,
-      edificio,
-      jugador,
-      session,
-      char: getCardField(npc?.card, 'name', ''),
-      mensaje: message,
-      userMessage: message,
-      lastSummary: options?.lastSummary
-    };
-
-    templateKeys.forEach(templateKey => {
-      // Buscar y expandir la plantilla de Grimorio
-      const templateCard = allGrimorioCards.find(card => card.key === templateKey);
-
-      if (templateCard && templateCard.tipo === 'plantilla') {
-        // Expandir la plantilla con TODAS las variables (usando replaceVariables directamente)
-        const expanded = replaceVariables(templateCard.plantilla || '', varContext);
-
-        // ✅ Insertar solo el contenido expandido, SIN encabezado de sección
-        // Las plantillas se insertan DENTRO de la sección existente
-        prompt += `${expanded}\n\n`;
-      }
-    });
-  };
-
   // 1. Instrucción inicial
   prompt += `Escribe ÚNICAMENTE la próxima respuesta de {{npc.name}} en reacción al último mensaje de {{jugador.nombre}}.\n\n`;
-  insertTemplatesForSection('1'); // ✅ Insertar plantillas de sección 1 aquí
 
   // 2. Main Prompt (DEL NPC)
   const mainPrompt = getCardField(npc?.card, 'system_prompt', '');
   if (mainPrompt) {
     prompt += `=== MAIN PROMPT ===\n{{npc.system_prompt}}\n\n`;
   }
-  insertTemplatesForSection('2'); // ✅ Insertar plantillas de sección 2 aquí
 
   // 3. Descripción (DEL NPC)
   const description = getCardField(npc?.card, 'description', '');
   if (description) {
     prompt += `=== DESCRIPCIÓN ===\n{{npc.description}}\n\n`;
   }
-  insertTemplatesForSection('3'); // ✅ Insertar plantillas de sección 3 aquí
 
   // 4. Personalidad (DEL NPC)
   const personality = getCardField(npc?.card, 'personality', '');
   if (personality) {
     prompt += `=== PERSONALIDAD ===\n{{npc.personality}}\n\n`;
   }
-  insertTemplatesForSection('4'); // ✅ Insertar plantillas de sección 4 aquí
 
   // 5. Scenario (DEL NPC)
   const scenario = getCardField(npc?.card, 'scenario', '');
   if (scenario) {
     prompt += `=== ESCENARIO ===\n{{npc.scenario}}\n\n`;
   }
-  insertTemplatesForSection('5'); // ✅ Insertar plantillas de sección 5 aquí
 
   // 6. Chat Examples (DEL NPC)
   const chatExamples = getCardField(npc?.card, 'mes_example', '');
   if (chatExamples) {
-    prompt += `=== EJEMPLOS DE CHAT ===\n{{npc.chat_examples}}\n\n`;
+    prompt += `=== EJEMPLOS DE CHAT ===\n{{npc.mes_example}}\n\n`;
   }
-  insertTemplatesForSection('6'); // ✅ Insertar plantillas de sección 6 aquí
 
   // 7. Last User Message (se eliminó la sección Template del Usuario, ahora se usan variables de Grimorio directamente)
   prompt += `=== LAST USER MESSAGE ===\n`;
 
   // 7.1. Último resumen (si existe)
   if (options?.lastSummary && options.lastSummary.trim()) {
-    prompt += `Último Resumen:\n{{lastSummary}}\n\n`;
+    prompt += `RECUERDOS DE ({{npc.name}}):\n{{lastSummary}}\n\n`;
   }
 
   // 7.2. Chat History (si existe)
   if (session && session.messages && session.messages.length > 0) {
-    prompt += `Chat History:\n{{chatHistory}}\n\n`;
+    prompt += `Historial de la conversación:\n{{chatHistory}}\n\n`;
   }
-
-  // 7.3. Mensaje del usuario
-  prompt += `Mensaje del Usuario:\n{{userMessage}}\n\n`;
-  insertTemplatesForSection('7'); // ✅ Insertar plantillas de sección 7 aquí
 
   // 8. POST-HISTORY (DEL NPC)
   const postHistory = getCardField(npc?.card, 'post_history_instructions', '');
   if (postHistory) {
     prompt += `=== INSTRUCCIONES POST-HISTORIAL ===\n{{npc.post_history_instructions}}\n\n`;
   }
-  insertTemplatesForSection('8'); // ✅ Insertar plantillas de sección 8 aquí
 
   // Construir contexto de variables para reemplazo
   const varContext: VariableContext = {
@@ -306,12 +227,11 @@ export function buildCompleteChatPrompt(
     templateUser: options?.templateUser
   };
 
-  // DEBUG: Log para verificar que las variables del jugador lleguen
-  console.log('[buildCompleteChatPrompt] DEBUG jugador:', jugador);
-  console.log('[buildCompleteChatPrompt] DEBUG grimorioTemplates:', templates);
+  // Cargar todas las cards del Grimorio para expandir plantillas
+  const grimorioCards = grimorioManager.getAll();
 
-  // Reemplazar todas las variables en el prompt (primarias y plantillas de Grimorio ya expandidas)
-  const result = replaceVariables(prompt, varContext);
+  // Primero reemplazar todas las variables (incluyendo plantillas de Grimorio)
+  const { result } = resolveAllVariables(prompt, varContext, grimorioCards);
 
   return result;
 }

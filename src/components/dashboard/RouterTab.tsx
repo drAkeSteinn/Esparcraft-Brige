@@ -12,8 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
-import { Switch } from '@/components/ui/switch';
-import { World, Pueblo, Edificio, NPC, Session, GrimorioCard } from '@/lib/types';
+import { World, Pueblo, Edificio, NPC, Session } from '@/lib/types';
 import { toast } from '@/hooks/use-toast';
 import { usePromptPreview } from '@/hooks/usePromptPreview';
 
@@ -44,27 +43,6 @@ export default function RouterTab() {
   const [resumenEdificioTemplateSaved, setResumenEdificioTemplateSaved] = useState(false);
   const [resumenPuebloTemplateSaved, setResumenPuebloTemplateSaved] = useState(false);
   const [resumenMundoTemplateSaved, setResumenMundoTemplateSaved] = useState(false);
-
-  // Plantillas de Grimorio
-  const [grimorioCards, setGrimorioCards] = useState<GrimorioCard[]>([]);
-  const [plantillaRows, setPlantillaRows] = useState<Array<{
-    enabled: boolean;
-    templateKey?: string;
-    section: string;
-  }>>([]);
-  const [plantillaConfigSaved, setPlantillaConfigSaved] = useState(false);
-
-  // Secciones disponibles del prompt
-  const PROMPT_SECTIONS = [
-    { id: '1', name: 'Instrucción Inicial' },
-    { id: '2', name: 'MAIN PROMPT' },
-    { id: '3', name: 'DESCRIPCIÓN' },
-    { id: '4', name: 'PERSONALIDAD' },
-    { id: '5', name: 'ESCENARIO' },
-    { id: '6', name: 'EJEMPLOS DE CHAT' },
-    { id: '7', name: 'LAST USER MESSAGE' },
-    { id: '8', name: 'INSTRUCCIONES POST-HISTORY' }
-  ];
 
   // Preview data from backend
   const [chatPreviewData, setChatPreviewData] = useState<any>(null);
@@ -159,62 +137,6 @@ export default function RouterTab() {
 
   useEffect(() => {
     fetchData();
-  }, []);
-
-  // Cargar plantillas de Grimorio de tipo 'plantilla' y configuración guardada
-  useEffect(() => {
-    const loadGrimorioCards = async () => {
-      try {
-        const response = await fetch('/api/grimorio');
-        const result = await response.json();
-
-        if (result.success && result.data.cards) {
-          // Filtrar solo plantillas de tipo 'plantilla'
-          const plantillaCards = result.data.cards.filter((card: GrimorioCard) => card.tipo === 'plantilla');
-          setGrimorioCards(plantillaCards);
-
-          // Siempre inicializar filas por defecto para todas las secciones
-          const defaultRows: Array<{ enabled: boolean; templateKey: string | undefined; section: string }> = [];
-          PROMPT_SECTIONS.forEach(section => {
-            defaultRows.push({
-              enabled: false,
-              templateKey: undefined,
-              section: section.id
-            });
-          });
-
-          // Cargar configuración guardada y merge con filas por defecto
-          try {
-            const configResponse = await fetch('/api/chat-trigger-config');
-            const configResult = await configResponse.json();
-
-            if (configResult.success && configResult.data.grimorioTemplates && configResult.data.grimorioTemplates.length > 0) {
-              // Merge: actualizar las filas por defecto con la configuración guardada
-              const mergedRows = defaultRows.map(defaultRow => {
-                const savedRow = configResult.data.grimorioTemplates.find((r: any) => r.section === defaultRow.section);
-                if (savedRow) {
-                  return savedRow;
-                }
-                return defaultRow;
-              });
-              setPlantillaRows(mergedRows);
-              setPlantillaConfigSaved(true);
-            } else {
-              // Si no hay configuración guardada, usar filas por defecto
-              setPlantillaRows(defaultRows);
-            }
-          } catch (configError) {
-            console.error('Error cargando configuración de plantillas:', configError);
-            // Inicializar con valores por defecto
-            setPlantillaRows(defaultRows);
-          }
-        }
-      } catch (error) {
-        console.error('Error cargando plantillas de Grimorio:', error);
-      }
-    };
-
-    loadGrimorioCards();
   }, []);
 
   useEffect(() => {
@@ -609,8 +531,7 @@ export default function RouterTab() {
     chatForm.sessionType,
     JSON.stringify(chatForm.jugador), // ✅ Cambiado para detectar cambios en propiedades del objeto
     chatForm.mensaje,
-    chatForm.lastSummary,
-    JSON.stringify(plantillaRows)
+    chatForm.lastSummary
   ]);
 
   // Debounced preview for resumen sesion trigger
@@ -877,39 +798,6 @@ export default function RouterTab() {
     });
   };
 
-  const handleSavePlantillaConfig = async () => {
-    try {
-      const response = await fetch('/api/chat-trigger-config', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ grimorioTemplates: plantillaRows })
-      });
-
-      const result = await response.json();
-
-      if (result.success) {
-        setPlantillaConfigSaved(true);
-        toast({
-          title: 'Configuración de Plantillas Guardada',
-          description: 'La configuración de plantillas Grimorio se ha guardado correctamente y se usará para todos los triggers de chat'
-        });
-      } else {
-        toast({
-          title: 'Error',
-          description: result.error || 'Error al guardar la configuración',
-          variant: 'destructive'
-        });
-      }
-    } catch (error) {
-      console.error('Error saving plantilla config:', error);
-      toast({
-        title: 'Error',
-        description: 'No se pudo guardar la configuración de plantillas',
-        variant: 'destructive'
-      });
-    }
-  };
-
   const fetchData = async () => {
     try {
       setLoading(true);
@@ -1025,7 +913,6 @@ export default function RouterTab() {
       jugador: chatForm.jugador,
       message: chatForm.mensaje, // Mensaje del jugador (message en lugar de mensaje)
       lastSummary: chatForm.lastSummary, // Último resumen de la sesión
-      grimorioTemplates: plantillaRows, // Plantillas de Grimorio activas
       context: {
         mundo: world,
         pueblo,
@@ -1443,117 +1330,6 @@ export default function RouterTab() {
                       />
                     </div>
                   )}
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <CardTitle>Plantillas Grimorio</CardTitle>
-                      <CardDescription>Selecciona plantillas del Grimorio para insertar en las secciones del prompt. Las plantillas pueden contener variables primarias.</CardDescription>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {plantillaConfigSaved && (
-                        <div className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400">
-                          <RefreshCw className="h-3 w-3" />
-                          Guardado
-                        </div>
-                      )}
-                      <Badge variant="outline">
-                        {plantillaRows.filter(r => r.enabled).length} activas
-                      </Badge>
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  {/* Header de columnas */}
-                  <div className="grid grid-cols-12 gap-2 text-xs font-semibold text-muted-foreground mb-2">
-                    <div className="col-span-1">Habilitar</div>
-                    <div className="col-span-5">Plantilla</div>
-                    <div className="col-span-6">Sección</div>
-                  </div>
-
-                  {/* Filas para cada sección */}
-                  <div className="space-y-2">
-                    {PROMPT_SECTIONS.map((section, index) => {
-                      const row = plantillaRows[index];
-                      // Si no hay fila, crear una por defecto
-                      const safeRow = row || { enabled: false, templateKey: undefined, section: section.id };
-
-                      return (
-                        <div key={section.id} className="grid grid-cols-12 gap-2 items-center py-2">
-                          {/* Switch para habilitar */}
-                          <div className="col-span-1 flex justify-center">
-                            <Switch
-                              id={`switch-${section.id}`}
-                              checked={safeRow.enabled ?? false}
-                              onCheckedChange={(checked) => {
-                                const newRows = [...plantillaRows];
-                                while (newRows.length <= index) {
-                                  newRows.push({ enabled: false, templateKey: undefined, section: PROMPT_SECTIONS[newRows.length].id });
-                                }
-                                newRows[index] = { ...newRows[index], enabled: checked };
-                                setPlantillaRows(newRows);
-                                setPlantillaConfigSaved(false);
-                              }}
-                            />
-                          </div>
-
-                          {/* Dropdown de plantillas */}
-                          <div className="col-span-5">
-                            <Select
-                              value={safeRow.templateKey === undefined ? "none" : safeRow.templateKey}
-                              onValueChange={(value) => {
-                                const newRows = [...plantillaRows];
-                                while (newRows.length <= index) {
-                                  newRows.push({ enabled: false, templateKey: undefined, section: PROMPT_SECTIONS[newRows.length].id });
-                                }
-                                newRows[index] = { ...newRows[index], templateKey: value === "none" ? undefined : value };
-                                setPlantillaRows(newRows);
-                                setPlantillaConfigSaved(false);
-                              }}
-                              disabled={!safeRow.enabled}
-                            >
-                              <SelectTrigger id={`plantilla-select-${section.id}`}>
-                                <SelectValue placeholder="Seleccionar plantilla..." />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="none">-- Ninguna --</SelectItem>
-                                {grimorioCards.map((card) => (
-                                  <SelectItem key={card.id} value={card.key}>
-                                    {card.nombre} ({card.key})
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
-
-                          {/* Etiqueta informativa fija de la sección */}
-                          <div className="col-span-6">
-                            <Badge variant="outline" className="w-full justify-start">
-                              {section.name}
-                            </Badge>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  {/* Botón de guardar configuración */}
-                  <div className="pt-4 border-t">
-                    <Button
-                      onClick={handleSavePlantillaConfig}
-                      className="w-full"
-                      variant="outline"
-                    >
-                      <RefreshCw className="h-4 w-4 mr-2" />
-                      Guardar Configuración
-                    </Button>
-                    <p className="text-xs text-muted-foreground mt-2 text-center">
-                      Esta configuración se usará para todos los triggers de chat
-                    </p>
-                  </div>
                 </CardContent>
               </Card>
 

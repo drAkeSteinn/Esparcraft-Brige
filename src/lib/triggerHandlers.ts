@@ -25,8 +25,7 @@ import {
   summaryManager,
   edificioStateManager,
   puebloStateManager,
-  worldStateManager,
-  grimorioManager
+  worldStateManager
 } from './fileManager';
 import {
   buildChatMessagesWithOptions,
@@ -41,7 +40,6 @@ import {
 } from './promptBuilder';
 import { EmbeddingTriggers } from './embedding-triggers';
 import { replaceVariables, replaceVariablesWithCache, VariableContext } from './utils';
-import { resolveAllVariables, resolveAllVariablesWithCache } from './grimorioUtils';
 import { extractPromptSections } from './promptUtils';
 
 // LLM Configuration
@@ -122,13 +120,12 @@ function mergeJugadorData(
 
 // Chat trigger handler
 export async function handleChatTrigger(payload: ChatTriggerPayload): Promise<{ response: string; sessionId: string }> {
-  const { message, npcid, playersessionid, jugador, lastSummary: payloadLastSummary, grimorioTemplates: payloadGrimorioTemplates } = payload;
+  const { message, npcid, playersessionid, jugador, lastSummary: payloadLastSummary } = payload;
 
   // DEBUG: Log para ver qué llega del request
   console.log('[handleChatTrigger] DEBUG payload.npcid:', npcid);
   console.log('[handleChatTrigger] DEBUG payload.jugador:', jugador);
   console.log('[handleChatTrigger] DEBUG payload.message:', message);
-  console.log('[handleChatTrigger] DEBUG payload.grimorioTemplates:', payloadGrimorioTemplates);
 
   // Get NPC
   const npc = npcManager.getById(npcid);
@@ -180,41 +177,16 @@ export async function handleChatTrigger(payload: ChatTriggerPayload): Promise<{ 
     });
   }
 
-  // Obtener el último resumen (SOLO si viene en el payload, no usar session.lastPrompt)
-  // session.lastPrompt contiene el prompt completo, no debe usarse como resumen
-  const lastSummary = payloadLastSummary || undefined;
+  // Obtener el último resumen
+  // 1. Prioridad: payload (puede venir del frontend)
+  // 2. Fallback: buscar automáticamente en el summaryManager
+  const lastSummary = payloadLastSummary || summaryManager.getSummary(session.id) || undefined;
 
-  // ✅ OBTENER PLANTILLAS DE GRIMORIO DEL PAYLOAD O CARGAR DEL ARCHIVO
-  let grimorioTemplates = payloadGrimorioTemplates;
+  console.log('[handleChatTrigger] payloadLastSummary:', payloadLastSummary ? 'SI' : 'NO');
+  console.log('[handleChatTrigger] summaryManager.getSummary:', summaryManager.getSummary(session.id) ? 'ENCONTRADO' : 'NO ENCONTRADO');
+  console.log('[handleChatTrigger] lastSummary final:', lastSummary ? lastSummary.substring(0, 100) + '...' : 'undefined');
 
-  // Si no vienen plantillas en el payload, cargar configuración guardada
-  if (!grimorioTemplates || grimorioTemplates.length === 0) {
-    try {
-      const fs = await import('fs/promises');
-      const path = await import('path');
-      const configPath = path.join(process.cwd(), 'db', 'chat-trigger-config.json');
-
-      try {
-        const configContent = await fs.readFile(configPath, 'utf-8');
-        const config = JSON.parse(configContent);
-        grimorioTemplates = config.grimorioTemplates || [];
-        console.log('[handleChatTrigger] Configuración de plantillas cargada del archivo:', grimorioTemplates.length, 'plantillas');
-      } catch (error) {
-        // El archivo no existe o hay error al leerlo, usar array vacío
-        console.log('[handleChatTrigger] No hay configuración de plantillas guardada, usando array vacío');
-        grimorioTemplates = [];
-      }
-    } catch (error) {
-      console.error('[handleChatTrigger] Error cargando configuración de plantillas:', error);
-      grimorioTemplates = [];
-    }
-  }
-
-  // ✅ OBTENER TODAS LAS CARDS DEL GRIMORIO
-  const allGrimorioCards = grimorioManager.getAll();
-  console.log('[handleChatTrigger] Cards del Grimorio cargadas:', allGrimorioCards.length);
-
-  // ✅ CONSTRUIR CONTEXTO DE VARIABLES PARA REEMPLAZO
+  // Construir contexto de variables para reemplazo
   // Usar session.jugador (ya mergeado) en lugar de payload.jugador
   const varContext: VariableContext = {
     npc,
@@ -229,9 +201,8 @@ export async function handleChatTrigger(payload: ChatTriggerPayload): Promise<{ 
     lastSummary: lastSummary
   };
 
-  // ✅ CONSTRUIR EL PROMPT COMPLETO CON VARIABLES DE GRIMORIO
-  // El prompt se construye primero y luego se resuelven las variables de Grimorio
-  const basePrompt = buildCompleteChatPrompt(message, {
+  // Construir el prompt completo
+  const resolvedPrompt = buildCompleteChatPrompt(message, {
     world,
     pueblo,
     edificio,
@@ -239,24 +210,12 @@ export async function handleChatTrigger(payload: ChatTriggerPayload): Promise<{ 
     session
   }, {
     jugador: session.jugador,  // ← DATOS DEL JUGADOR MERGEADOS
-    lastSummary,
-    grimorioTemplates // Pasar las plantillas de Grimorio
+    lastSummary
   });
 
-  console.log('[handleChatTrigger] DEBUG basePrompt antes de Grimorio:', basePrompt.substring(0, 200) + '...');
+  console.log('[handleChatTrigger] DEBUG prompt:', resolvedPrompt.substring(0, 300) + '...');
 
-  // ✅ REEMPLAZAR TODAS LAS VARIABLES (PRIMARIAS + PLANTILLAS DE GRIMORIO)
-  const resolvedPrompt = resolveAllVariablesWithCache(
-    basePrompt,
-    varContext,
-    allGrimorioCards,
-    'chat-prompt-base', // Template ID para el cache
-    { verbose: false, useCache: true }
-  ).result;
-
-  console.log('[handleChatTrigger] DEBUG prompt después de Grimorio:', resolvedPrompt.substring(0, 300) + '...');
-
-  // ✅ CONSTRUIR MENSAJES DIRECTAMENTE CON EL PROMPT RESUELTO
+  // Construir mensajes directamente con el prompt resuelto
   const messages: ChatMessage[] = [
     {
       role: 'system',
@@ -741,11 +700,10 @@ export async function previewTriggerPrompt(payload: AnyTriggerPayload): Promise<
       const edificio = npc.location.edificioId ? edificioManager.getById(npc.location.edificioId) : undefined;
       const session = chatPayload.playersessionid ? sessionManager.getById(chatPayload.playersessionid) : undefined;
 
-      // Obtener el último resumen (SOLO si viene en el payload, no usar session.lastPrompt)
-      const lastSummary = chatPayload.lastSummary || undefined;
-
-      // ✅ OBTENER TODAS LAS CARDS DEL GRIMORIO
-      const allGrimorioCards = grimorioManager.getAll();
+      // Obtener el último resumen
+      // 1. Prioridad: payload (puede venir del frontend)
+      // 2. Fallback: buscar automáticamente en el summaryManager
+      const lastSummary = chatPayload.lastSummary || (session ? summaryManager.getSummary(session.id) : undefined) || undefined;
 
       // ✅ CONSTRUIR CONTEXTO DE VARIABLES PARA REEMPLAZO
       const varContext: VariableContext = {
@@ -770,18 +728,11 @@ export async function previewTriggerPrompt(payload: AnyTriggerPayload): Promise<
         session
       }, {
         jugador: chatPayload.jugador,
-        lastSummary,
-        grimorioTemplates: chatPayload.grimorioTemplates // ✅ Pasar plantillas de Grimorio
+        lastSummary
       });
 
-      // ✅ REEMPLAZAR TODAS LAS VARIABLES (PRIMARIAS + PLANTILLAS DE GRIMORIO)
-      const resolvedPrompt = resolveAllVariablesWithCache(
-        basePrompt,
-        varContext,
-        allGrimorioCards,
-        'chat-prompt-preview', // Template ID para el cache
-        { verbose: false, useCache: true }
-      ).result;
+      // ✅ buildCompleteChatPrompt YA reemplaza todas las variables (incluyendo plantillas de Grimorio)
+      const resolvedPrompt = basePrompt;
 
       console.log('[previewTriggerPrompt] RESOLVED PROMPT LENGTH:', resolvedPrompt.length);
       console.log('[previewTriggerPrompt] RESOLVED PROMPT (primeros 200 chars):', resolvedPrompt.substring(0, 200));
@@ -854,9 +805,6 @@ export async function previewTriggerPrompt(payload: AnyTriggerPayload): Promise<
           configSystemPrompt = '';
         }
       }
-
-      // ✅ OBTENER TODAS LAS CARDS DEL GRIMORIO
-      const allGrimorioCards = grimorioManager.getAll();
 
       // ✅ CONSTRUIR CONTEXTO DE VARIABLES PARA REEMPLAZO
       const varContext: VariableContext = {
