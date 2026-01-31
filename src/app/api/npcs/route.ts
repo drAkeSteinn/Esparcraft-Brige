@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { npcManager } from '@/lib/fileManager';
+import { npcDbManager } from '@/lib/npcDbManager';
 import { getCardField } from '@/lib/types';
 
 // GET all NPCs or filter by location
@@ -12,13 +12,13 @@ export async function GET(request: NextRequest) {
 
     let npcs;
     if (edificioId) {
-      npcs = npcManager.getByLocation(worldId || '', puebloId || '', edificioId);
+      npcs = await npcDbManager.getByLocation(worldId || '', puebloId || '', edificioId);
     } else if (puebloId) {
-      npcs = npcManager.getByLocation(worldId || '', puebloId);
+      npcs = await npcDbManager.getByLocation(worldId || '', puebloId);
     } else if (worldId) {
-      npcs = npcManager.getByLocation(worldId);
+      npcs = await npcDbManager.getByWorldId(worldId);
     } else {
-      npcs = npcManager.getAll();
+      npcs = await npcDbManager.getAll();
     }
 
     return NextResponse.json({
@@ -62,7 +62,7 @@ export async function POST(request: NextRequest) {
       card: body.card
     };
 
-    const newNPC = npcManager.create(npcData, body.id);
+    const newNPC = await npcDbManager.create(npcData, body.id);
 
     return NextResponse.json({
       success: true,

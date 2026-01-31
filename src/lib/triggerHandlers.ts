@@ -17,7 +17,6 @@ import {
   SessionSummary
 } from './types';
 import {
-  npcManager,
   worldManager,
   puebloManager,
   edificioManager,
@@ -29,6 +28,7 @@ import {
   worldStateManager,
   grimorioManager
 } from './fileManager';
+import { npcDbManager } from './npcDbManager';
 import {
   buildChatMessagesWithOptions,
   buildCompleteChatPrompt,
@@ -131,7 +131,7 @@ export async function handleChatTrigger(payload: ChatTriggerPayload): Promise<{ 
   console.log('[handleChatTrigger] DEBUG payload.message:', message);
 
   // Get NPC
-  const npc = npcManager.getById(npcid);
+  const npc = await npcDbManager.getById(npcid);
   if (!npc) {
     throw new Error(`NPC with id ${npcid} not found`);
   }
@@ -297,7 +297,7 @@ export async function handleResumenSesionTrigger(payload: ResumenSesionTriggerPa
   const { npcid, playersessionid, systemPrompt, lastSummary: payloadLastSummary, chatHistory } = payload;
 
   // Get NPC and session
-  const npc = npcManager.getById(npcid);
+  const npc = await npcDbManager.getById(npcid);
   if (!npc) {
     throw new Error(`NPC with id ${npcid} not found`);
   }
@@ -407,7 +407,7 @@ export async function handleResumenNPCTrigger(payload: ResumenNPCTriggerPayload)
   const { npcid, systemPrompt: payloadSystemPrompt, allSummaries: payloadAllSummaries } = payload;
 
   // Get NPC
-  const npc = npcManager.getById(npcid);
+  const npc = await npcDbManager.getById(npcid);
   if (!npc) {
     throw new Error(`NPC with id ${npcid} not found`);
   }
@@ -538,7 +538,7 @@ ${memoriesSections.join('\n')}
       };
     }
 
-    npcManager.update(npcid, { card: updatedCard });
+    await npcDbManager.update(npcid, { card: updatedCard });
     console.log('[handleResumenNPCTrigger] Resumen guardado en creator_notes de la Card del NPC');
   }
 
@@ -588,7 +588,7 @@ export async function handleResumenEdificioTrigger(payload: ResumenEdificioTrigg
   }
 
   // Get all NPCs for this edificio
-  const npcs = npcManager.getByEdificioId(edificioid);
+  const npcs = await npcDbManager.getByEdificioId(edificioid);
 
   // ✅ OBTENER creator_notes DE LOS NPCs (no npcStateManager)
   let npcSummaries = payloadAllSummaries;
@@ -1043,7 +1043,7 @@ export async function previewTriggerPrompt(payload: AnyTriggerPayload): Promise<
       // ✅ DEBUG: Log para ver qué llega del payload
       console.log('[previewTriggerPrompt] CHAT PAYLOAD:', JSON.stringify(chatPayload, null, 2));
 
-      const npc = npcManager.getById(chatPayload.npcid);
+      const npc = await npcDbManager.getById(chatPayload.npcid);
       if (!npc) throw new Error('NPC not found');
 
       console.log('[previewTriggerPrompt] NPC encontrado:', npc.id, npc.card?.data?.name || npc.card?.name);
@@ -1124,7 +1124,7 @@ export async function previewTriggerPrompt(payload: AnyTriggerPayload): Promise<
 
     case 'resumen_sesion': {
       const summaryPayload = payload as ResumenSesionTriggerPayload;
-      const npc = npcManager.getById(summaryPayload.npcid);
+      const npc = await npcDbManager.getById(summaryPayload.npcid);
       const session = sessionManager.getById(summaryPayload.playersessionid);
 
       if (!npc || !session) throw new Error('NPC or session not found');
@@ -1211,7 +1211,7 @@ export async function previewTriggerPrompt(payload: AnyTriggerPayload): Promise<
 
     case 'resumen_npc': {
       const npcPayload = payload as ResumenNPCTriggerPayload;
-      const npc = npcManager.getById(npcPayload.npcid);
+      const npc = await npcDbManager.getById(npcPayload.npcid);
       if (!npc) {
         throw new Error(`NPC with id ${npcPayload.npcid} not found`);
       }
@@ -1402,7 +1402,7 @@ ${memoriesSections.join('\n')}
       }
 
       // ✅ OBTENER creator_notes DE LOS NPCs (no npcStateManager)
-      const npcs = npcManager.getByEdificioId(edificioPayload.edificioid);
+      const npcs = await npcDbManager.getByEdificioId(edificioPayload.edificioid);
       const npcSummaries = npcs
         .map(npc => {
           const creatorNotes = npc?.card?.data?.creator_notes || '';

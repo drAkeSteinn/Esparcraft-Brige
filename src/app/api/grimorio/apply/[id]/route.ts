@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { grimorioManager } from '@/lib/fileManager';
+import { grimorioManager, worldManager, puebloManager, edificioManager, sessionManager } from '@/lib/fileManager';
 import { ApplyGrimorioCardRequest } from '@/lib/types';
 import { resolveAllVariablesWithCache, VariableContext } from '@/lib/grimorioUtils';
-import { npcManager, worldManager, puebloManager, edificioManager, sessionManager } from '@/lib/fileManager';
+import { npcDbManager } from '@/lib/npcDbManager';
 
 export async function POST(
   request: NextRequest,
@@ -25,7 +25,7 @@ export async function POST(
     let world, pueblo, edificio, npc, session;
 
     if (context.npc?.npcid) {
-      npc = npcManager.getById(context.npc.npcid);
+      npc = await npcDbManager.getById(context.npc.npcid);
       if (npc) {
         world = worldManager.getById(npc.location.worldId);
         pueblo = npc.location.puebloId ? puebloManager.getById(npc.location.puebloId) : undefined;

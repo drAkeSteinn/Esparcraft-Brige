@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { npcManager } from '@/lib/fileManager';
+import { npcDbManager } from '@/lib/npcDbManager';
 
 // GET Edificio NPC summaries
 export async function GET(
@@ -10,7 +10,7 @@ export async function GET(
     const { id } = await params;
 
     // Get all NPCs for this edificio
-    const npcs = npcManager.getByEdificioId(id);
+    const npcs = await npcDbManager.getByEdificioId(id);
 
     // ✅ Get creator_notes from each NPC (consolidated summaries)
     const npcsWithSummaries = npcs

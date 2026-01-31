@@ -30,3 +30,20 @@ model Post {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
+
+// NPC Model - Migrado desde sistema de archivos JSON
+model NPC {
+  id             String   @id @default(cuid())
+  locationScope  String   // 'mundo' | 'pueblo' | 'edificio'
+  worldId        String
+  puebloId       String?
+  edificioId     String?
+  card           String   // JSON string of SillyTavernCard
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([worldId])
+  @@index([puebloId])
+  @@index([edificioId])
+  @@index([locationScope])
+}

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { npcManager } from '@/lib/fileManager';
+import { npcDbManager } from '@/lib/npcDbManager';
 
 // GET specific NPC
 export async function GET(
@@ -8,7 +8,7 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    const npc = npcManager.getById(id);
+    const npc = await npcDbManager.getById(id);
 
     if (!npc) {
       return NextResponse.json(
@@ -38,7 +38,7 @@ export async function PUT(
   try {
     const { id } = await params;
     const body = await request.json();
-    const updatedNPC = npcManager.update(id, body);
+    const updatedNPC = await npcDbManager.update(id, body);
 
     if (!updatedNPC) {
       return NextResponse.json(
@@ -67,7 +67,7 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params;
-    const success = npcManager.delete(id);
+    const success = await npcDbManager.delete(id);
 
     if (!success) {
       return NextResponse.json(
