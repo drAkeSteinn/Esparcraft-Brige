@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, MapPin, X } from 'lucide-react';
+import { Plus, Edit2, Trash2, MapPin, X, ScrollText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -29,6 +29,7 @@ export default function EdificiosSection() {
   const [formData, setFormData] = useState({
     name: '',
     lore: '',
+    rumores: '',
     eventos_recientes: '',
     worldId: '',
     puebloId: '',
@@ -110,6 +111,7 @@ export default function EdificiosSection() {
     setFormData({
       name: '',
       lore: '',
+      rumores: '',
       eventos_recientes: '',
       worldId: worlds[0]?.id || '',
       puebloId: '',
@@ -203,6 +205,7 @@ export default function EdificiosSection() {
     setFormData({
       name: edificio.name,
       lore: edificio.lore,
+      rumores: (edificio.rumores || []).join('\n'),
       eventos_recientes: edificio.eventos_recientes.join('\n'),
       worldId: edificio.worldId,
       puebloId: edificio.puebloId,
@@ -247,6 +250,7 @@ export default function EdificiosSection() {
       const payload: any = {
         name: formData.name,
         lore: formData.lore,
+        rumores: formData.rumores.split('\n').filter(r => r.trim()),
         eventos_recientes: formData.eventos_recientes.split('\n').filter(e => e.trim()),
         worldId: formData.worldId,
         puebloId: formData.puebloId,
@@ -357,11 +361,17 @@ export default function EdificiosSection() {
                   </div>
                 </CardTitle>
               </CardHeader>
-              <CardDescription>
-                {pueblo?.name || 'Pueblo desconocido'} • {world?.name || 'Mundo desconocido'}
+              <CardDescription className="pt-2">
+                <div className="flex items-center gap-2 text-sm">
+                  <span className="text-muted-foreground leading-tight">{pueblo?.name || 'Pueblo desconocido'}</span>
+                  <span className="text-muted-foreground/60 mt-0.5">•</span>
+                  <span className="font-mono text-xs bg-muted/50 px-2 py-0.5 rounded border-2 border-[#2C2923] text-[#83673D] leading-tight">
+                    {edificio.id}
+                  </span>
+                </div>
               </CardDescription>
-              <CardContent>
-                <div className="space-y-3">
+              <CardContent className="overflow-hidden">
+                <div className="max-h-96 overflow-y-auto space-y-3 pr-1 custom-scrollbar">
                   <div>
                     <p className="text-sm font-medium">Descripción:</p>
                     <p className="text-sm text-muted-foreground line-clamp-2">
@@ -369,17 +379,55 @@ export default function EdificiosSection() {
                     </p>
                   </div>
 
+                  {edificio.rumores && edificio.rumores.length > 0 && (
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="text-sm font-medium flex items-center gap-2">
+                          <ScrollText className="h-3.5 w-3.5 text-[#83673D]" />
+                          Rumores:
+                        </p>
+                        <span className="text-xs text-muted-foreground">
+                          {edificio.rumores.length} {edificio.rumores.length === 1 ? 'rumor' : 'rumores'}
+                        </span>
+                      </div>
+                      <div className="max-h-32 overflow-y-auto border-2 border-[#2C2923] bg-[#100F11] p-3 rounded">
+                        <ul className="space-y-1.5">
+                          {edificio.rumores.map((rumor, i) => (
+                            <li key={i} className="text-sm text-[#B8B8B8] flex items-start gap-2">
+                              <span className="flex-shrink-0 w-5 h-5 flex items-center justify-center bg-[#2C2923] text-[#83673D] text-xs font-mono rounded">
+                                {i + 1}
+                              </span>
+                              <span className="break-words">{rumor}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+                  )}
+
                   {edificio.eventos_recientes.length > 0 && (
                     <div>
-                      <p className="text-sm font-medium">Eventos Recientes:</p>
-                      <ul className="text-sm text-muted-foreground list-disc list-inside">
-                        {edificio.eventos_recientes.slice(0, 2).map((evento, i) => (
-                          <li key={i}>{evento}</li>
-                        ))}
-                        {edificio.eventos_recientes.length > 2 && (
-                          <li className="text-xs text-muted-foreground">...y {edificio.eventos_recientes.length - 2} más</li>
-                        )}
-                      </ul>
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="text-sm font-medium flex items-center gap-2">
+                          <ScrollText className="h-3.5 w-3.5 text-[#83673D]" />
+                          Eventos Recientes:
+                        </p>
+                        <span className="text-xs text-muted-foreground">
+                          {edificio.eventos_recientes.length} {edificio.eventos_recientes.length === 1 ? 'evento' : 'eventos'}
+                        </span>
+                      </div>
+                      <div className="max-h-32 overflow-y-auto border-2 border-[#2C2923] bg-[#100F11] p-3 rounded">
+                        <ul className="space-y-1.5">
+                          {edificio.eventos_recientes.map((evento, i) => (
+                            <li key={i} className="text-sm text-[#B8B8B8] flex items-start gap-2">
+                              <span className="flex-shrink-0 w-5 h-5 flex items-center justify-center bg-[#2C2923] text-[#83673D] text-xs font-mono rounded">
+                                {i + 1}
+                              </span>
+                              <span className="break-words">{evento}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
                     </div>
                   )}
 
@@ -525,6 +573,17 @@ export default function EdificiosSection() {
                 onChange={(e) => setFormData({ ...formData, lore: e.target.value })}
                 placeholder="Describe el edificio, su historia, características especiales..."
                 rows={4}
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="rumores">Rumores (uno por línea)</Label>
+              <Textarea
+                id="rumores"
+                value={formData.rumores}
+                onChange={(e) => setFormData({ ...formData, rumores: e.target.value })}
+                placeholder="Cada rumor en una línea nueva"
+                rows={3}
               />
             </div>
 

@@ -61,6 +61,7 @@ export interface Edificio {
   puebloId: string;
   name: string;
   lore: string;
+  rumores?: string[];
   eventos_recientes: string[];
   area: Area;
   puntosDeInteres?: PointOfInterest[]; // Puntos de interés dentro del edificio

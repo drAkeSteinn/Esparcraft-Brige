@@ -11,7 +11,6 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
 import { Pueblo, World, Edificio } from '@/lib/types';
 import { toast } from '@/hooks/use-toast';
-import { Slider } from '@/components/ui/slider';
 
 interface FormData {
   worldId: string;
@@ -258,15 +257,27 @@ export default function PueblosSection() {
 
                     {pueblo.lore.rumores.length > 0 && (
                       <div>
-                        <p className="text-sm font-medium">Rumores:</p>
-                        <ul className="text-sm text-muted-foreground list-disc list-inside">
-                          {pueblo.lore.rumores.slice(0, 3).map((rumor, i) => (
-                            <li key={i}>{rumor}</li>
-                          ))}
-                          {pueblo.lore.rumores.length > 3 && (
-                            <li className="text-xs">...y {pueblo.lore.rumores.length - 3} más</li>
-                          )}
-                        </ul>
+                        <div className="flex items-center justify-between mb-2">
+                          <p className="text-sm font-medium flex items-center gap-2">
+                            <ScrollText className="h-3.5 w-3.5 text-[#83673D]" />
+                            Rumores:
+                          </p>
+                          <span className="text-xs text-muted-foreground">
+                            {pueblo.lore.rumores.length} {pueblo.lore.rumores.length === 1 ? 'rumor' : 'rumores'}
+                          </span>
+                        </div>
+                        <div className="max-h-32 overflow-y-auto border-2 border-[#2C2923] bg-[#100F11] p-3 rounded">
+                          <ul className="space-y-1.5">
+                            {pueblo.lore.rumores.map((rumor, i) => (
+                              <li key={i} className="text-sm text-[#B8B8B8] flex items-start gap-2">
+                                <span className="flex-shrink-0 w-5 h-5 flex items-center justify-center bg-[#2C2923] text-[#83673D] text-xs font-mono rounded">
+                                  {i + 1}
+                                </span>
+                                <span className="break-words">{rumor}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
                       </div>
                     )}
                     {pueblo.lore.eventos && pueblo.lore.eventos.length > 0 && (
@@ -280,17 +291,7 @@ export default function PueblosSection() {
                             {pueblo.lore.eventos.length} {pueblo.lore.eventos.length === 1 ? 'evento' : 'eventos'}
                           </span>
                         </div>
-                        <Slider
-                          defaultValue={[0]}
-                          max={Math.max(pueblo.lore.eventos.length - 1, 0)}
-                          step={1}
-                          value={[Math.floor((pueblo.lore.eventos.length - 1) / 2)]}
-                          onValueChange={([value]) => {
-                            // Solo para visualización - el slider muestra todos los eventos
-                          }}
-                          className="w-full"
-                        />
-                        <div className="mt-2 max-h-32 overflow-y-auto border-2 border-[#2C2923] bg-[#100F11] p-3 rounded">
+                        <div className="max-h-32 overflow-y-auto border-2 border-[#2C2923] bg-[#100F11] p-3 rounded">
                           <ul className="space-y-1.5">
                             {pueblo.lore.eventos.map((evento, i) => (
                               <li key={i} className="text-sm text-[#B8B8B8] flex items-start gap-2">

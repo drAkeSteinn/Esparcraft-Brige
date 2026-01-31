@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, MapPin, Building2, RefreshCw } from 'lucide-react';
+import { Plus, Edit2, Trash2, MapPin, Building2, RefreshCw, ScrollText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -249,28 +249,52 @@ export default function MundosSection() {
                 </div>
                 {world.lore.rumores.length > 0 && (
                   <div>
-                    <p className="text-sm font-medium">Rumores:</p>
-                    <ul className="text-sm text-muted-foreground list-disc list-inside">
-                      {world.lore.rumores.slice(0, 3).map((rumor, i) => (
-                        <li key={i}>{rumor}</li>
-                      ))}
-                      {world.lore.rumores.length > 3 && (
-                        <li className="text-xs">...y {world.lore.rumores.length - 3} más</li>
-                      )}
-                    </ul>
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-sm font-medium flex items-center gap-2">
+                        <ScrollText className="h-3.5 w-3.5 text-[#83673D]" />
+                        Rumores:
+                      </p>
+                      <span className="text-xs text-muted-foreground">
+                        {world.lore.rumores.length} {world.lore.rumores.length === 1 ? 'rumor' : 'rumores'}
+                      </span>
+                    </div>
+                    <div className="max-h-32 overflow-y-auto border-2 border-[#2C2923] bg-[#100F11] p-3 rounded">
+                      <ul className="space-y-1.5">
+                        {world.lore.rumores.map((rumor, i) => (
+                          <li key={i} className="text-sm text-[#B8B8B8] flex items-start gap-2">
+                            <span className="flex-shrink-0 w-5 h-5 flex items-center justify-center bg-[#2C2923] text-[#83673D] text-xs font-mono rounded">
+                              {i + 1}
+                            </span>
+                            <span className="break-words">{rumor}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
                   </div>
                 )}
                 {world.lore.eventos && world.lore.eventos.length > 0 && (
                   <div>
-                    <p className="text-sm font-medium">Eventos:</p>
-                    <ul className="text-sm text-muted-foreground list-disc list-inside">
-                      {world.lore.eventos.slice(0, 3).map((evento, i) => (
-                        <li key={i}>{evento}</li>
-                      ))}
-                      {world.lore.eventos.length > 3 && (
-                        <li className="text-xs">...y {world.lore.eventos.length - 3} más</li>
-                      )}
-                    </ul>
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-sm font-medium flex items-center gap-2">
+                        <ScrollText className="h-3.5 w-3.5 text-[#83673D]" />
+                        Eventos:
+                      </p>
+                      <span className="text-xs text-muted-foreground">
+                        {world.lore.eventos.length} {world.lore.eventos.length === 1 ? 'evento' : 'eventos'}
+                      </span>
+                    </div>
+                    <div className="max-h-32 overflow-y-auto border-2 border-[#2C2923] bg-[#100F11] p-3 rounded">
+                      <ul className="space-y-1.5">
+                        {world.lore.eventos.map((evento, i) => (
+                          <li key={i} className="text-sm text-[#B8B8B8] flex items-start gap-2">
+                            <span className="flex-shrink-0 w-5 h-5 flex items-center justify-center bg-[#2C2923] text-[#83673D] text-xs font-mono rounded">
+                              {i + 1}
+                            </span>
+                            <span className="break-words">{evento}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
                   </div>
                 )}
                 {(() => {
