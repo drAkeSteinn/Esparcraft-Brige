@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { Send, RefreshCw, Network, MessageSquare, Globe, MapPin, Building, User, Eye, MessageCircle, FileText, Copy, Trash2, Terminal, Loader2 } from 'lucide-react';
+import { Send, RefreshCw, Network, MessageSquare, Globe, MapPin, Building, User, Eye, MessageCircle, FileText, Copy, Trash2, Terminal, Loader2, Layers } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -15,6 +15,7 @@ import { Badge } from '@/components/ui/badge';
 import { World, Pueblo, Edificio, NPC, Session } from '@/lib/types';
 import { toast } from '@/hooks/use-toast';
 import { usePromptPreview } from '@/hooks/usePromptPreview';
+import ResumenGeneral from '@/components/dashboard/ResumenGeneralWorking';
 
 export default function RouterTab() {
   // Preview hook
@@ -1279,7 +1280,7 @@ ${memoriesSections.join('\n')}
 
       {/* Main Tabs */}
       <Tabs defaultValue="chat" className="w-full">
-        <TabsList className="grid w-full grid-cols-7">
+        <TabsList className="grid w-full grid-cols-8">
           <TabsTrigger value="chat">
             <MessageSquare className="h-4 w-4 mr-2" />
             Chat
@@ -1307,6 +1308,10 @@ ${memoriesSections.join('\n')}
           <TabsTrigger value="nuevo_lore">
             <FileText className="h-4 w-4 mr-2" />
             Nuevo Lore
+          </TabsTrigger>
+          <TabsTrigger value="resumen_general">
+            <Layers className="h-4 w-4 mr-2" />
+            Resumen General
           </TabsTrigger>
         </TabsList>
 
@@ -3260,6 +3265,11 @@ ${memoriesSections.join('\n')}
               </Button>
             </div>
           </div>
+        </TabsContent>
+
+        {/* Resumen General */}
+        <TabsContent value="resumen_general" className="space-y-4">
+          <ResumenGeneral />
         </TabsContent>
       </Tabs>
     </div>

@@ -153,3 +153,70 @@ model SessionSummary {
   @@index([playerId])
   @@index([timestamp])
 }
+
+// SystemConfig - Configuración y estado del sistema
+model SystemConfig {
+  id             String   @id @default(cuid())
+  key            String   @unique // 'resumen_general_status'
+  value          String   // 'idle' | 'running' | 'error'
+  updatedAt      DateTime @updatedAt
+  metadata       String?  // JSON con información adicional (fase actual, progreso, configuración)
+
+  @@index([key])
+}
+
+// NPC Summary - Resúmenes consolidados de NPCs
+model NPCSummary {
+  id             String   @id @default(cuid())
+  npcId          String
+  summary        String
+  version        Int      @default(1)
+  sessionHash    String   // Hash de los resúmenes de sesiones usados para generar este resumen
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([npcId])
+  @@index([sessionHash])
+}
+
+// Edificio Summary - Resúmenes consolidados de edificios
+model EdificioSummary {
+  id             String   @id @default(cuid())
+  edificioId     String
+  summary        String
+  version        Int      @default(1)
+  npcHash        String   // Hash de los resúmenes de NPCs usados
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([edificioId])
+  @@index([npcHash])
+}
+
+// Pueblo Summary - Resúmenes consolidados de pueblos
+model PuebloSummary {
+  id             String   @id @default(cuid())
+  puebloId       String
+  summary        String
+  version        Int      @default(1)
+  edificioHash   String   // Hash de los resúmenes de edificios usados
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([puebloId])
+  @@index([edificioHash])
+}
+
+// World Summary - Resúmenes consolidados de mundos
+model WorldSummary {
+  id             String   @id @default(cuid())
+  worldId        String
+  summary        String
+  version        Int      @default(1)
+  puebloHash     String   // Hash de los resúmenes de pueblos usados
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([worldId])
+  @@index([puebloHash])
+}

@@ -12,6 +12,11 @@ import { templateCache } from './templateCache';
 import { grimorioStats } from './grimorioStats';
 
 /**
+ * Reexportar replaceVariables para compatibilidad
+ */
+export { replaceVariables };
+
+/**
  * Tipos de variables en el sistema de resolución
  */
 export type VariableResolutionType = 'primaria' | 'plantilla' | 'desconocida';

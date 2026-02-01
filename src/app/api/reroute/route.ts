@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { handleTrigger, previewTriggerPrompt } from '@/lib/triggerHandlers';
+import { ResumenGeneralService } from '@/lib/resumenGeneralService';
 import { AnyTriggerPayload } from '@/lib/types';
 
 export async function POST(request: NextRequest) {
@@ -23,6 +24,17 @@ export async function POST(request: NextRequest) {
     }
 
     const payload = body as AnyTriggerPayload;
+
+    // ✅ VERIFICAR SI RESUMEN GENERAL ESTÁ CORRIENDO (SOLO PARA CHAT)
+    if (payload.mode === 'chat') {
+      const isRunning = await ResumenGeneralService.isRunning();
+      if (isRunning) {
+        return NextResponse.json({
+          success: true,
+          data: { response: "resumen_general" }
+        });
+      }
+    }
 
     // If preview mode, return prompt preview without calling LLM
     if (preview) {

@@ -501,3 +501,4 @@ export const sessionDbManager = {
 };
 
 export default sessionDbManager;
+export const sessionDbManagerSingleton = sessionDbManager;
