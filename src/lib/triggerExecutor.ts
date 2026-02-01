@@ -192,14 +192,9 @@ async function executeResumenSesion(
   ];
 
   // ✅ LLAMAR AL LLM
-  const llmResponse = await callLLM({
-    model: 'gpt-4o-mini',
-    messages,
-    temperature: 0.7,
-    max_tokens: 4000
-  });
+  const llmResponse = await callLLM(messages);
 
-  const summary = llmResponse.choices[0].message.content;
+  const summary = llmResponse;
 
   // ✅ GUARDAR EN DB
   await sessionSummaryDbManager.create({
@@ -321,14 +316,9 @@ ${memoriesSections.join('\n')}
   ];
 
   // ✅ LLAMAR AL LLM
-  const llmResponse = await callLLM({
-    model: 'gpt-4o-mini',
-    messages,
-    temperature: 0.7,
-    max_tokens: 4000
-  });
+  const llmResponse = await callLLM(messages);
 
-  const summary = llmResponse.choices[0].message.content;
+  const summary = llmResponse;
 
   // ✅ ACTUALIZAR MEMORIA DEL NPC
   npcStateManager.updateMemory(npcid, {
@@ -429,14 +419,9 @@ async function executeResumenEdificio(
   ];
 
   // ✅ LLAMAR AL LLM
-  const llmResponse = await callLLM({
-    model: 'gpt-4o-mini',
-    messages,
-    temperature: 0.7,
-    max_tokens: 4000
-  });
+  const llmResponse = await callLLM(messages);
 
-  const summary = llmResponse.choices[0].message.content;
+  const summary = llmResponse;
 
   return {
     success: true,
@@ -532,14 +517,9 @@ async function executeResumenPueblo(
   ];
 
   // ✅ LLAMAR AL LLM
-  const llmResponse = await callLLM({
-    model: 'gpt-4o-mini',
-    messages,
-    temperature: 0.7,
-    max_tokens: 4000
-  });
+  const llmResponse = await callLLM(messages);
 
-  const summary = llmResponse.choices[0].message.content;
+  const summary = llmResponse;
 
   return {
     success: true,
@@ -631,14 +611,9 @@ async function executeResumenMundo(
   ];
 
   // ✅ LLAMAR AL LLM
-  const llmResponse = await callLLM({
-    model: 'gpt-4o-mini',
-    messages,
-    temperature: 0.7,
-    max_tokens: 4000
-  });
+  const llmResponse = await callLLM(messages);
 
-  const summary = llmResponse.choices[0].message.content;
+  const summary = llmResponse;
 
   return {
     success: true,

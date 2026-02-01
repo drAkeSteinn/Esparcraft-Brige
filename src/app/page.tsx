@@ -29,7 +29,7 @@ export default function Dashboard() {
                 Gestor Narrativo - Servidor Esparcraft
               </p>
               <p className="text-xs text-muted-foreground">
-                Comunidad Tirano Estudios
+                Comunidad Tirano Estudios v2.0
               </p>
             </div>
             <div className="text-right text-sm text-muted-foreground">

@@ -326,6 +326,11 @@ export class ResumenGeneralService {
         console.log('[ResumenGeneral] FASE 1: Resumen de sesiones');
         await this.executePhase1(config);
         completedPhases++;
+        const progress = (completedPhases / totalPhases) * 100;
+        await this.updateProgress('sesiones', 
+          { current: 0, total: 0, message: 'Completada' }, 
+          progress
+        );
       }
 
       // FASE 2: Resumen de NPCs
@@ -333,6 +338,11 @@ export class ResumenGeneralService {
         console.log('[ResumenGeneral] FASE 2: Resumen de NPCs');
         await this.executePhase2();
         completedPhases++;
+        const progress = (completedPhases / totalPhases) * 100;
+        await this.updateProgress('npcs', 
+          { current: 0, total: 0, message: 'Completada' }, 
+          progress
+        );
       }
 
       // FASE 3: Resumen de Edificios
@@ -340,6 +350,11 @@ export class ResumenGeneralService {
         console.log('[ResumenGeneral] FASE 3: Resumen de edificios');
         await this.executePhase3();
         completedPhases++;
+        const progress = (completedPhases / totalPhases) * 100;
+        await this.updateProgress('edificios', 
+          { current: 0, total: 0, message: 'Completada' }, 
+          progress
+        );
       }
 
       // FASE 4: Resumen de Pueblos
@@ -347,6 +362,11 @@ export class ResumenGeneralService {
         console.log('[ResumenGeneral] FASE 4: Resumen de pueblos');
         await this.executePhase4();
         completedPhases++;
+        const progress = (completedPhases / totalPhases) * 100;
+        await this.updateProgress('pueblos', 
+          { current: 0, total: 0, message: 'Completada' }, 
+          progress
+        );
       }
 
       // FASE 5: Resumen de Mundos
@@ -354,6 +374,11 @@ export class ResumenGeneralService {
         console.log('[ResumenGeneral] FASE 5: Resumen de mundos');
         await this.executePhase5();
         completedPhases++;
+        const progress = (completedPhases / totalPhases) * 100;
+        await this.updateProgress('mundos', 
+          { current: 0, total: 0, message: 'Completada' }, 
+          progress
+        );
       }
 
       // ✅ MARCAR COMO COMPLETADO
@@ -383,9 +408,6 @@ export class ResumenGeneralService {
     
     console.log(`[ResumenGeneral] ${eligibleSessions.length} sesiones elegibles (>= ${config.minMessages} mensajes)`);
     
-    let completed = 0;
-    let skipped = 0;
-    
     for (let i = 0; i < eligibleSessions.length; i++) {
       const session = eligibleSessions[i];
       
@@ -397,11 +419,8 @@ export class ResumenGeneralService {
           playersessionid: session.id
         } as ResumenSesionTriggerPayload);
 
-        if (result.success) {
-          completed++;
-        } else {
+        if (!result.success) {
           console.error(`[ResumenGeneral] ❌ Error resumen sesión ${session.id}:`, result.error);
-          skipped++;
         }
 
         // Actualizar progreso
@@ -409,20 +428,12 @@ export class ResumenGeneralService {
         const overallProgress = (1 / 5) * 100 * (progress / 100);
         await this.updateProgress('sesiones', 
           { current: i + 1, total: eligibleSessions.length, message: `Sesión ${i + 1}/${eligibleSessions.length}` },
-          overallProgress,
-          { completed, skipped }
+          overallProgress
         );
       } catch (error) {
         console.error(`[ResumenGeneral] ❌ Error procesando sesión ${session.id}:`, error);
-        skipped++;
       }
     }
-    
-    await this.updateProgress('sesiones',
-      { current: eligibleSessions.length, total: eligibleSessions.length, message: 'Completada' },
-      20,
-      { completed, skipped }
-    );
   }
 
   // ========================================================================
@@ -442,9 +453,6 @@ export class ResumenGeneralService {
 
     console.log(`[ResumenGeneral] Procesando ${npcs.length} NPCs`);
     
-    let completed = 0;
-    let skipped = 0;
-    
     for (let i = 0; i < npcs.length; i++) {
       const npc = npcs[i];
       const summaries = summariesByNPC.get(npc.id) || [];
@@ -458,7 +466,6 @@ export class ResumenGeneralService {
       // Verificar si hubo cambios
       if (lastNPCSummary?.sessionHash === currentHash) {
         console.log(`[ResumenGeneral] NPC ${npc.id} sin cambios, SKIP`);
-        skipped++;
         continue;
       }
 
@@ -471,7 +478,6 @@ export class ResumenGeneralService {
 
         if (!result.success) {
           console.error(`[ResumenGeneral] ❌ Error resumen NPC ${npc.id}:`, result.error);
-          skipped++;
           continue;
         }
 
@@ -482,38 +488,29 @@ export class ResumenGeneralService {
           sessionHash: currentHash,
           version: (lastNPCSummary?.version || 0) + 1
         });
-        
-        completed++;
 
         // Actualizar progreso
         const progress = ((i + 1) / npcs.length) * 100;
         const overallProgress = 20 + (1 / 5) * 100 * (progress / 100);
         await this.updateProgress('npcs', 
           { current: i + 1, total: npcs.length, message: `NPC ${i + 1}/${npcs.length}` },
-          overallProgress,
-          { completed, skipped }
+          overallProgress
         );
       } catch (error) {
         console.error(`[ResumenGeneral] ❌ Error procesando NPC ${npc.id}:`, error);
-        skipped++;
       }
     }
-    
-    await this.updateProgress('npcs',
-      { current: npcs.length, total: npcs.length, message: 'Completada' },
-      40,
-      { completed, skipped }
-    );
   }
 
   // ========================================================================
   // FASE 3: Resumen de Edificios
   // ========================================================================
 
-    private static async executePhase3() {
+  private static async executePhase3() {
     const edificios = await edificioDbManager.getAll();
     const summariesByEdificio = new Map<string, any[]>();
 
+    // Agrupar resúmenes de NPCs por edificio
     for (const summary of await npcSummaryDbManager.getAll()) {
       const existing = summariesByEdificio.get(summary.npcId) || [];
       existing.push(summary);
@@ -522,30 +519,35 @@ export class ResumenGeneralService {
 
     console.log(`[ResumenGeneral] Procesando ${edificios.length} edificios`);
     
-    let completed = 0;
-    let skipped = 0;
-    
     for (let i = 0; i < edificios.length; i++) {
       const edificio = edificios[i];
-      const summaries = summariesByEdificio.get(edificio.id) || [];
+      
+      // Obtener resúmenes de NPCs que pertenecen a este edificio
+      const npcsInEdificio = await npcDbManager.getByEdificioId(edificio.id);
+      const npcSummaries: any[] = [];
+      
+      for (const npc of npcsInEdificio) {
+        const summary = await npcSummaryDbManager.getLatest(npc.id);
+        if (summary) npcSummaries.push(summary);
+      }
 
-      const currentHash = generateNPCSummariesHash(summaries);
+      const currentHash = generateNPCSummariesHash(npcSummaries);
       const lastEdificioSummary = await edificioSummaryDbManager.getLatest(edificio.id);
       
       if (lastEdificioSummary?.npcHash === currentHash) {
         console.log(`[ResumenGeneral] Edificio ${edificio.id} sin cambios, SKIP`);
-        skipped++;
         continue;
       }
 
       try {
+        // ✅ SIMULAR HTTP REQUEST DE RESUMEN DE EDIFICIO
         const result = await executeTrigger({
           mode: 'resumen_edificio',
           edificioid: edificio.id
         } as ResumenEdificioTriggerPayload);
 
         if (!result.success) {
-          console.error(`[ResumenGeneral] Error resumen edificio ${edificio.id}:`, result.error);
+          console.error(`[ResumenGeneral] ❌ Error resumen edificio ${edificio.id}:`, result.error);
           continue;
         }
 
@@ -555,68 +557,65 @@ export class ResumenGeneralService {
           npcHash: currentHash,
           version: (lastEdificioSummary?.version || 0) + 1
         });
-        
-        completed++;
 
         const progress = ((i + 1) / edificios.length) * 100;
         const overallProgress = 40 + (1 / 5) * 100 * (progress / 100);
-        await this.updateProgress('edificios',
+        await this.updateProgress('edificios', 
           { current: i + 1, total: edificios.length, message: `Edificio ${i + 1}/${edificios.length}` },
-          overallProgress,
-          { completed, skipped }
+          overallProgress
         );
       } catch (error) {
-        console.error(`[ResumenGeneral] Error procesando edificio ${edificio.id}:`, error);
+        console.error(`[ResumenGeneral] ❌ Error procesando edificio ${edificio.id}:`, error);
       }
     }
-    
-    await this.updateProgress('edificios',
-      { current: edificios.length, total: edificios.length, message: 'Completada' },
-      60,
-      { completed, skipped }
-    );
   }
 
   // ========================================================================
   // FASE 4: Resumen de Pueblos
   // ========================================================================
 
-    private static async executePhase4() {
+  private static async executePhase4() {
     const pueblos = await puebloDbManager.getAll();
     const summariesByPueblo = new Map<string, any[]>();
 
+    // Agrupar resúmenes de edificios por pueblo
     for (const summary of await edificioSummaryDbManager.getAll()) {
-      const existing = summariesByPueblo.get(summary.puebloId) || [];
+      const existing = summariesByPueblo.get(summary.edificioId) || [];
       existing.push(summary);
-      summariesByPueblo.set(summary.puebloId, existing);
+      summariesByPueblo.set(summary.edificioId, existing);
     }
 
     console.log(`[ResumenGeneral] Procesando ${pueblos.length} pueblos`);
     
-    let completed = 0;
-    let skipped = 0;
-    
     for (let i = 0; i < pueblos.length; i++) {
       const pueblo = pueblos[i];
-      const summaries = summariesByPueblo.get(pueblo.id) || [];
+      
+      // Obtener resúmenes de edificios que pertenecen a este pueblo
+      const edificiosInPueblo = await edificioDbManager.getByPuebloId(pueblo.id);
+      const edificioSummaries: any[] = [];
+      
+      for (const edificio of edificiosInPueblo) {
+        const summary = await edificioSummaryDbManager.getLatest(edificio.id);
+        if (summary) edificioSummaries.push(summary);
+      }
 
-      const currentHash = generateEdificioSummariesHash(summaries);
+      const currentHash = generateEdificioSummariesHash(edificioSummaries);
       const lastPuebloSummary = await puebloSummaryDbManager.getLatest(pueblo.id);
       
       if (lastPuebloSummary?.edificioHash === currentHash) {
         console.log(`[ResumenGeneral] Pueblo ${pueblo.id} sin cambios, SKIP`);
-        skipped++;
         continue;
       }
 
       try {
+        // ✅ SIMULAR HTTP REQUEST DE RESUMEN DE PUEBLO
         const result = await executeTrigger({
           mode: 'resumen_pueblo',
           pueblid: pueblo.id
         } as ResumenPuebloTriggerPayload);
 
         if (!result.success) {
-          console.error(`[ResumenGeneral] Error resumen pueblo ${pueblo.id}:`, result.error);
+          console.error(`[ResumenGeneral] ❌ Error resumen pueblo ${pueblo.id}:`, result.error);
           continue;
         }
 
@@ -626,68 +625,65 @@ export class ResumenGeneralService {
           edificioHash: currentHash,
           version: (lastPuebloSummary?.version || 0) + 1
         });
-        
-        completed++;
 
         const progress = ((i + 1) / pueblos.length) * 100;
         const overallProgress = 60 + (1 / 5) * 100 * (progress / 100);
-        await this.updateProgress('pueblos',
+        await this.updateProgress('pueblos', 
           { current: i + 1, total: pueblos.length, message: `Pueblo ${i + 1}/${pueblos.length}` },
-          overallProgress,
-          { completed, skipped }
+          overallProgress
         );
       } catch (error) {
-        console.error(`[ResumenGeneral] Error procesando pueblo ${pueblo.id}:`, error);
+        console.error(`[ResumenGeneral] ❌ Error procesando pueblo ${pueblo.id}:`, error);
       }
     }
-    
-    await this.updateProgress('pueblos',
-      { current: pueblos.length, total: pueblos.length, message: 'Completada' },
-      80,
-      { completed, skipped }
-    );
   }
 
   // ========================================================================
   // FASE 5: Resumen de Mundos
   // ========================================================================
 
-    private static async executePhase5() {
+  private static async executePhase5() {
     const mundos = await worldDbManager.getAll();
     const summariesByMundo = new Map<string, any[]>();
 
+    // Agrupar resúmenes de pueblos por mundo
     for (const summary of await puebloSummaryDbManager.getAll()) {
-      const existing = summariesByMundo.get(summary.mundoId) || [];
+      const existing = summariesByMundo.get(summary.puebloId) || [];
       existing.push(summary);
-      summariesByMundo.set(summary.mundoId, existing);
+      summariesByMundo.set(summary.puebloId, existing);
     }
 
     console.log(`[ResumenGeneral] Procesando ${mundos.length} mundos`);
     
-    let completed = 0;
-    let skipped = 0;
-    
     for (let i = 0; i < mundos.length; i++) {
       const mundo = mundos[i];
-      const summaries = summariesByMundo.get(mundo.id) || [];
+      
+      // Obtener resúmenes de pueblos que pertenecen a este mundo
+      const pueblosInMundo = await puebloDbManager.getByWorldId(mundo.id);
+      const puebloSummaries: any[] = [];
+      
+      for (const pueblo of pueblosInMundo) {
+        const summary = await puebloSummaryDbManager.getLatest(pueblo.id);
+        if (summary) puebloSummaries.push(summary);
+      }
 
-      const currentHash = generatePuebloSummariesHash(summaries);
+      const currentHash = generatePuebloSummariesHash(puebloSummaries);
       const lastWorldSummary = await worldSummaryDbManager.getLatest(mundo.id);
       
       if (lastWorldSummary?.puebloHash === currentHash) {
         console.log(`[ResumenGeneral] Mundo ${mundo.id} sin cambios, SKIP`);
-        skipped++;
         continue;
       }
 
       try {
+        // ✅ SIMULAR HTTP REQUEST DE RESUMEN DE MUNDO
         const result = await executeTrigger({
           mode: 'resumen_mundo',
           mundoid: mundo.id
         } as ResumenMundoTriggerPayload);
 
         if (!result.success) {
-          console.error(`[ResumenGeneral] Error resumen mundo ${mundo.id}:`, result.error);
+          console.error(`[ResumenGeneral] ❌ Error resumen mundo ${mundo.id}:`, result.error);
           continue;
         }
 
@@ -697,25 +693,16 @@ export class ResumenGeneralService {
           puebloHash: currentHash,
           version: (lastWorldSummary?.version || 0) + 1
         });
-        
-        completed++;
 
         const progress = ((i + 1) / mundos.length) * 100;
         const overallProgress = 80 + (1 / 5) * 100 * (progress / 100);
-        await this.updateProgress('mundos',
+        await this.updateProgress('mundos', 
           { current: i + 1, total: mundos.length, message: `Mundo ${i + 1}/${mundos.length}` },
-          overallProgress,
-          { completed, skipped }
+          overallProgress
         );
       } catch (error) {
-        console.error(`[ResumenGeneral] Error procesando mundo ${mundo.id}:`, error);
+        console.error(`[ResumenGeneral] ❌ Error procesando mundo ${mundo.id}:`, error);
       }
     }
-    
-    await this.updateProgress('mundos',
-      { current: mundos.length, total: mundos.length, message: 'Completada' },
-      100,
-      { completed, skipped }
-    );
   }
 }

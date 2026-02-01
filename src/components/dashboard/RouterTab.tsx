@@ -15,7 +15,7 @@ import { Badge } from '@/components/ui/badge';
 import { World, Pueblo, Edificio, NPC, Session } from '@/lib/types';
 import { toast } from '@/hooks/use-toast';
 import { usePromptPreview } from '@/hooks/usePromptPreview';
-import ResumenGeneral from '@/components/dashboard/ResumenGeneralWorking';
+import ResumenGeneral from '@/components/dashboard/ResumenGeneralMiniDashboard';
 
 export default function RouterTab() {
   // Preview hook
