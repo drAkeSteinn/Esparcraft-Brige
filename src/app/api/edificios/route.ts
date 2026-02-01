@@ -1,5 +1,6 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { edificioManager } from '@/lib/fileManager';
+import { NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
+import { edificioDbManager } from '@/lib/edificioDbManager';
 
 // GET all edificios or filter by worldId or puebloId
 export async function GET(request: NextRequest) {
@@ -10,11 +11,11 @@ export async function GET(request: NextRequest) {
 
     let edificios;
     if (puebloId) {
-      edificios = edificioManager.getByPuebloId(puebloId);
+      edificios = await edificioDbManager.getByPuebloId(puebloId);
     } else if (worldId) {
-      edificios = edificioManager.getByWorldId(worldId);
+      edificios = await edificioDbManager.getByWorldId(worldId);
     } else {
-      edificios = edificioManager.getAll();
+      edificios = await edificioDbManager.getAll();
     }
 
     return NextResponse.json({
@@ -52,7 +53,7 @@ export async function POST(request: NextRequest) {
       area: body.area
     };
 
-    const newEdificio = edificioManager.create(edificioData, body.id);
+    const newEdificio = await edificioDbManager.create(edificioData, body.id);
 
     return NextResponse.json({
       success: true,

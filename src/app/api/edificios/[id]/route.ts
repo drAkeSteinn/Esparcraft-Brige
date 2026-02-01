@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { edificioManager } from '@/lib/fileManager';
+import { edificioDbManager } from '@/lib/edificioDbManager';
 
 // GET specific edificio
 export async function GET(
@@ -8,7 +8,7 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    const edificio = edificioManager.getById(id);
+    const edificio = await edificioDbManager.getById(id);
 
     if (!edificio) {
       return NextResponse.json(
@@ -38,7 +38,7 @@ export async function PUT(
   try {
     const { id } = await params;
     const body = await request.json();
-    const updatedEdificio = edificioManager.update(id, body);
+    const updatedEdificio = await edificioDbManager.update(id, body);
 
     if (!updatedEdificio) {
       return NextResponse.json(
@@ -67,7 +67,7 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params;
-    const success = edificioManager.delete(id);
+    const success = await edificioDbManager.delete(id);
 
     if (!success) {
       return NextResponse.json(

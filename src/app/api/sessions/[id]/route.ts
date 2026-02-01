@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { sessionManager } from '@/lib/fileManager';
+import { sessionDbManager } from '@/lib/sessionDbManager';
 
 // GET specific session
 export async function GET(
@@ -8,7 +8,7 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    const session = sessionManager.getById(id);
+    const session = await sessionDbManager.getById(id);
 
     if (!session) {
       return NextResponse.json(
@@ -38,7 +38,7 @@ export async function PUT(
   try {
     const { id } = await params;
     const body = await request.json();
-    const updatedSession = sessionManager.update(id, body);
+    const updatedSession = await sessionDbManager.update(id, body);
 
     if (!updatedSession) {
       return NextResponse.json(
@@ -67,7 +67,7 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params;
-    const success = sessionManager.delete(id);
+    const success = await sessionDbManager.delete(id);
 
     if (!success) {
       return NextResponse.json(

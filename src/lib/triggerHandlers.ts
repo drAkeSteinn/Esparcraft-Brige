@@ -17,18 +17,19 @@ import {
   SessionSummary
 } from './types';
 import {
-  worldManager,
-  puebloManager,
-  edificioManager,
-  sessionManager,
   npcStateManager,
-  summaryManager,
   edificioStateManager,
   puebloStateManager,
   worldStateManager,
-  grimorioManager
+  grimorioManager,
+  summaryManager
 } from './fileManager';
 import { npcDbManager } from './npcDbManager';
+import { worldDbManager } from './worldDbManager';
+import { puebloDbManager } from './puebloDbManager';
+import { edificioDbManager } from './edificioDbManager';
+import { sessionDbManager } from './sessionDbManager';
+import { sessionSummaryDbManager } from './sessionSummaryDbManager';
 import {
   buildChatMessagesWithOptions,
   buildCompleteChatPrompt,
@@ -137,15 +138,15 @@ export async function handleChatTrigger(payload: ChatTriggerPayload): Promise<{ 
   }
 
   // Get context (world, pueblo, edificio)
-  const world = worldManager.getById(npc.location.worldId);
-  const pueblo = npc.location.puebloId ? puebloManager.getById(npc.location.puebloId) : undefined;
-  const edificio = npc.location.edificioId ? edificioManager.getById(npc.location.edificioId) : undefined;
+  const world = await worldDbManager.getById(npc.location.worldId);
+  const pueblo = npc.location.puebloId ? await puebloDbManager.getById(npc.location.puebloId) : undefined;
+  const edificio = npc.location.edificioId ? await edificioDbManager.getById(npc.location.edificioId) : undefined;
 
   // Get or create session con merge incremental de jugador
   let session;
   if (playersessionid) {
     // Sessión existente: hacer merge incremental de jugador
-    session = sessionManager.getById(playersessionid);
+    session = await sessionDbManager.getById(playersessionid);
     if (!session) {
       throw new Error(`Session ${playersessionid} not found`);
     }
@@ -158,7 +159,7 @@ export async function handleChatTrigger(payload: ChatTriggerPayload): Promise<{ 
     console.log('[handleChatTrigger] MERGE JUGADOR - Resultado:', jugadorMergeado);
 
     // Actualizar sesión con datos mergeados
-    sessionManager.update(session.id, {
+    await sessionDbManager.update(session.id, {
       jugador: jugadorMergeado
     });
 
@@ -172,7 +173,7 @@ export async function handleChatTrigger(payload: ChatTriggerPayload): Promise<{ 
 
     console.log('[handleChatTrigger] NUEVA SESIÓN - Jugador filtrado:', jugadorFiltrado);
 
-    session = sessionManager.create({
+    session = await sessionDbManager.create({
       npcId: npcid,
       playerId: jugador?.nombre || undefined,
       jugador: Object.keys(jugadorFiltrado).length > 0 ? jugadorFiltrado : undefined,
@@ -183,10 +184,10 @@ export async function handleChatTrigger(payload: ChatTriggerPayload): Promise<{ 
   // Obtener el último resumen
   // 1. Prioridad: payload (puede venir del frontend)
   // 2. Fallback: buscar automáticamente en el summaryManager
-  const lastSummary = payloadLastSummary || summaryManager.getSummary(session.id) || undefined;
+  const lastSummary = payloadLastSummary || (await sessionSummaryDbManager.getLatestBySessionId(session.id))?.summary || undefined;
 
   console.log('[handleChatTrigger] payloadLastSummary:', payloadLastSummary ? 'SI' : 'NO');
-  console.log('[handleChatTrigger] summaryManager.getSummary:', summaryManager.getSummary(session.id) ? 'ENCONTRADO' : 'NO ENCONTRADO');
+  console.log('[handleChatTrigger] sessionSummaryDbManager.getLatestBySessionId:', await sessionSummaryDbManager.getLatestBySessionId(session.id) ? 'ENCONTRADO' : 'NO ENCONTRADO');
   console.log('[handleChatTrigger] lastSummary final:', lastSummary ? lastSummary.substring(0, 100) + '...' : 'undefined');
 
   // Construir contexto de variables para reemplazo
@@ -267,7 +268,7 @@ export async function handleChatTrigger(payload: ChatTriggerPayload): Promise<{ 
 
   // Save the complete prompt to session (ahora incluye embeddings si existían)
   // ✅ También guardar snapshot del jugador mergeado
-  sessionManager.update(session.id, {
+  await sessionDbManager.update(session.id, {
     lastPrompt: completePrompt,
     jugador: session.jugador  // ← Guardar snapshot mergeado
   });
@@ -276,12 +277,12 @@ export async function handleChatTrigger(payload: ChatTriggerPayload): Promise<{ 
   const response = await callLLM(finalMessages);
 
   // Save messages to session
-  sessionManager.addMessage(session.id, {
+  await sessionDbManager.addMessage(session.id, {
     role: 'user',
     content: message
   });
 
-  sessionManager.addMessage(session.id, {
+  await sessionDbManager.addMessage(session.id, {
     role: 'assistant',
     content: response
   });
@@ -302,15 +303,15 @@ export async function handleResumenSesionTrigger(payload: ResumenSesionTriggerPa
     throw new Error(`NPC with id ${npcid} not found`);
   }
 
-  const session = sessionManager.getById(playersessionid);
+  const session = await sessionDbManager.getById(playersessionid);
   if (!session) {
     throw new Error(`Session ${playersessionid} not found`);
   }
 
   // Get context (world, pueblo, edificio)
-  const world = worldManager.getById(npc.location.worldId);
-  const pueblo = npc.location.puebloId ? puebloManager.getById(npc.location.puebloId) : undefined;
-  const edificio = npc.location.edificioId ? edificioManager.getById(npc.location.edificioId) : undefined;
+  const world = await worldDbManager.getById(npc.location.worldId);
+  const pueblo = npc.location.puebloId ? await puebloDbManager.getById(npc.location.puebloId) : undefined;
+  const edificio = npc.location.edificioId ? await edificioDbManager.getById(npc.location.edificioId) : undefined;
 
   // ✅ LEER CONFIGURACIÓN DE SYSTEM PROMPT DEL ARCHIVO ESPECÍFICO
   let configSystemPrompt = systemPrompt;
@@ -379,7 +380,7 @@ export async function handleResumenSesionTrigger(payload: ResumenSesionTriggerPa
   // ✅ OBTENER METADATA PARA EL RESUMEN
   const npcName = getCardField(npc?.card, 'name', '');
   const playerName = session.playerId || session.jugador?.nombre || 'Unknown';
-  const nextVersion = sessionManager.getNextSummaryVersion(session.id);
+  const nextVersion = await sessionDbManager.getNextSummaryVersion(session.id);
 
   // ✅ GUARDAR RESUMEN CON METADATA COMPLETA (Opción 3: Híbrida)
   summaryManager.saveSummary(
@@ -392,10 +393,10 @@ export async function handleResumenSesionTrigger(payload: ResumenSesionTriggerPa
   );
 
   // ✅ AGREGAR RESUMEN AL HISTORIAL DE LA SESIÓN
-  sessionManager.addSummaryToHistory(session.id, summary, nextVersion);
+  await sessionDbManager.addSummaryToHistory(session.id, summary, nextVersion);
 
   // Clear messages from session after summary is generated
-  sessionManager.clearMessages(session.id);
+  await sessionDbManager.clearMessages(session.id);
 
   return {
     summary
@@ -411,6 +412,11 @@ export async function handleResumenNPCTrigger(payload: ResumenNPCTriggerPayload)
   if (!npc) {
     throw new Error(`NPC with id ${npcid} not found`);
   }
+
+  // Get context (world, pueblo, edificio)
+  const world = await worldDbManager.getById(npc.location.worldId);
+  const pueblo = npc.location.puebloId ? await puebloDbManager.getById(npc.location.puebloId) : undefined;
+  const edificio = npc.location.edificioId ? await edificioDbManager.getById(npc.location.edificioId) : undefined;
 
   // ✅ LEER CONFIGURACIÓN DE SYSTEM PROMPT DEL ARCHIVO ESPECÍFICO
   let configSystemPrompt = payloadSystemPrompt;
@@ -439,7 +445,7 @@ export async function handleResumenNPCTrigger(payload: ResumenNPCTriggerPayload)
   }
 
   // ✅ OBTENER RESÚMENES DE SESIONES DEL NPC CON METADATA
-  const npcSummaries = summaryManager.getSummariesByNPC(npcid);
+  const npcSummaries = await sessionSummaryDbManager.getByNPCId(npcid);
   console.log(`[handleResumenNPCTrigger] Obtenidos ${npcSummaries.length} resúmenes para el NPC ${npcid}`);
 
   // ✅ FORMATEAR LA LISTA DE RESÚMENES CON EL NUEVO FORMATO
@@ -553,14 +559,14 @@ export async function handleResumenEdificioTrigger(payload: ResumenEdificioTrigg
   const { edificioid, systemPrompt: payloadSystemPrompt, allSummaries: payloadAllSummaries } = payload;
 
   // Get edificio
-  const edificio = edificioManager.getById(edificioid);
+  const edificio = await edificioDbManager.getById(edificioid);
   if (!edificio) {
     throw new Error(`Edificio with id ${edificioid} not found`);
   }
 
   // Get context (world, pueblo)
-  const world = worldManager.getById(edificio.worldId);
-  const pueblo = edificio.puebloId ? puebloManager.getById(edificio.puebloId) : undefined;
+  const world = await worldDbManager.getById(edificio.worldId);
+  const pueblo = edificio.puebloId ? await puebloDbManager.getById(edificio.puebloId) : undefined;
 
   // ✅ LEER CONFIGURACIÓN DE SYSTEM PROMPT DEL ARCHIVO ESPECÍFICO
   let configSystemPrompt = payloadSystemPrompt;
@@ -663,7 +669,7 @@ export async function handleResumenEdificioTrigger(payload: ResumenEdificioTrigg
       eventos_recientes: [response]
     };
 
-    edificioManager.update(edificioid, updatedEdificio);
+  await edificioDbManager.update(edificioid, updatedEdificio);
     console.log('[handleResumenEdificioTrigger] Resumen guardado en eventos_recientes del edificio');
   }
 
@@ -678,13 +684,13 @@ export async function handleResumenPuebloTrigger(payload: ResumenPuebloTriggerPa
   const { pueblid, systemPrompt: payloadSystemPrompt, allSummaries: payloadAllSummaries } = payload;
 
   // Get pueblo
-  const pueblo = puebloManager.getById(pueblid);
+  const pueblo = await puebloDbManager.getById(pueblid);
   if (!pueblo) {
     throw new Error(`Pueblo with id ${pueblid} not found`);
   }
 
   // Get context (world)
-  const world = worldManager.getById(pueblo.worldId);
+  const world = await worldDbManager.getById(pueblo.worldId);
 
   // ✅ LEER CONFIGURACIÓN DE SYSTEM PROMPT DEL ARCHIVO ESPECÍFICO
   let configSystemPrompt = payloadSystemPrompt;
@@ -712,7 +718,7 @@ export async function handleResumenPuebloTrigger(payload: ResumenPuebloTriggerPa
   }
 
   // Get all edificios for this pueblo
-  const edificios = edificioManager.getByPuebloId(pueblid);
+  const edificios = await edificioDbManager.getByPuebloId(pueblid);
 
   // ✅ OBTENER eventos_recientes DE LOS EDIFICIOS
   let edificioSummaries = payloadAllSummaries;
@@ -793,7 +799,7 @@ export async function handleResumenPuebloTrigger(payload: ResumenPuebloTriggerPa
       }
     };
 
-    puebloManager.update(pueblid, updatedPueblo);
+    await puebloDbManager.update(pueblid, updatedPueblo);
     console.log('[handleResumenPuebloTrigger] Resumen guardado en rumores del pueblo');
   }
 
@@ -808,7 +814,7 @@ export async function handleResumenMundoTrigger(payload: ResumenMundoTriggerPayl
   const { mundoid, systemPrompt: payloadSystemPrompt, allSummaries: payloadAllSummaries } = payload;
 
   // Get world
-  const world = worldManager.getById(mundoid);
+  const world = await worldDbManager.getById(mundoid);
   if (!world) {
     throw new Error(`World with id ${mundoid} not found`);
   }
@@ -839,7 +845,7 @@ export async function handleResumenMundoTrigger(payload: ResumenMundoTriggerPayl
   }
 
   // Get all pueblos for this world
-  const pueblos = puebloManager.getByWorldId(mundoid);
+  const pueblos = await puebloDbManager.getByWorldId(mundoid);
 
   // ✅ OBTENER RUMORES DE LOS PUEBLOS
   let puebloSummaries = payloadAllSummaries;
@@ -859,7 +865,7 @@ export async function handleResumenMundoTrigger(payload: ResumenMundoTriggerPayl
         };
       })
       .filter(p => p.consolidatedSummary !== '')
-      .map(p => `Pueblo/Nación ${p.p.puebloName} (ID: ${p.p.puebloId})\n${p.consolidatedSummary}`)
+      .map(p => `Pueblo/Nación ${p.puebloName} (ID: ${p.puebloId})\n${p.consolidatedSummary}`)
       .join('\n\n');
   }
 
@@ -919,7 +925,7 @@ export async function handleResumenMundoTrigger(payload: ResumenMundoTriggerPayl
       }
     };
 
-    worldManager.update(mundoid, updatedWorld);
+    await worldDbManager.update(mundoid, updatedWorld);
     console.log('[handleResumenMundoTrigger] Resumen guardado en rumores del mundo');
   }
 
@@ -936,16 +942,16 @@ export async function handleNuevoLoreTrigger(payload: NuevoLoreTriggerPayload): 
   // Get context based on scope
   let world, pueblo, edificio;
   if (scope === 'mundo') {
-    world = worldManager.getById(targetId);
+    world = await worldDbManager.getById(targetId);
     if (!world) {
       throw new Error(`World with id ${targetId} not found`);
     }
   } else if (scope === 'pueblo') {
-    pueblo = puebloManager.getById(targetId);
+    pueblo = await puebloDbManager.getById(targetId);
     if (!pueblo) {
       throw new Error(`Pueblo with id ${targetId} not found`);
     }
-    world = worldManager.getById(pueblo.worldId);
+    world = await worldDbManager.getById(pueblo.worldId);
   }
 
   // Build prompt
@@ -963,14 +969,14 @@ export async function handleNuevoLoreTrigger(payload: NuevoLoreTriggerPayload): 
   // Update lore
   if (scope === 'mundo' && world) {
     if (loreType === 'rumores') {
-      worldManager.update(world.id, {
+      await worldDbManager.update(world.id, {
         lore: {
           ...world.lore,
           rumores: [...world.lore.rumores, lore]
         }
       });
     } else if (loreType === 'estado_mundo') {
-      worldManager.update(world.id, {
+      await worldDbManager.update(world.id, {
         lore: {
           ...world.lore,
           estado_mundo: lore
@@ -979,14 +985,14 @@ export async function handleNuevoLoreTrigger(payload: NuevoLoreTriggerPayload): 
     }
   } else if (scope === 'pueblo' && pueblo) {
     if (loreType === 'rumores') {
-      puebloManager.update(pueblo.id, {
+      await puebloDbManager.update(pueblo.id, {
         lore: {
           ...pueblo.lore,
           rumores: [...pueblo.lore.rumores, lore]
         }
       });
     } else if (loreType === 'estado_pueblo') {
-      puebloManager.update(pueblo.id, {
+      await puebloDbManager.update(pueblo.id, {
         lore: {
           ...pueblo.lore,
           estado_pueblo: lore
@@ -1048,15 +1054,15 @@ export async function previewTriggerPrompt(payload: AnyTriggerPayload): Promise<
 
       console.log('[previewTriggerPrompt] NPC encontrado:', npc.id, npc.card?.data?.name || npc.card?.name);
 
-      const world = worldManager.getById(npc.location.worldId);
-      const pueblo = npc.location.puebloId ? puebloManager.getById(npc.location.puebloId) : undefined;
-      const edificio = npc.location.edificioId ? edificioManager.getById(npc.location.edificioId) : undefined;
-      const session = chatPayload.playersessionid ? sessionManager.getById(chatPayload.playersessionid) : undefined;
+      const world = await worldDbManager.getById(npc.location.worldId);
+      const pueblo = npc.location.puebloId ? await puebloDbManager.getById(npc.location.puebloId) : undefined;
+      const edificio = npc.location.edificioId ? await edificioDbManager.getById(npc.location.edificioId) : undefined;
+      const session = chatPayload.playersessionid ? await sessionDbManager.getById(chatPayload.playersessionid) : undefined;
 
       // Obtener el último resumen
       // 1. Prioridad: payload (puede venir del frontend)
       // 2. Fallback: buscar automáticamente en el summaryManager
-      const lastSummary = chatPayload.lastSummary || (session ? summaryManager.getSummary(session.id) : undefined) || undefined;
+      const lastSummary = chatPayload.lastSummary || (session ? (await sessionSummaryDbManager.getLatestBySessionId(session.id))?.summary : undefined) || undefined;
 
       // ✅ CONSTRUIR CONTEXTO DE VARIABLES PARA REEMPLAZO
       const varContext: VariableContext = {
@@ -1125,14 +1131,14 @@ export async function previewTriggerPrompt(payload: AnyTriggerPayload): Promise<
     case 'resumen_sesion': {
       const summaryPayload = payload as ResumenSesionTriggerPayload;
       const npc = await npcDbManager.getById(summaryPayload.npcid);
-      const session = sessionManager.getById(summaryPayload.playersessionid);
+      const session = await sessionDbManager.getById(summaryPayload.playersessionid);
 
       if (!npc || !session) throw new Error('NPC or session not found');
 
       // Get context (world, pueblo, edificio)
-      const world = worldManager.getById(npc.location.worldId);
-      const pueblo = npc.location.puebloId ? puebloManager.getById(npc.location.puebloId) : undefined;
-      const edificio = npc.location.edificioId ? edificioManager.getById(npc.location.edificioId) : undefined;
+      const world = await worldDbManager.getById(npc.location.worldId);
+      const pueblo = npc.location.puebloId ? await puebloDbManager.getById(npc.location.puebloId) : undefined;
+      const edificio = npc.location.edificioId ? await edificioDbManager.getById(npc.location.edificioId) : undefined;
 
       // ✅ LEER CONFIGURACIÓN DE SYSTEM PROMPT DEL ARCHIVO ESPECÍFICO
       let configSystemPrompt = summaryPayload.systemPrompt;
@@ -1217,9 +1223,9 @@ export async function previewTriggerPrompt(payload: AnyTriggerPayload): Promise<
       }
 
       // Get context (world, pueblo, edificio)
-      const world = worldManager.getById(npc.location.worldId);
-      const pueblo = npc.location.puebloId ? puebloManager.getById(npc.location.puebloId) : undefined;
-      const edificio = npc.location.edificioId ? edificioManager.getById(npc.location.edificioId) : undefined;
+      const world = await worldDbManager.getById(npc.location.worldId);
+      const pueblo = npc.location.puebloId ? await puebloDbManager.getById(npc.location.puebloId) : undefined;
+      const edificio = npc.location.edificioId ? await edificioDbManager.getById(npc.location.edificioId) : undefined;
 
       // ✅ LEER CONFIGURACIÓN DE SYSTEM PROMPT DEL ARCHIVO ESPECÍFICO
       let configSystemPrompt = npcPayload.systemPrompt;
@@ -1247,7 +1253,7 @@ export async function previewTriggerPrompt(payload: AnyTriggerPayload): Promise<
       }
 
       // ✅ OBTENER RESÚMENES DE SESIONES DEL NPC CON METADATA
-      const npcSummaries = summaryManager.getSummariesByNPC(npcPayload.npcid);
+      const npcSummaries = await sessionSummaryDbManager.getByNPCId(npcPayload.npcid);
 
       // ✅ FORMATEAR LA LISTA DE RESÚMENES CON EL NUEVO FORMATO
       let allSummariesFormatted = npcPayload.allSummaries;
@@ -1337,12 +1343,12 @@ ${memoriesSections.join('\n')}
       let world, pueblo;
 
       if (lorePayload.scope === 'mundo') {
-        world = worldManager.getById(lorePayload.targetId);
+        world = await worldDbManager.getById(lorePayload.targetId);
         if (!world) {
           throw new Error(`World with id ${lorePayload.targetId} not found`);
         }
       } else if (lorePayload.scope === 'pueblo') {
-        pueblo = puebloManager.getById(lorePayload.targetId);
+        pueblo = await puebloDbManager.getById(lorePayload.targetId);
         if (!pueblo) {
           throw new Error(`Pueblo with id ${lorePayload.targetId} not found`);
         }
@@ -1369,12 +1375,12 @@ ${memoriesSections.join('\n')}
 
     case 'resumen_edificio': {
       const edificioPayload = payload as ResumenEdificioTriggerPayload;
-      const edificio = edificioManager.getById(edificioPayload.edificioid);
+      const edificio = await edificioDbManager.getById(edificioPayload.edificioid);
       if (!edificio) throw new Error('Edificio not found');
 
       // Get context (world, pueblo)
-      const world = worldManager.getById(edificio.worldId);
-      const pueblo = edificio.puebloId ? puebloManager.getById(edificio.puebloId) : undefined;
+      const world = await worldDbManager.getById(edificio.worldId);
+      const pueblo = edificio.puebloId ? await puebloDbManager.getById(edificio.puebloId) : undefined;
 
       // ✅ LEER CONFIGURACIÓN DE SYSTEM PROMPT
       let configSystemPrompt = edificioPayload.systemPrompt;
@@ -1475,11 +1481,11 @@ ${memoriesSections.join('\n')}
 
     case 'resumen_pueblo': {
       const puebloPayload = payload as ResumenPuebloTriggerPayload;
-      const pueblo = puebloManager.getById(puebloPayload.pueblid);
+      const pueblo = await puebloDbManager.getById(puebloPayload.pueblid);
       if (!pueblo) throw new Error('Pueblo not found');
 
       // Get context (world)
-      const world = worldManager.getById(pueblo.worldId);
+      const world = await worldDbManager.getById(pueblo.worldId);
 
       // ✅ LEER CONFIGURACIÓN DE SYSTEM PROMPT
       let configSystemPrompt = puebloPayload.systemPrompt;
@@ -1506,7 +1512,7 @@ ${memoriesSections.join('\n')}
       }
 
       // ✅ OBTENER eventos_recientes DE LOS EDIFICIOS
-      const edificios = edificioManager.getByPuebloId(puebloPayload.pueblid);
+      const edificios = await edificioDbManager.getByPuebloId(puebloPayload.pueblid);
       const edificioSummaries = edificios
         .map(edificio => {
           const eventosRecientes = edificio.eventos_recientes || [];
@@ -1576,7 +1582,7 @@ ${memoriesSections.join('\n')}
 
     case 'resumen_mundo': {
       const mundoPayload = payload as ResumenMundoTriggerPayload;
-      const world = worldManager.getById(mundoPayload.mundoid);
+      const world = await worldDbManager.getById(mundoPayload.mundoid);
       if (!world) throw new Error('World not found');
 
       // ✅ LEER CONFIGURACIÓN DE SYSTEM PROMPT
@@ -1604,7 +1610,7 @@ ${memoriesSections.join('\n')}
       }
 
       // ✅ OBTENER rumores DE LOS PUEBLOS
-      const pueblos = puebloManager.getByWorldId(mundoPayload.mundoid);
+      const pueblos = await puebloDbManager.getByWorldId(mundoPayload.mundoid);
       const puebloSummaries = pueblos
         .map(pueblo => {
           const rumores = pueblo.lore.rumores || [];

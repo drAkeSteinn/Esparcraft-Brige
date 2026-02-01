@@ -1,6 +1,5 @@
 // This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
+// learn more about it in docs: https://pris.ly/d/prisma-schema
 // Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
 // Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
 
@@ -42,8 +41,115 @@ model NPC {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
+  // Relaciones FK hacia entidades padre
+  mundo          World?     @relation("NPC_Mundo", fields: [worldId], references: [id])
+  pueblo         Pueblo?    @relation("NPC_Pueblo", fields: [puebloId], references: [id])
+  edificio       Edificio?   @relation("NPC_Edificio", fields: [edificioId], references: [id])
+
+  // Relaciones hacia entidades hijas
+  sessions       Session[]  @relation("Session_NPC")
+
   @@index([worldId])
   @@index([puebloId])
   @@index([edificioId])
   @@index([locationScope])
+}
+
+// World Model - Mundos/Universos
+model World {
+  id             String   @id @default(cuid())
+  name           String
+  lore           String   // JSON string de {estado_mundo, rumores, eventos}
+  area           String?  // JSON string de {start, end}
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  // Relaciones FK
+  npcs           NPC[]      @relation("NPC_Mundo")
+  edificios      Edificio[] @relation("Edificio_Mundo")
+  pueblos        Pueblo[]    @relation("Pueblo_Mundo")
+}
+
+// Pueblo Model - Pueblos/Naciones
+model Pueblo {
+  id             String   @id @default(cuid())
+  worldId        String
+  name           String
+  type           String   // 'pueblo' | 'nacion'
+  description    String
+  lore           String   // JSON string de {estado_pueblo, rumores, eventos}
+  area           String?  // JSON string de {start, end}
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  // Relaciones FK
+  mundo          World?     @relation("Pueblo_Mundo", fields: [worldId], references: [id])
+  edificios      Edificio[] @relation("Edificio_Pueblo")
+  npcs           NPC[]      @relation("NPC_Pueblo")
+
+  @@index([worldId])
+}
+
+// Edificio Model - Edificios/Lugares
+model Edificio {
+  id                  String   @id @default(cuid())
+  worldId             String
+  puebloId            String
+  name                String
+  lore                String
+  rumores             String?  // JSON string
+  eventos_recientes  String?  // JSON string
+  area                String   // JSON string de {start, end}
+  puntosDeInteres    String?  // JSON string de PointOfInterest[]
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  // Relaciones FK
+  mundo              World?     @relation("Edificio_Mundo", fields: [worldId], references: [id])
+  pueblo             Pueblo?    @relation("Edificio_Pueblo", fields: [puebloId], references: [id])
+  npcs               NPC[]      @relation("NPC_Edificio")
+
+  @@index([worldId])
+  @@index([puebloId])
+}
+
+// Session Model - Sesiones de chat
+model Session {
+  id             String   @id @default(cuid())
+  npcId          String
+  playerId       String?
+  jugador        String   // JSON string de Jugador
+  startTime      DateTime @default(now())
+  lastActivity   DateTime @updatedAt
+  messages       String   // JSON string de ChatMessage[]
+  lastPrompt     String?
+  summary        String?  // Resumen más reciente (opcional, para compatibilidad)
+  summaryId      String?  // FK al último resumen (opcional)
+
+  // Relaciones FK
+  npc            NPC?       @relation("Session_NPC", fields: [npcId], references: [id])
+
+  @@index([npcId])
+  @@index([playerId])
+  @@index([startTime])
+  @@index([lastActivity])
+  @@index([summaryId])
+}
+
+// SessionSummary Model - Resúmenes de sesiones
+model SessionSummary {
+  id             String   @id @default(cuid())
+  sessionId      String
+  npcId          String
+  playerId       String?
+  playerName     String?
+  npcName        String?
+  summary        String
+  timestamp      DateTime @default(now())
+  version        Int      @default(1)
+
+  @@index([sessionId])
+  @@index([npcId])
+  @@index([playerId])
+  @@index([timestamp])
 }

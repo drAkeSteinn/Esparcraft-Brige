@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { puebloManager } from '@/lib/fileManager';
+import { puebloDbManager } from '@/lib/puebloDbManager';
 
 // GET specific pueblo
 export async function GET(
@@ -8,7 +8,7 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    const pueblo = puebloManager.getById(id);
+    const pueblo = await puebloDbManager.getById(id);
 
     if (!pueblo) {
       return NextResponse.json(
@@ -38,7 +38,7 @@ export async function PUT(
   try {
     const { id } = await params;
     const body = await request.json();
-    const updatedPueblo = puebloManager.update(id, body);
+    const updatedPueblo = await puebloDbManager.update(id, body);
 
     if (!updatedPueblo) {
       return NextResponse.json(
@@ -67,7 +67,7 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params;
-    const success = puebloManager.delete(id);
+    const success = await puebloDbManager.delete(id);
 
     if (!success) {
       return NextResponse.json(

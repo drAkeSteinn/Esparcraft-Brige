@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { worldManager } from '@/lib/fileManager';
+import { worldDbManager } from '@/lib/worldDbManager';
 import { World } from '@/lib/types';
 
 // GET all worlds
 export async function GET() {
   try {
-    const worlds = worldManager.getAll();
+    const worlds = await worldDbManager.getAll();
     return NextResponse.json({
       success: true,
       data: worlds
@@ -41,7 +41,7 @@ export async function POST(request: NextRequest) {
       }
     };
 
-    const newWorld = worldManager.create(worldData, body.id);
+    const newWorld = await worldDbManager.create(worldData, body.id);
 
     return NextResponse.json({
       success: true,

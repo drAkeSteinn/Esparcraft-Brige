@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { sessionManager } from '@/lib/fileManager';
+import { sessionDbManager } from '@/lib/sessionDbManager';
 
 // GET all sessions or filter by npcId
 export async function GET(request: NextRequest) {
@@ -9,9 +9,9 @@ export async function GET(request: NextRequest) {
 
     let sessions;
     if (npcId) {
-      sessions = sessionManager.getByNPCId(npcId);
+      sessions = await sessionDbManager.getByNPCId(npcId);
     } else {
-      sessions = sessionManager.getAll();
+      sessions = await sessionDbManager.getAll();
     }
 
     return NextResponse.json({
@@ -47,7 +47,7 @@ export async function POST(request: NextRequest) {
       summary: body.summary
     };
 
-    const newSession = sessionManager.create(sessionData, body.id);
+    const newSession = await sessionDbManager.create(sessionData, body.id);
 
     return NextResponse.json({
       success: true,

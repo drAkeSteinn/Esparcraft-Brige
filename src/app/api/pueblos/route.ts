@@ -1,5 +1,5 @@
+import { puebloDbManager } from '@/lib/puebloDbManager';
 import { NextRequest, NextResponse } from 'next/server';
-import { puebloManager } from '@/lib/fileManager';
 
 // GET all pueblos or filter by worldId
 export async function GET(request: NextRequest) {
@@ -9,9 +9,9 @@ export async function GET(request: NextRequest) {
 
     let pueblos;
     if (worldId) {
-      pueblos = puebloManager.getByWorldId(worldId);
+      pueblos = await puebloDbManager.getByWorldId(worldId);
     } else {
-      pueblos = puebloManager.getAll();
+      pueblos = await puebloDbManager.getAll();
     }
 
     return NextResponse.json({
@@ -60,7 +60,7 @@ export async function POST(request: NextRequest) {
       }
     };
 
-    const newPueblo = puebloManager.create(puebloData, body.id);
+    const newPueblo = await puebloDbManager.create(puebloData, body.id);
 
     return NextResponse.json({
       success: true,

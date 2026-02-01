@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { worldManager } from '@/lib/fileManager';
+import { worldDbManager } from '@/lib/worldDbManager';
 
 // GET specific world
 export async function GET(
@@ -8,7 +8,7 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    const world = worldManager.getById(id);
+    const world = await worldDbManager.getById(id);
 
     if (!world) {
       return NextResponse.json(
@@ -38,7 +38,7 @@ export async function PUT(
   try {
     const { id } = await params;
     const body = await request.json();
-    const updatedWorld = worldManager.update(id, body);
+    const updatedWorld = await worldDbManager.update(id, body);
 
     if (!updatedWorld) {
       return NextResponse.json(
@@ -67,7 +67,7 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params;
-    const success = worldManager.delete(id);
+    const success = await worldDbManager.delete(id);
 
     if (!success) {
       return NextResponse.json(

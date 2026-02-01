@@ -1,18 +1,6 @@
-import { PrismaClient } from '@prisma/client';
+import { db } from '@/lib/db';
 import { NPC, SillyTavernCard, NPCLocation } from './types';
 
-// Singleton pattern para Prisma Client (evita múltiples instancias en desarrollo)
-const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
-
-const prisma =
-  globalForPrisma.prisma ??
-  new PrismaClient({
-    log: process.env.NODE_ENV === 'development' ? ['error', 'warn'] : ['error'],
-  });
-
-if (process.env.NODE_ENV !== 'production') {
-  globalForPrisma.prisma = prisma;
-}
 
 // Helper para convertir entre modelos de DB y TypeScript
 function toDomainNPC(dbNPC: any): NPC {
@@ -45,7 +33,7 @@ export const npcDbManager = {
    * Obtiene todos los NPCs
    */
   async getAll(): Promise<NPC[]> {
-    const npcs = await prisma.nPC.findMany({
+    const npcs = await db.nPC.findMany({
       orderBy: { createdAt: 'desc' }
     });
     return npcs.map(toDomainNPC);
@@ -55,7 +43,7 @@ export const npcDbManager = {
    * Obtiene un NPC por su ID
    */
   async getById(id: string): Promise<NPC | null> {
-    const npc = await prisma.nPC.findUnique({
+    const npc = await db.nPC.findUnique({
       where: { id }
     });
     return npc ? toDomainNPC(npc) : null;
@@ -77,7 +65,7 @@ export const npcDbManager = {
       where.edificioId = edificioId;
     }
 
-    const npcs = await prisma.nPC.findMany({
+    const npcs = await db.nPC.findMany({
       where,
       orderBy: { createdAt: 'desc' }
     });
@@ -88,7 +76,7 @@ export const npcDbManager = {
    * Obtiene NPCs por edificioId
    */
   async getByEdificioId(edificioId: string): Promise<NPC[]> {
-    const npcs = await prisma.nPC.findMany({
+    const npcs = await db.nPC.findMany({
       where: { edificioId },
       orderBy: { createdAt: 'desc' }
     });
@@ -99,7 +87,7 @@ export const npcDbManager = {
    * Obtiene NPCs por puebloId
    */
   async getByPuebloId(puebloId: string): Promise<NPC[]> {
-    const npcs = await prisma.nPC.findMany({
+    const npcs = await db.nPC.findMany({
       where: { puebloId },
       orderBy: { createdAt: 'desc' }
     });
@@ -110,7 +98,7 @@ export const npcDbManager = {
    * Obtiene NPCs por worldId
    */
   async getByWorldId(worldId: string): Promise<NPC[]> {
-    const npcs = await prisma.nPC.findMany({
+    const npcs = await db.nPC.findMany({
       where: { worldId },
       orderBy: { createdAt: 'desc' }
     });
@@ -124,7 +112,7 @@ export const npcDbManager = {
     const npcId = id || `NPC_${Date.now()}`;
     const newNPC: NPC = { ...npc, id: npcId };
 
-    const created = await prisma.nPC.create({
+    const created = await db.nPC.create({
       data: toDBNPC(newNPC)
     });
 
@@ -144,7 +132,7 @@ export const npcDbManager = {
       id: existing.id, // Mantener el ID original
     };
 
-    const result = await prisma.nPC.update({
+    const result = await db.nPC.update({
       where: { id },
       data: toDBNPC(updated)
     });
@@ -159,7 +147,7 @@ export const npcDbManager = {
     const existing = await this.getById(id);
     if (!existing) return null;
 
-    const result = await prisma.nPC.update({
+    const result = await db.nPC.update({
       where: { id },
       data: {
         card: JSON.stringify(card)
@@ -174,7 +162,7 @@ export const npcDbManager = {
    */
   async delete(id: string): Promise<boolean> {
     try {
-      await prisma.nPC.delete({
+      await db.nPC.delete({
         where: { id }
       });
       return true;
@@ -194,7 +182,7 @@ export const npcDbManager = {
     if (puebloId) where.puebloId = puebloId;
     if (edificioId) where.edificioId = edificioId;
 
-    return await prisma.nPC.count({ where });
+    return await db.nPC.count({ where });
   },
 
   /**
@@ -211,7 +199,7 @@ export const npcDbManager = {
       where.worldId = worldId;
     }
 
-    const npcs = await prisma.nPC.findMany({
+    const npcs = await db.nPC.findMany({
       where,
       orderBy: { createdAt: 'desc' }
     });
