@@ -58,6 +58,19 @@ export async function POST(request: NextRequest) {
       }
     };
 
+    // ✅ GUARDAR CONFIGURACIÓN DE minMessages EN ARCHIVO PERSISTENTE
+    // Esto permite que el trigger "Resumen de Sesión" use el mismo valor
+    try {
+      const fs = await import('fs/promises');
+      const path = await import('path');
+      const configPath = path.join(process.cwd(), 'db', 'resumen-general-config.json');
+      await fs.writeFile(configPath, JSON.stringify({ minMessages }, null, 2));
+      console.log(`[ResumenGeneral API] Configuración guardada en ${configPath}:`, { minMessages });
+    } catch (error) {
+      console.error('[ResumenGeneral API] Error guardando configuración en archivo:', error);
+      // No fallar el proceso si no se puede guardar el archivo
+    }
+
     // ✅ MARCAR COMO RUNNING EN DB
     await ResumenGeneralService.setRunning(config);
 

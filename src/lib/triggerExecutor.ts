@@ -18,8 +18,14 @@ import { worldDbManager } from './worldDbManager';
 import { puebloDbManager } from './puebloDbManager';
 import { edificioDbManager } from './edificioDbManager';
 import { sessionSummaryDbManager } from './resumenSummaryDbManager';
-import { npcStateManager, grimorioManager } from './fileManager';
+import { NPCSummaryManager, EdificioSummaryManager, PuebloSummaryManager, WorldSummaryManager } from './summaryManagers';
+import { grimorioManager } from './fileManager';
 import { getCardField } from './types';
+import {
+  generateSessionSummariesHash,
+  generateNPCSummariesHash,
+  generateEdificioSummariesHash
+} from './hashUtils';
 import {
   buildCompleteSessionSummaryPrompt,
   buildNPCSummaryPrompt,
@@ -131,6 +137,35 @@ async function executeResumenSesion(
     return { success: false, error: `Session ${playersessionid} not found` };
   }
 
+  // ✅ LEER CONFIGURACIÓN DE minMessages (misma configuración que usa Resumen General)
+  let minMessages = 10; // Valor por defecto
+  try {
+    const fs = await import('fs/promises');
+    const path = await import('path');
+    const configPath = path.join(process.cwd(), 'db', 'resumen-general-config.json');
+    try {
+      const configContent = await fs.readFile(configPath, 'utf-8');
+      const config = JSON.parse(configContent);
+      minMessages = config.minMessages || 10;
+      console.log(`[executeResumenSesion] minMessages leído: ${minMessages}`);
+    } catch (error) {
+      console.log('[executeResumenSesion] No se pudo leer config de minMessages, usando valor por defecto: 10');
+    }
+  } catch (error) {
+    console.log('[executeResumenSesion] Error al leer config de minMessages, usando valor por defecto: 10');
+  }
+
+  // ✅ VERIFICAR QUE LA SESIÓN TENGA SUFICIENTES MENSAJES
+  if (session.messages.length < minMessages) {
+    console.log(`[executeResumenSesion] Sesión ${playersessionid} tiene ${session.messages.length} mensajes (< ${minMessages}), OMITIENDO resumen`);
+    return {
+      success: false,
+      error: `La sesión tiene solo ${session.messages.length} mensajes. Se requieren al menos ${minMessages} mensajes para generar el resumen.`
+    };
+  }
+
+  console.log(`[executeResumenSesion] Sesión ${playersessionid} tiene ${session.messages.length} mensajes (>= ${minMessages}), PROCEDIENDO con resumen`);
+
   // Get context (world, pueblo, edificio)
   const world = await worldDbManager.getById(npc.location.worldId);
   const pueblo = npc.location.puebloId ? await puebloDbManager.getById(npc.location.puebloId) : undefined;
@@ -194,7 +229,30 @@ async function executeResumenSesion(
   // ✅ LLAMAR AL LLM
   const llmResponse = await callLLM(messages);
 
-  const summary = llmResponse;
+  
+
+  // ✅ GUARDAR RESUMEN EN lore.eventos DEL MUNDO (EN LA DB)
+  const loreActual = world.lore || {};
+  await worldDbManager.update(mundoid, {
+    lore: {
+      ...loreActual,
+      eventos: [summary]
+    }
+  });
+  console.log(`[executeResumenMundo] Resumen guardado en lore.eventos del mundo ${mundoid}`);
+
+  // ✅ GUARDAR EN TABLA WorldSummary PARA HISTÓRICO (CON VERSIÓN)
+  const nextVersion = (lastWorldSummary?.version || 0) + 1;
+  await worldSummaryMgr.create({
+    worldId: mundoid,
+    summary,
+    puebloHash: currentHash,
+    version: nextVersion
+  });
+  console.log(`[executeResumenMundo] Mundo ${mundoid} - Resumen guardado en DB con versión ${nextVersion}`);
+
+
+  
 
   // ✅ GUARDAR EN DB
   await sessionSummaryDbManager.create({
@@ -206,6 +264,10 @@ async function executeResumenSesion(
     timestamp: new Date().toISOString(),
     version: 1
   });
+
+  // ✅ LIMPIAR MENSAJES DE LA SESIÓN DESPUÉS DE RESUMIR
+  await sessionDbManagerSingleton.clearMessages(playersessionid);
+  console.log(`[executeResumenSesion] Sesión ${playersessionid}: ${session.messages.length} mensajes eliminados después de resumir`);
 
   return {
     success: true,
@@ -276,8 +338,27 @@ ${memoriesSections.join('\n')}
 ***`;
   }
 
+  // ✅ CALCULAR HASH ACTUAL DE LOS RESÚMENES DE SESIONES DEL NPC
+  const currentHash = generateSessionSummariesHash(npcSummaries);
+
+  // ✅ OBTENER ÚLTIMO RESUMEN GUARDADO DEL NPC
+  const lastNPCSummary = await npcSummaryDbManager.getLatest(npcid);
+
+  console.log(`[executeResumenNPC] NPC ${npcid} - Resúmenes: ${npcSummaries.length}, Hash actual: ${currentHash}`);
+
+  // ✅ VERIFICAR SI HUBO CAMBIOS
+  if (lastNPCSummary?.sessionHash === currentHash) {
+    console.log(`[executeResumenNPC] NPC ${npcid} - SIN CAMBIOS, SKIP`);
+    return {
+      success: false,
+      error: `No hubo cambios en las sesiones del NPC ${npcid}. Los resúmenes son iguales.`
+    };
+  }
+
+  console.log(`[executeResumenNPC] NPC ${npcid} - HAY CAMBIOS, PROCEDIENDO CON RESUMEN`);
+
   // ✅ CONSTRUIR EL PROMPT COMPLETO
-  const existingMemory = npcStateManager.getMemory(npcid) || {};
+  const existingMemory = {};
   const npcName = getCardField(npc?.card, 'name', '');
   const varContext: VariableContext = {
     npc,
@@ -318,17 +399,64 @@ ${memoriesSections.join('\n')}
   // ✅ LLAMAR AL LLM
   const llmResponse = await callLLM(messages);
 
-  const summary = llmResponse;
+  
 
-  // ✅ ACTUALIZAR MEMORIA DEL NPC
-  npcStateManager.updateMemory(npcid, {
-    ...existingMemory,
-    last_summary: summary
+  // ✅ GUARDAR RESUMEN EN lore.eventos DEL MUNDO (EN LA DB)
+  const loreActual = world.lore || {};
+  await worldDbManager.update(mundoid, {
+    lore: {
+      ...loreActual,
+      eventos: [summary]
+    }
   });
+  console.log(`[executeResumenMundo] Resumen guardado en lore.eventos del mundo ${mundoid}`);
+
+  // ✅ GUARDAR EN TABLA WorldSummary PARA HISTÓRICO (CON VERSIÓN)
+  const nextVersion = (lastWorldSummary?.version || 0) + 1;
+  await worldSummaryMgr.create({
+    worldId: mundoid,
+    summary,
+    puebloHash: currentHash,
+    version: nextVersion
+  });
+  console.log(`[executeResumenMundo] Mundo ${mundoid} - Resumen guardado en DB con versión ${nextVersion}`);
+
+
+  
+
+  // ✅ GUARDAR RESUMEN EN creator_notes DE LA CARD DEL NPC (EN LA DB)
+  if (npc?.card) {
+    const updatedCard: any = { ...npc.card };
+
+    if (updatedCard.data) {
+      updatedCard.data = {
+        ...updatedCard.data,
+        creator_notes: summary
+      };
+    } else {
+      updatedCard.data = {
+        creator_notes: summary
+      };
+    }
+
+    await npcDbManager.update(npcid, { card: updatedCard });
+    console.log(`[executeResumenNPC] Resumen guardado en creator_notes de la card del NPC ${npcid}`);
+  }
+
+  // ✅ GUARDAR EN TABLA NPCSummary PARA HISTÓRICO (CON VERSIÓN)
+  const npcSummaryMgr = new NPCSummaryManager();
+  const nextVersion = (lastNPCSummary?.version || 0) + 1;
+  await npcSummaryMgr.create({
+    npcId: npcid,
+    summary,
+    sessionHash: currentHash,
+    version: nextVersion
+  });
+  console.log(`[executeResumenNPC] NPC ${npcid} - Resumen guardado en DB con versión ${nextVersion}`);
 
   return {
     success: true,
-    data: { summary }
+    data: { summary, version: nextVersion }
   };
 }
 
@@ -382,6 +510,36 @@ async function executeResumenEdificio(
     })
     .filter(n => n.consolidatedSummary !== '');
 
+  // ✅ CALCULAR HASH DE LOS RESÚMENES DE NPCs DEL EDIFICIO
+  const npcSummaryMgr = new NPCSummaryManager();
+  const allNPCSummaries = [];
+
+  for (const npc of npcs) {
+    const npcSummaries = await npcSummaryMgr.getByNPCId(npc.id);
+    if (npcSummaries) {
+      allNPCSummaries.push(npcSummaries);
+    }
+  }
+
+  const currentHash = generateNPCSummariesHash(allNPCSummaries);
+
+  // ✅ OBTENER ÚLTIMO RESUMEN GUARDADO DEL EDIFICIO
+  const edificioSummaryMgr = new EdificioSummaryManager();
+  const lastEdificioSummary = await edificioSummaryMgr.getLatest(edificioid);
+
+  console.log(`[executeResumenEdificio] Edificio ${edificioid} - NPCs: ${npcs.length}, Hash actual: ${currentHash}`);
+
+  // ✅ VERIFICAR SI HUBO CAMBIOS EN LOS RESÚMENES DE NPCs
+  if (lastEdificioSummary?.npcHash === currentHash) {
+    console.log(`[executeResumenEdificio] Edificio ${edificioid} - SIN CAMBIOS, SKIP`);
+    return {
+      success: false,
+      error: `No hubo cambios en los resúmenes de NPCs del edificio ${edificioid}. Los resúmenes son iguales.`
+    };
+  }
+
+  console.log(`[executeResumenEdificio] Edificio ${edificioid} - HAY CAMBIOS, PROCEDIENDO CON RESUMEN`);
+
   // ✅ CONSTRUIR EL PROMPT COMPLETO
   const edificioName = edificio.name;
   const varContext: VariableContext = {
@@ -421,11 +579,50 @@ async function executeResumenEdificio(
   // ✅ LLAMAR AL LLM
   const llmResponse = await callLLM(messages);
 
-  const summary = llmResponse;
+  
+
+  // ✅ GUARDAR RESUMEN EN lore.eventos DEL MUNDO (EN LA DB)
+  const loreActual = world.lore || {};
+  await worldDbManager.update(mundoid, {
+    lore: {
+      ...loreActual,
+      eventos: [summary]
+    }
+  });
+  console.log(`[executeResumenMundo] Resumen guardado en lore.eventos del mundo ${mundoid}`);
+
+  // ✅ GUARDAR EN TABLA WorldSummary PARA HISTÓRICO (CON VERSIÓN)
+  const nextVersion = (lastWorldSummary?.version || 0) + 1;
+  await worldSummaryMgr.create({
+    worldId: mundoid,
+    summary,
+    puebloHash: currentHash,
+    version: nextVersion
+  });
+  console.log(`[executeResumenMundo] Mundo ${mundoid} - Resumen guardado en DB con versión ${nextVersion}`);
+
+
+  
+
+  // ✅ GUARDAR RESUMEN EN eventos_recientes DEL EDIFICIO (EN LA DB)
+  await edificioDbManager.update(edificioid, {
+    eventos_recientes: [summary]
+  });
+  console.log(`[executeResumenEdificio] Resumen guardado en eventos_recientes del edificio ${edificioid}`);
+
+  // ✅ GUARDAR EN TABLA EdificioSummary PARA HISTÓRICO (CON VERSIÓN)
+  const nextVersion = (lastEdificioSummary?.version || 0) + 1;
+  await edificioSummaryMgr.create({
+    edificioId: edificioid,
+    summary,
+    npcHash: currentHash,
+    version: nextVersion
+  });
+  console.log(`[executeResumenEdificio] Edificio ${edificioid} - Resumen guardado en DB con versión ${nextVersion}`);
 
   return {
     success: true,
-    data: { summary }
+    data: { summary, version: nextVersion }
   };
 }
 
@@ -481,6 +678,36 @@ async function executeResumenPueblo(
     })
     .filter(e => e.consolidatedSummary !== '');
 
+  // ✅ CALCULAR HASH DE LOS RESÚMENES DE EDIFICIOS DEL PUEBLO
+  const edificioSummaryMgr = new EdificioSummaryManager();
+  const allEdificioSummaries = [];
+
+  for (const edificio of edificios) {
+    const edificioSummaries = await edificioSummaryMgr.getByEdificioId(edificio.id);
+    if (edificioSummaries) {
+      allEdificioSummaries.push(edificioSummaries);
+    }
+  }
+
+  const currentHash = generateEdificioSummariesHash(allEdificioSummaries);
+
+  // ✅ OBTENER ÚLTIMO RESUMEN GUARDADO DEL PUEBLO
+  const puebloSummaryMgr = new PuebloSummaryManager();
+  const lastPuebloSummary = await puebloSummaryMgr.getLatest(pueblid);
+
+  console.log(`[executeResumenPueblo] Pueblo ${pueblid} - Edificios: ${edificios.length}, Hash actual: ${currentHash}`);
+
+  // ✅ VERIFICAR SI HUBO CAMBIOS EN LOS RESÚMENES DE EDIFICIOS
+  if (lastPuebloSummary?.edificioHash === currentHash) {
+    console.log(`[executeResumenPueblo] Pueblo ${pueblid} - SIN CAMBIOS, SKIP`);
+    return {
+      success: false,
+      error: `No hubo cambios en los resúmenes de edificios del pueblo ${pueblid}. Los resúmenes son iguales.`
+    };
+  }
+
+  console.log(`[executeResumenPueblo] Pueblo ${pueblid} - HAY CAMBIOS, PROCEDIENDO CON RESUMEN`);
+
   // ✅ CONSTRUIR EL PROMPT COMPLETO
   const puebloName = pueblo.name;
   const varContext: VariableContext = {
@@ -519,11 +746,54 @@ async function executeResumenPueblo(
   // ✅ LLAMAR AL LLM
   const llmResponse = await callLLM(messages);
 
-  const summary = llmResponse;
+  
+
+  // ✅ GUARDAR RESUMEN EN lore.eventos DEL MUNDO (EN LA DB)
+  const loreActual = world.lore || {};
+  await worldDbManager.update(mundoid, {
+    lore: {
+      ...loreActual,
+      eventos: [summary]
+    }
+  });
+  console.log(`[executeResumenMundo] Resumen guardado en lore.eventos del mundo ${mundoid}`);
+
+  // ✅ GUARDAR EN TABLA WorldSummary PARA HISTÓRICO (CON VERSIÓN)
+  const nextVersion = (lastWorldSummary?.version || 0) + 1;
+  await worldSummaryMgr.create({
+    worldId: mundoid,
+    summary,
+    puebloHash: currentHash,
+    version: nextVersion
+  });
+  console.log(`[executeResumenMundo] Mundo ${mundoid} - Resumen guardado en DB con versión ${nextVersion}`);
+
+
+  
+
+  // ✅ GUARDAR RESUMEN EN lore.eventos DEL PUEBLO (EN LA DB)
+  const loreActual = pueblo.lore || {};
+  await puebloDbManager.update(pueblid, {
+    lore: {
+      ...loreActual,
+      eventos: [summary]
+    }
+  });
+  console.log(`[executeResumenPueblo] Resumen guardado en lore.eventos del pueblo ${pueblid}`);
+
+  // ✅ GUARDAR EN TABLA PuebloSummary PARA HISTÓRICO (CON VERSIÓN)
+  const nextVersion = (lastPuebloSummary?.version || 0) + 1;
+  await puebloSummaryMgr.create({
+    puebloId: pueblid,
+    summary,
+    edificioHash: currentHash,
+    version: nextVersion
+  });
+  console.log(`[executeResumenPueblo] Pueblo ${pueblid} - Resumen guardado en DB con versión ${nextVersion}`);
 
   return {
     success: true,
-    data: { summary }
+    data: { summary, version: nextVersion }
   };
 }
 
@@ -560,13 +830,14 @@ async function executeResumenMundo(
     }
   }
 
-  // ✅ OBTENER rumores DE LOS PUEBLOS
+  // ✅ OBTENER eventos DE LOS PUEBLOS
   const pueblos = await puebloDbManager.getByWorldId(mundoid);
   const puebloSummaries = pueblos
     .map(pueblo => {
-      const rumores = pueblo.lore.rumores || [];
-      const consolidatedSummary = rumores.length > 0
-        ? rumores.join('\n')
+      const lore = pueblo.lore || {};
+        const eventos = lore.eventos || [];
+      const consolidatedSummary = eventos.length > 0
+        ? eventos.join('\n')
         : '';
       return {
         puebloId: pueblo.id,
@@ -575,6 +846,37 @@ async function executeResumenMundo(
       };
     })
     .filter(p => p.consolidatedSummary !== '');
+
+
+  // ✅ CALCULAR HASH DE LOS RESÚMENES DE PUEBLOS DEL MUNDO
+  const puebloSummaryMgr = new PuebloSummaryManager();
+  const allPuebloSummaries = [];
+
+  for (const pueblo of pueblos) {
+    const puebloSummaries = await puebloSummaryMgr.getByPuebloId(pueblo.id);
+    if (puebloSummaries) {
+      allPuebloSummaries.push(puebloSummaries);
+    }
+  }
+
+  const currentHash = generatePuebloSummariesHash(allPuebloSummaries);
+
+  // ✅ OBTENER ÚLTIMO RESUMEN GUARDADO DEL MUNDO
+  const worldSummaryMgr = new WorldSummaryManager();
+  const lastWorldSummary = await worldSummaryMgr.getLatest(mundoid);
+
+  console.log(`[executeResumenMundo] Mundo ${mundoid} - Pueblos: ${pueblos.length}, Hash actual: ${currentHash}`);
+
+  // ✅ VERIFICAR SI HUBO CAMBIOS EN LOS RESÚMENES DE PUEBLOS
+  if (lastWorldSummary?.puebloHash === currentHash) {
+    console.log(`[executeResumenMundo] Mundo ${mundoid} - SIN CAMBIOS, SKIP`);
+    return {
+      success: false,
+      error: `No hubo cambios en los resúmenes de pueblos del mundo ${mundoid}. Los resúmenes son iguales.`
+    };
+  }
+
+  console.log(`[executeResumenMundo] Mundo ${mundoid} - HAY CAMBIOS, PROCEDIENDO CON RESUMEN`);
 
   // ✅ CONSTRUIR EL PROMPT COMPLETO
   const mundoName = world.name;
@@ -613,7 +915,30 @@ async function executeResumenMundo(
   // ✅ LLAMAR AL LLM
   const llmResponse = await callLLM(messages);
 
-  const summary = llmResponse;
+  
+
+  // ✅ GUARDAR RESUMEN EN lore.eventos DEL MUNDO (EN LA DB)
+  const loreActual = world.lore || {};
+  await worldDbManager.update(mundoid, {
+    lore: {
+      ...loreActual,
+      eventos: [summary]
+    }
+  });
+  console.log(`[executeResumenMundo] Resumen guardado en lore.eventos del mundo ${mundoid}`);
+
+  // ✅ GUARDAR EN TABLA WorldSummary PARA HISTÓRICO (CON VERSIÓN)
+  const nextVersion = (lastWorldSummary?.version || 0) + 1;
+  await worldSummaryMgr.create({
+    worldId: mundoid,
+    summary,
+    puebloHash: currentHash,
+    version: nextVersion
+  });
+  console.log(`[executeResumenMundo] Mundo ${mundoid} - Resumen guardado en DB con versión ${nextVersion}`);
+
+
+  
 
   return {
     success: true,

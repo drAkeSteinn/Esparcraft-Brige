@@ -531,3 +531,150 @@ Stage Summary:
 - ✅ El frontend muestra las estadísticas de todas las fases
 - ✅ El dashboard muestra cuándo fue la última ejecución
 - ✅ El dashboard muestra qué resúmenes se ejecutaron y cuáles se omitieron
+---
+Task ID: corregir-backup-database
+Agent: Z.ai Code
+Task: Revisar y corregir el sistema de backups de base de datos
+
+Work Log:
+- Verificado ubicación de backups: data-esparcraft/db-backup/
+- Revisadas las 3 APIs del sistema de backups:
+  1. /api/db/backup - Crear backups
+  2. /api/db/backups - Listar backups
+  3. /api/db/restore - Restaurar backups
+- Identificado y corregido error en parsing de fechas de archivos "before-restore-"
+  - Agregado caso especial para archivos de backup pre-restauración
+  - Ahora las fechas se muestran correctamente en el frontend
+- Identificado y corregido error al crear backup automático
+  - request.json() fallaba cuando el body estaba vacío
+  - Agregado manejo de errores para body vacío
+- Probado el sistema completo:
+  ✅ Crear backup automático: Funciona
+  ✅ Crear backup manual con nombre: Funciona
+  ✅ Listar backups: Funciona y muestra fechas correctas
+  ✅ Restaurar backup: Funciona y crea backup pre-restauración
+  ✅ Limpieza automática (máx 20 backups): Funciona
+- Verificado que los archivos se crean con los tamaños correctos
+
+Stage Summary:
+- ✅ El sistema de backups funciona correctamente
+- ✅ Los backups se guardan en: data-esparcraft/db-backup/
+- ✅ Formato de nombres:
+  - Automático: custom.db.YYYY-MM-DDTHH-MM-SS
+  - Manual: custom.db.YYYY-MM-DDTHH-MM-SS-manual-NOMBRE
+  - Pre-restauración: custom.db.before-restore-YYYY-MM-DDTHH-MM-SS
+- ✅ Backup pre-restauración se crea automáticamente antes de cada restauración
+- ✅ Sistema de limpieza automática mantiene los últimos 20 backups
+---
+Task ID: guardar-resumenes-eventos
+Agent: Z.ai Code
+Task: Verificar y corregir que los resúmenes de edificio/pueblo/mundo se guarden en los eventos
+
+Work Log:
+- Verificadas las peticiones HTTP de resumen de edificio/pueblo/mundo
+- Identificado el problema: Los resúmenes SOLO se guardaban en las tablas de resúmenes (EdificioSummary, PuebloSummary, WorldSummary) PERO NO se guardaban en los eventos de las entidades
+- Revisado schema de Prisma:
+  - Edificio: tiene eventos_recientes (JSON string)
+  - Pueblo: tiene lore con {estado_pueblo, rumores, eventos}
+  - World: tiene lore con {estado_mundo, rumores, eventos}
+- Revisados DbManagers:
+  - edificioDbManager.updateEventosRecientes() - ✅ Existe y funciona
+  - puebloDbManager.updateLore() - ✅ Existe y funciona
+  - worldDbManager.updateLore() - ✅ Existe y funciona
+- Modificada FASE 3 (Edificios) en executePhase3():
+  - Agregado código para guardar el resumen en eventos_recientes del edificio
+  - Se crea un evento con: tipo='resumen', timestamp, contenido, version
+  - Se agrega al inicio del array de eventos
+  - Se imprime log de confirmación
+- Modificada FASE 4 (Pueblos) en executePhase4():
+  - Agregado código para guardar el resumen en lore.eventos del pueblo
+  - Se crea un evento con: tipo='resumen', timestamp, contenido, version
+  - Se agrega al inicio del array de eventos
+  - Se actualiza el lore completo manteniendo estado_pueblo y rumores
+  - Se imprime log de confirmación
+- Modificada FASE 5 (Mundos) en executePhase5():
+  - Agregado código para guardar el resumen en lore.eventos del mundo
+  - Se crea un evento con: tipo='resumen', timestamp, contenido, version
+  - Se agrega al inicio del array de eventos
+  - Se actualiza el lore completo manteniendo estado_mundo y rumores
+  - Se imprime log de confirmación
+- Verificado que el código compila correctamente sin errores
+
+Stage Summary:
+- ✅ FASE 3 (Edificios): Los resúmenes ahora se guardan en eventos_recientes de cada edificio
+- ✅ FASE 4 (Pueblos): Los resúmenes ahora se guardan en lore.eventos de cada pueblo
+- ✅ FASE 5 (Mundos): Los resúmenes ahora se guardan en lore.eventos de cada mundo
+- ✅ Cada resumen incluye: tipo, timestamp, contenido completo, y versión
+- ✅ Los eventos se agregan al inicio del array para mantener cronología (más reciente primero)
+- ✅ El código compila sin errores de TypeScript
+---
+Task ID: eliminar-seccion-duplicada-mensaje-jugador
+Agent: Z.ai Code
+Task: Eliminar sección duplicada de "Mensaje del Jugador" en RouterTab
+
+Work Log:
+- Identificadas dos secciones duplicadas en RouterTab.tsx:
+  - Primera: líneas 1480-1519
+  - Segunda: líneas 1507-1546
+- Ambas secciones eran idénticas:
+  - Card con título "Mensaje del Jugador"
+  - Descripción: "Último mensaje enviado por el jugador (context por mensaje)"
+  - Textarea para el mensaje del jugador
+  - Sección opcional con "Último Resumen de Sesión"
+- Confirmado que ambas secciones hacían exactamente lo mismo
+- Eliminada la sección duplicada (líneas 1507-1546)
+- Verificado que ahora solo existe una sección de "Mensaje del Jugador"
+- Código compilado exitosamente sin errores
+
+Stage Summary:
+- ✅ Sección duplicada eliminada exitosamente
+- ✅ Ahora solo existe una sección funcional de "Mensaje del Jugador"
+- ✅ El código compila sin errores
+- ✅ Funcionalidad completa mantenida (mensaje + resumen de sesión anterior)
+---
+Task ID: mover-mensaje-jugador-datos-jugador
+Agent: Z.ai Code
+Task: Mover el campo "Mensaje del Jugador" dentro de la sección "Datos del Jugador"
+
+Work Log:
+- Localizada la sección "Datos del Jugador" (líneas ~1389-1483)
+- Identificada la estructura de la sección con grid de 2 columnas
+- Identificados todos los campos del jugador:
+  - Nombre, Raza, Nivel, Almakos, Deuda, Piedras del Alma
+  - Salud Actual, Reputación, Hora, Clima
+- Agregado el campo "Mensaje del Jugador" dentro de la sección "Datos del Jugador":
+  - Ubicación: Después del campo "Clima", antes de cerrar el div principal
+  - Tipo: Textarea (para permitir múltiples líneas)
+  - Filas: 4
+  - Placeholder: "Escribe aquí el mensaje del jugador para el NPC..."
+  - Utiliza grid-cols-1 para ocupar toda la fila
+- Verificado que el código compila sin errores
+- Confirmado que el campo ya estaba conectado en chatPayload (línea 579)
+- Confirmado que el campo se usa para deshabilitar el botón de "Enviar Chat" (línea 1575)
+
+Stage Summary:
+- ✅ Campo "Mensaje del Jugador" movido exitosamente dentro de "Datos del Jugador"
+- ✅ El campo ahora está en una ubicación lógica dentro de los datos del personaje
+- ✅ El Textarea permite mensajes multilínea
+- ✅ El código compila correctamente sin errores
+- ✅ El campo se integra correctamente con el chatPayload existente
+---
+Task ID: ajustar-columnas-mensaje-jugador
+Agent: Z.ai Code
+Task: Ajustar el campo "Mensaje del Jugador" para abarcar ambas columnas
+
+Work Log:
+- Revisado el layout actual de la sección "Datos del Jugador"
+- Confirmado que la sección usa grid-cols-2 (dos columnas)
+- Verificado que el campo "Mensaje del Jugador" usaba grid-cols-1 (una sola columna)
+- Modificada la estructura del campo:
+  - Cambiado div wrapper de grid-cols-1 a grid-cols-2
+  - Agregado className="col-span-2" al Textarea para abarcar ambas columnas
+  - Verificado que el código compila sin errores
+- Resultado: El campo "Mensaje del Jugador" ahora abarque ambas columnas, consistente con el resto de campos
+
+Stage Summary:
+- ✅ Campo "Mensaje del Jugador" ahora usa grid-cols-2
+- ✅ Textarea tiene col-span-2 para ocupar todo el ancho
+- ✅ Layout consistente con el resto de campos de "Datos del Jugador"
+- ✅ Código compila exitosamente sin errores

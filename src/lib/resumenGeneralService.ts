@@ -5,7 +5,7 @@ import { edificioDbManager } from './edificioDbManager';
 import { puebloDbManager } from './puebloDbManager';
 import { worldDbManager } from './worldDbManager';
 import { sessionSummaryDbManager } from './resumenSummaryDbManager';
-import { npcSummaryDbManager, edificioSummaryDbManager, puebloSummaryDbManager, worldSummaryDbManager } from './resumenSummaryDbManager';
+import { npcSummaryDbManager, edificioSummaryDbManager, puebloSummaryDbManager, worldSummaryDbManager } from './summaryManagers';
 import { executeTrigger } from './triggerExecutor';
 import {
   ResumenSesionTriggerPayload,
@@ -514,17 +514,29 @@ export class ResumenGeneralService {
     const edificios = await edificioDbManager.getAll();
     const summariesByEdificio = new Map<string, any[]>();
 
-    for (const summary of await npcSummaryDbManager.getAll()) {
-      const existing = summariesByEdificio.get(summary.npcId) || [];
-      existing.push(summary);
-      summariesByEdificio.set(summary.npcId, existing);
+    // ✅ CORREGIDO: Agrupar resúmenes de NPCs por edificioId
+    // Primero obtenemos todos los resúmenes de NPCs
+    const allNPCSummaries = await npcSummaryDbManager.getAll();
+
+    // Para cada edificio, obtenemos sus NPCs y sus resúmenes
+    for (const edificio of edificios) {
+      const npcs = await npcDbManager.getByEdificioId(edificio.id);
+
+      // Obtener los resúmenes de los NPCs de este edificio
+      const npcSummaries = allNPCSummaries.filter(summary =>
+        npcs.some(npc => npc.id === summary.npcId)
+      );
+
+      if (npcSummaries.length > 0) {
+        summariesByEdificio.set(edificio.id, npcSummaries);
+      }
     }
 
     console.log(`[ResumenGeneral] Procesando ${edificios.length} edificios`);
-    
+
     let completed = 0;
     let skipped = 0;
-    
+
     for (let i = 0; i < edificios.length; i++) {
       const edificio = edificios[i];
       const summaries = summariesByEdificio.get(edificio.id) || [];
@@ -555,7 +567,13 @@ export class ResumenGeneralService {
           npcHash: currentHash,
           version: (lastEdificioSummary?.version || 0) + 1
         });
-        
+
+        // ✅ GUARDAR RESUMEN EN eventos_recientes DEL EDIFICIO (REEMPLAZANDO)
+        await edificioDbManager.update(edificio.id, {
+          eventos_recientes: [result.data.summary]
+        });
+        console.log(`[ResumenGeneral] Resumen guardado en eventos_recientes de edificio ${edificio.id} (reemplazando)`);
+
         completed++;
 
         const progress = ((i + 1) / edificios.length) * 100;
@@ -626,7 +644,17 @@ export class ResumenGeneralService {
           edificioHash: currentHash,
           version: (lastPuebloSummary?.version || 0) + 1
         });
-        
+
+        // ✅ GUARDAR RESUMEN EN lore.eventos DEL PUEBLO (REEMPLAZANDO)
+        const loreActual = pueblo.lore || {};
+        await puebloDbManager.update(pueblo.id, {
+          lore: {
+            ...loreActual,
+            eventos: [result.data.summary]  // ✅ REEMPLAZA (en lugar de agregar)
+          }
+        });
+        console.log(`[ResumenGeneral] Resumen guardado en lore.eventos de pueblo ${pueblo.id} (reemplazando)`);
+
         completed++;
 
         const progress = ((i + 1) / pueblos.length) * 100;
@@ -697,7 +725,22 @@ export class ResumenGeneralService {
           puebloHash: currentHash,
           version: (lastWorldSummary?.version || 0) + 1
         });
-        
+
+        // ✅ GUARDAR RESUMEN EN lore.eventos DEL MUNDO
+        const loreActual = mundo.lore || {};
+        const timestamp = new Date().toISOString();
+        const eventoResumen = {
+          tipo: 'resumen',
+          timestamp,
+          contenido: result.data.summary,
+          version: (lastWorldSummary?.version || 0) + 1
+        };
+        await worldDbManager.update(mundo.id, {
+          ...loreActual,
+          eventos: [result.data.summary]
+        });
+        console.log(`[ResumenGeneral] Resumen guardado en lore.eventos de mundo ${mundo.id}`);
+
         completed++;
 
         const progress = ((i + 1) / mundos.length) * 100;

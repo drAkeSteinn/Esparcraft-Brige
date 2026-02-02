@@ -33,11 +33,16 @@ export async function GET() {
         let timestamp = '';
         let isManual = false;
 
-        if (filename.includes('-manual-')) {
+        if (filename.includes('before-restore-')) {
+          // Backup pre-restauración
+          timestamp = filename.replace('custom.db.before-restore-', '');
+        } else if (filename.includes('-manual-')) {
+          // Backup manual con nombre personalizado
           isManual = true;
           const parts = filename.replace('custom.db.', '').split('-manual-');
           timestamp = parts[0];
         } else {
+          // Backup automático normal
           timestamp = filename.replace('custom.db.', '');
         }
 

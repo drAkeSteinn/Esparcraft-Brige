@@ -5,8 +5,17 @@ import { join } from 'path';
 // POST /api/db/backup - Crear un nuevo backup
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
-    const name = body.name?.trim();
+    let body;
+    let name: string | undefined;
+
+    // Intentar parsear el body, puede venir vacío en backup automático
+    try {
+      body = await request.json();
+      name = body.name?.trim();
+    } catch {
+      // Body vacío o inválido - es un backup automático
+      name = undefined;
+    }
 
     const dbDir = join(process.cwd(), 'db');
     const dbFile = join(dbDir, 'custom.db');

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { Send, RefreshCw, Network, MessageSquare, Globe, MapPin, Building, User, Eye, MessageCircle, FileText, Copy, Trash2, Terminal, Loader2, Layers } from 'lucide-react';
+import { Send, RefreshCw, Network, MessageSquare, Globe, MapPin, Building, User, Eye, MessageCircle, FileText, Copy, Trash2, Terminal, Loader2, Layers, CheckCircle, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -65,6 +65,9 @@ export default function RouterTab() {
 
   // Estado para almacenar los resúmenes de pueblos del mundo seleccionado
   const [mundoPuebloSummaries, setMundoPuebloSummaries] = useState<any[]>([]);
+
+  // Estado para cargar configuración de minMessages desde Resumen General
+  const [minMessagesConfig, setMinMessagesConfig] = useState<number>(10);
 
   // Chat trigger form
   const [chatForm, setChatForm] = useState({
@@ -138,6 +141,24 @@ export default function RouterTab() {
 
   useEffect(() => {
     fetchData();
+  }, []);
+
+  // ✅ Cargar configuración de minMessages desde Resumen General
+  useEffect(() => {
+    const loadMinMessagesConfig = async () => {
+      try {
+        const response = await fetch('/api/resumen-general/config');
+        const result = await response.json();
+
+        if (result.success && result.data.minMessages) {
+          setMinMessagesConfig(result.data.minMessages);
+        }
+      } catch (error) {
+        console.error('[useEffect minMessages] Error cargando configuración de minMessages:', error);
+      }
+    };
+
+    loadMinMessagesConfig();
   }, []);
 
   useEffect(() => {
@@ -1471,61 +1492,17 @@ ${memoriesSections.join('\n')}
                         placeholder="Ej: soleado, lluvioso, etc."
                       />
                     </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <Label>Mensaje del Jugador</Label>
+                      <Textarea
+                        value={chatForm.mensaje}
+                        onChange={(e) => setChatForm({ ...chatForm, mensaje: e.target.value })}
+                        placeholder="Escribe aquí el mensaje del jugador para el NPC..."
+                        rows={4}
+                        className="col-span-2"
+                      />
+                    </div>
                   </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle>Mensaje del Jugador</CardTitle>
-                  <CardDescription>Último mensaje enviado por el jugador (context por mensaje)</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <Textarea
-                    value={chatForm.mensaje}
-                    onChange={(e) => setChatForm({ ...chatForm, mensaje: e.target.value })}
-                    placeholder="Escribe aquí el mensaje del jugador..."
-                    rows={4}
-                  />
-                  {chatForm.lastSummary && (
-                    <div>
-                      <Label>Último Resumen de Sesión</Label>
-                      <Textarea
-                        value={chatForm.lastSummary}
-                        onChange={(e) => setChatForm({ ...chatForm, lastSummary: e.target.value })}
-                        placeholder="Resumen de la sesión anterior..."
-                        rows={3}
-                        className="text-sm bg-muted/50"
-                      />
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle>Mensaje del Jugador</CardTitle>
-                  <CardDescription>Último mensaje enviado por el jugador (context por mensaje)</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <Textarea
-                    value={chatForm.mensaje}
-                    onChange={(e) => setChatForm({ ...chatForm, mensaje: e.target.value })}
-                    placeholder="Escribe aquí el mensaje del jugador..."
-                    rows={4}
-                  />
-                  {chatForm.lastSummary && (
-                    <div>
-                      <Label>Último Resumen de Sesión</Label>
-                      <Textarea
-                        value={chatForm.lastSummary}
-                        onChange={(e) => setChatForm({ ...chatForm, lastSummary: e.target.value })}
-                        placeholder="Resumen de la sesión anterior..."
-                        rows={3}
-                        className="text-sm bg-muted/50"
-                      />
-                    </div>
-                  )}
                 </CardContent>
               </Card>
             </div>
@@ -1644,85 +1621,6 @@ ${memoriesSections.join('\n')}
                 <CardDescription>Genera un resumen consolidado del historial de chat de una sesión</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <Label>System Prompt</Label>
-                    {resumenSesionTemplateSaved && (
-                      <div className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400">
-                        <RefreshCw className="h-3 w-3" />
-                        Guardado
-                      </div>
-                    )}
-                  </div>
-                  <Textarea
-                    value={resumenSesionForm.systemPrompt}
-                    onChange={(e) => setResumenSesionForm({ ...resumenSesionForm, systemPrompt: e.target.value })}
-                    placeholder="Escribe aquí el system prompt personalizado para generar el resumen de la sesión. Puedes usar variables como {{npc.name}}, {{mundo}}, etc..."
-                    rows={4}
-                    className="text-sm bg-muted/50"
-                  />
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Soporta variables primarias y plantillas de Grimorio. Si se deja vacío, se usará el system prompt por defecto.
-                  </p>
-                  <div className="flex gap-2 mt-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handleSaveResumenSesionTemplate}
-                      className="flex-1"
-                    >
-                      <RefreshCw className="h-4 w-4 mr-2" />
-                      Guardar Template
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={async () => {
-                        try {
-                          // Guardar string vacío en la API
-                          const response = await fetch('/api/resumen-sesion-trigger-config', {
-                            method: 'POST',
-                            headers: {
-                              'Content-Type': 'application/json'
-                            },
-                            body: JSON.stringify({
-                              systemPrompt: ''
-                            })
-                          });
-
-                          const result = await response.json();
-
-                          if (result.success) {
-                            setResumenSesionForm(prev => ({ ...prev, systemPrompt: '' }));
-                            setResumenSesionTemplateSaved(false);
-                            toast({
-                              title: 'Template Eliminado',
-                              description: 'El system prompt de resumen de sesión ha sido eliminado'
-                            });
-                          } else {
-                            toast({
-                              title: 'Error al Eliminar',
-                              description: result.error || 'No se pudo eliminar el system prompt',
-                              variant: 'destructive'
-                            });
-                          }
-                        } catch (error) {
-                          console.error('[Eliminar Template] Error:', error);
-                          toast({
-                            title: 'Error al Eliminar',
-                            description: 'No se pudo eliminar el system prompt',
-                            variant: 'destructive'
-                          });
-                        }
-                      }}
-                      className="flex-1"
-                    >
-                      <Trash2 className="h-4 w-4 mr-2" />
-                      Eliminar Template
-                    </Button>
-                  </div>
-                </div>
-
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <Label>NPC</Label>
@@ -1835,6 +1733,85 @@ ${memoriesSections.join('\n')}
                     </div>
                   )}
                 </div>
+
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <Label>System Prompt</Label>
+                    {resumenSesionTemplateSaved && (
+                      <div className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400">
+                        <RefreshCw className="h-3 w-3" />
+                        Guardado
+                      </div>
+                    )}
+                  </div>
+                  <Textarea
+                    value={resumenSesionForm.systemPrompt}
+                    onChange={(e) => setResumenSesionForm({ ...resumenSesionForm, systemPrompt: e.target.value })}
+                    placeholder="Escribe aquí el system prompt personalizado para generar el resumen de la sesión. Puedes usar variables como {{npc.name}}, {{mundo}}, etc..."
+                    rows={8}
+                    className="text-sm bg-muted/50 max-h-48 overflow-y-auto resize-none"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Soporta variables primarias y plantillas de Grimorio. Si se deja vacío, se usará el system prompt por defecto.
+                  </p>
+                  <div className="flex gap-2 mt-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleSaveResumenSesionTemplate}
+                      className="flex-1"
+                    >
+                      <RefreshCw className="h-4 w-4 mr-2" />
+                      Guardar Template
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={async () => {
+                        try {
+                          // Guardar string vacío en la API
+                          const response = await fetch('/api/resumen-sesion-trigger-config', {
+                            method: 'POST',
+                            headers: {
+                              'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({
+                              systemPrompt: ''
+                            })
+                          });
+
+                          const result = await response.json();
+
+                          if (result.success) {
+                            setResumenSesionForm(prev => ({ ...prev, systemPrompt: '' }));
+                            setResumenSesionTemplateSaved(false);
+                            toast({
+                              title: 'Template Eliminado',
+                              description: 'El system prompt de resumen de sesión ha sido eliminado'
+                            });
+                          } else {
+                            toast({
+                              title: 'Error al Eliminar',
+                              description: result.error || 'No se pudo eliminar el system prompt',
+                              variant: 'destructive'
+                            });
+                          }
+                        } catch (error) {
+                          console.error('[Eliminar Template] Error:', error);
+                          toast({
+                            title: 'Error al Eliminar',
+                            description: 'No se pudo eliminar el system prompt',
+                            variant: 'destructive'
+                          });
+                        }
+                      }}
+                      className="flex-1"
+                    >
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Eliminar Template
+                    </Button>
+                  </div>
+                </div>
               </CardContent>
             </Card>
 
@@ -1923,11 +1900,96 @@ ${memoriesSections.join('\n')}
                 </CardContent>
               </Card>
 
+              {/* ✅ Indicador visual de estado de mensajes */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <Layers className="h-4 w-4" />
+                    Estado de Mensajes
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {resumenSesionForm.sessionid ? (
+                    (() => {
+                      const selectedSession = sessions.find(s => s.id === resumenSesionForm.sessionid);
+                      const messageCount = selectedSession?.messages.length || 0;
+                      const meetsRequirement = messageCount >= minMessagesConfig;
+                      const requirementText = messageCount >= minMessagesConfig
+                        ? `La sesión tiene suficientes mensajes para generar el resumen.`
+                        : `La sesión necesita al menos ${minMessagesConfig} mensajes para generar el resumen.`;
+
+                      return (
+                        <div className="space-y-3">
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm text-muted-foreground">
+                              Mensajes actuales:
+                            </span>
+                            <Badge 
+                              variant={meetsRequirement ? "default" : "destructive"}
+                              className="text-base font-semibold px-3 py-1"
+                            >
+                              {messageCount}
+                            </Badge>
+                          </div>
+                          
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm text-muted-foreground">
+                              Mínimo requerido:
+                            </span>
+                            <span className="text-base font-semibold text-primary">
+                              {minMessagesConfig}
+                            </span>
+                          </div>
+
+                          <div className={`flex items-start gap-3 p-3 rounded-lg border ${
+                            meetsRequirement
+                              ? 'bg-green-50 dark:bg-green-950 border-green-200 dark:border-green-800' 
+                              : 'bg-red-50 dark:bg-red-950 border-red-200 dark:border-red-800'
+                          }`}>
+                            {meetsRequirement ? (
+                              <CheckCircle className="h-5 w-5 text-green-600 dark:text-green-400 flex-shrink-0 mt-0.5" />
+                            ) : (
+                              <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
+                            )}
+                            <div className="flex-1">
+                              <p className={`text-sm font-medium ${
+                                meetsRequirement
+                                  ? 'text-green-700 dark:text-green-300' 
+                                  : 'text-red-700 dark:text-red-300'
+                              }`}>
+                                {meetsRequirement ? '✓ Listo para resumir' : '✗ Mensajes insuficientes'}
+                              </p>
+                              <p className={`text-xs mt-1 ${
+                                meetsRequirement
+                                  ? 'text-green-600 dark:text-green-400' 
+                                  : 'text-red-600 dark:text-red-400'
+                              }`}>
+                                {requirementText}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })()
+                  ) : (
+                    <div className="text-center py-4">
+                      <p className="text-sm text-muted-foreground">
+                        Selecciona una sesión para ver el estado de mensajes.
+                      </p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
               <Button
                 className="w-full"
                 size="lg"
                 onClick={() => resumenSesionPayload && sendRequest('resumen_sesion', resumenSesionPayload)}
-                disabled={!resumenSesionForm.npcid || !resumenSesionForm.sessionid}
+                disabled={
+                  !resumenSesionForm.npcid || 
+                  !resumenSesionForm.sessionid || 
+                  !(sessions.find(s => s.id === resumenSesionForm.sessionid)?.messages.length || 0) >= minMessagesConfig
+                }
               >
                 <Send className="h-5 w-5 mr-2" />
                 Generar Resumen de Sesión
@@ -1945,85 +2007,6 @@ ${memoriesSections.join('\n')}
                 <CardDescription>Genera un resumen consolidado de todas las sesiones de un NPC</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <Label>System Prompt</Label>
-                    {resumenNPCTemplateSaved && (
-                      <div className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400">
-                        <RefreshCw className="h-3 w-3" />
-                        Guardado
-                      </div>
-                    )}
-                  </div>
-                  <Textarea
-                    value={resumenNPCForm.systemPrompt}
-                    onChange={(e) => setResumenNPCForm({ ...resumenNPCForm, systemPrompt: e.target.value })}
-                    placeholder="Escribe aquí el system prompt personalizado para generar el resumen consolidado del NPC. Puedes usar variables como {{npc.name}}, {{mundo}}, etc..."
-                    rows={4}
-                    className="text-sm bg-muted/50"
-                  />
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Soporta variables primarias y plantillas de Grimorio. Si se deja vacío, se usará el system prompt por defecto.
-                  </p>
-                  <div className="flex gap-2 mt-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handleSaveResumenNPCTemplate}
-                      className="flex-1"
-                    >
-                      <RefreshCw className="h-4 w-4 mr-2" />
-                      Guardar Template
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={async () => {
-                        try {
-                          // Guardar string vacío en la API
-                          const response = await fetch('/api/resumen-npc-trigger-config', {
-                            method: 'POST',
-                            headers: {
-                              'Content-Type': 'application/json'
-                            },
-                            body: JSON.stringify({
-                              systemPrompt: ''
-                            })
-                          });
-
-                          const result = await response.json();
-
-                          if (result.success) {
-                            setResumenNPCForm(prev => ({ ...prev, systemPrompt: '' }));
-                            setResumenNPCTemplateSaved(false);
-                            toast({
-                              title: 'Template Eliminado',
-                              description: 'El system prompt de resumen NPC ha sido eliminado'
-                            });
-                          } else {
-                            toast({
-                              title: 'Error al Eliminar',
-                              description: result.error || 'No se pudo eliminar el system prompt',
-                              variant: 'destructive'
-                            });
-                          }
-                        } catch (error) {
-                          console.error('[Eliminar Template NPC] Error:', error);
-                          toast({
-                            title: 'Error al Eliminar',
-                            description: 'No se pudo eliminar el system prompt',
-                            variant: 'destructive'
-                          });
-                        }
-                      }}
-                      className="flex-1"
-                    >
-                      <Trash2 className="h-4 w-4 mr-2" />
-                      Eliminar Template
-                    </Button>
-                  </div>
-                </div>
-
                 <div>
                   <Label>NPC</Label>
                   <Select
@@ -2086,6 +2069,85 @@ ${memoriesSections.join('\n')}
                     placeholder="Pega aquí los resúmenes de todas las sesiones de este NPC..."
                     rows={6}
                   />
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <Label>System Prompt</Label>
+                    {resumenNPCTemplateSaved && (
+                      <div className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400">
+                        <RefreshCw className="h-3 w-3" />
+                        Guardado
+                      </div>
+                    )}
+                  </div>
+                  <Textarea
+                    value={resumenNPCForm.systemPrompt}
+                    onChange={(e) => setResumenNPCForm({ ...resumenNPCForm, systemPrompt: e.target.value })}
+                    placeholder="Escribe aquí el system prompt personalizado para generar el resumen consolidado del NPC. Puedes usar variables como {{npc.name}}, {{mundo}}, etc..."
+                    rows={4}
+                    className="text-sm bg-muted/50 max-h-48 overflow-y-auto resize-none"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Soporta variables primarias y plantillas de Grimorio. Si se deja vacío, se usará el system prompt por defecto.
+                  </p>
+                  <div className="flex gap-2 mt-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleSaveResumenNPCTemplate}
+                      className="flex-1"
+                    >
+                      <RefreshCw className="h-4 w-4 mr-2" />
+                      Guardar Template
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={async () => {
+                        try {
+                          // Guardar string vacío en la API
+                          const response = await fetch('/api/resumen-npc-trigger-config', {
+                            method: 'POST',
+                            headers: {
+                              'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({
+                              systemPrompt: ''
+                            })
+                          });
+
+                          const result = await response.json();
+
+                          if (result.success) {
+                            setResumenNPCForm(prev => ({ ...prev, systemPrompt: '' }));
+                            setResumenNPCTemplateSaved(false);
+                            toast({
+                              title: 'Template Eliminado',
+                              description: 'El system prompt de resumen NPC ha sido eliminado'
+                            });
+                          } else {
+                            toast({
+                              title: 'Error al Eliminar',
+                              description: result.error || 'No se pudo eliminar el system prompt',
+                              variant: 'destructive'
+                            });
+                          }
+                        } catch (error) {
+                          console.error('[Eliminar Template NPC] Error:', error);
+                          toast({
+                            title: 'Error al Eliminar',
+                            description: 'No se pudo eliminar el system prompt',
+                            variant: 'destructive'
+                          });
+                        }
+                      }}
+                      className="flex-1"
+                    >
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Eliminar Template
+                    </Button>
+                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -2228,6 +2290,50 @@ ${memoriesSections.join('\n')}
                 </div>
 
                 <div>
+                  <Label>Resúmenes de Todos los NPCs del Edificio</Label>
+                  {edificioNPCSummaries.length > 0 ? (
+                    <div className="border rounded-lg p-4 bg-muted/50">
+                      <ScrollArea className="h-[300px] pr-4">
+                        <div className="space-y-3">
+                          {edificioNPCSummaries.map((npc, index) => (
+                            <div key={npc.npcId} className="border rounded-lg p-3 bg-background">
+                              <div className="flex items-start justify-between mb-2">
+                                <div className="flex items-center gap-2">
+                                  <Badge variant="secondary">NPC {index + 1}</Badge>
+                                  <span className="text-sm font-medium">{npc.npcName}</span>
+                                </div>
+                                <span className="text-xs text-muted-foreground">
+                                  ID: {npc.npcId}
+                                </span>
+                              </div>
+                              <p className="text-sm text-foreground line-clamp-4">
+                                {npc.consolidatedSummary}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      </ScrollArea>
+                    </div>
+                  ) : (
+                    <div className="border rounded-lg p-6 bg-muted/50 text-center">
+                      <p className="text-sm text-muted-foreground">
+                        {resumenEdificioForm.edificioid
+                          ? "Este edificio no tiene NPCs con resúmenes generados aún."
+                          : "Selecciona un edificio para ver sus NPCs con resúmenes."
+                        }
+                      </p>
+                    </div>
+                  )}
+                  <Textarea
+                    className="hidden"
+                    value={resumenEdificioForm.allSummaries}
+                    onChange={(e) => setResumenEdificioForm({ ...resumenEdificioForm, allSummaries: e.target.value })}
+                    placeholder="Pega aquí los resúmenes de todos los NPCs en este edificio..."
+                    rows={6}
+                  />
+                </div>
+
+                <div>
                   <div className="flex items-center justify-between mb-2">
                     <Label>System Prompt</Label>
                     {resumenEdificioTemplateSaved && (
@@ -2242,7 +2348,7 @@ ${memoriesSections.join('\n')}
                     onChange={(e) => setResumenEdificioForm({ ...resumenEdificioForm, systemPrompt: e.target.value })}
                     placeholder="Escribe aquí el system prompt personalizado para generar el resumen consolidado del edificio. Puedes usar variables como {{edificio.name}}, {{npcs_count}}, etc..."
                     rows={4}
-                    className="text-sm bg-muted/50"
+                    className="text-sm bg-muted/50 max-h-48 overflow-y-auto resize-none"
                   />
                   <p className="text-xs text-muted-foreground mt-1">
                     Soporta variables primarias y plantillas de Grimorio. Si se deja vacío, se usará el system prompt por defecto.
@@ -2304,50 +2410,6 @@ ${memoriesSections.join('\n')}
                       Eliminar Template
                     </Button>
                   </div>
-                </div>
-
-                <div>
-                  <Label>Resúmenes de Todos los NPCs del Edificio</Label>
-                  {edificioNPCSummaries.length > 0 ? (
-                    <div className="border rounded-lg p-4 bg-muted/50">
-                      <ScrollArea className="h-[300px] pr-4">
-                        <div className="space-y-3">
-                          {edificioNPCSummaries.map((npc, index) => (
-                            <div key={npc.npcId} className="border rounded-lg p-3 bg-background">
-                              <div className="flex items-start justify-between mb-2">
-                                <div className="flex items-center gap-2">
-                                  <Badge variant="secondary">NPC {index + 1}</Badge>
-                                  <span className="text-sm font-medium">{npc.npcName}</span>
-                                </div>
-                                <span className="text-xs text-muted-foreground">
-                                  ID: {npc.npcId}
-                                </span>
-                              </div>
-                              <p className="text-sm text-foreground line-clamp-4">
-                                {npc.consolidatedSummary}
-                              </p>
-                            </div>
-                          ))}
-                        </div>
-                      </ScrollArea>
-                    </div>
-                  ) : (
-                    <div className="border rounded-lg p-6 bg-muted/50 text-center">
-                      <p className="text-sm text-muted-foreground">
-                        {resumenEdificioForm.edificioid
-                          ? "Este edificio no tiene NPCs con resúmenes generados aún."
-                          : "Selecciona un edificio para ver sus NPCs con resúmenes."
-                        }
-                      </p>
-                    </div>
-                  )}
-                  <Textarea
-                    className="hidden"
-                    value={resumenEdificioForm.allSummaries}
-                    onChange={(e) => setResumenEdificioForm({ ...resumenEdificioForm, allSummaries: e.target.value })}
-                    placeholder="Pega aquí los resúmenes de todos los NPCs en este edificio..."
-                    rows={6}
-                  />
                 </div>
 
                 <div className="border rounded-lg p-4 bg-muted/50">
@@ -2515,6 +2577,50 @@ ${memoriesSections.join('\n')}
                 </div>
 
                 <div>
+                  <Label>Resúmenes de Todos los Edificios del Pueblo/Nación</Label>
+                  {puebloEdificioSummaries.length > 0 ? (
+                    <div className="border rounded-lg p-4 bg-muted/50">
+                      <ScrollArea className="h-[300px] pr-4">
+                        <div className="space-y-3">
+                          {puebloEdificioSummaries.map((edificio, index) => (
+                            <div key={edificio.edificioId} className="border rounded-lg p-3 bg-background">
+                              <div className="flex items-start justify-between mb-2">
+                                <div className="flex items-center gap-2">
+                                  <Badge variant="secondary">Edificio {index + 1}</Badge>
+                                  <span className="text-sm font-medium">{edificio.edificioName}</span>
+                                </div>
+                                <span className="text-xs text-muted-foreground">
+                                  ID: {edificio.edificioId}
+                                </span>
+                              </div>
+                              <p className="text-sm text-foreground line-clamp-4">
+                                {edificio.consolidatedSummary}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      </ScrollArea>
+                    </div>
+                  ) : (
+                    <div className="border rounded-lg p-6 bg-muted/50 text-center">
+                      <p className="text-sm text-muted-foreground">
+                        {resumenPuebloForm.pueblid
+                          ? "Este pueblo/nación no tiene edificios con resúmenes generados aún."
+                          : "Selecciona un pueblo/nación para ver sus edificios con resúmenes."
+                        }
+                      </p>
+                    </div>
+                  )}
+                  <Textarea
+                    className="hidden"
+                    value={resumenPuebloForm.allSummaries}
+                    onChange={(e) => setResumenPuebloForm({ ...resumenPuebloForm, allSummaries: e.target.value })}
+                    placeholder="Pega aquí los resúmenes de todos los edificios en este pueblo/nación..."
+                    rows={6}
+                  />
+                </div>
+
+                <div>
                   <div className="flex items-center justify-between mb-2">
                     <Label>System Prompt</Label>
                     {resumenPuebloTemplateSaved && (
@@ -2529,7 +2635,7 @@ ${memoriesSections.join('\n')}
                     onChange={(e) => setResumenPuebloForm({ ...resumenPuebloForm, systemPrompt: e.target.value })}
                     placeholder="Escribe aquí el system prompt personalizado para generar el resumen consolidado del pueblo/nación. Puedes usar variables como {{pueblo.name}}, {{edificios_count}}, etc..."
                     rows={4}
-                    className="text-sm bg-muted/50"
+                    className="text-sm bg-muted/50 max-h-48 overflow-y-auto resize-none"
                   />
                   <p className="text-xs text-muted-foreground mt-1">
                     Soporta variables primarias y plantillas de Grimorio. Si se deja vacío, se usará el system prompt por defecto.
@@ -2591,50 +2697,6 @@ ${memoriesSections.join('\n')}
                       Eliminar Template
                     </Button>
                   </div>
-                </div>
-
-                <div>
-                  <Label>Resúmenes de Todos los Edificios del Pueblo/Nación</Label>
-                  {puebloEdificioSummaries.length > 0 ? (
-                    <div className="border rounded-lg p-4 bg-muted/50">
-                      <ScrollArea className="h-[300px] pr-4">
-                        <div className="space-y-3">
-                          {puebloEdificioSummaries.map((edificio, index) => (
-                            <div key={edificio.edificioId} className="border rounded-lg p-3 bg-background">
-                              <div className="flex items-start justify-between mb-2">
-                                <div className="flex items-center gap-2">
-                                  <Badge variant="secondary">Edificio {index + 1}</Badge>
-                                  <span className="text-sm font-medium">{edificio.edificioName}</span>
-                                </div>
-                                <span className="text-xs text-muted-foreground">
-                                  ID: {edificio.edificioId}
-                                </span>
-                              </div>
-                              <p className="text-sm text-foreground line-clamp-4">
-                                {edificio.consolidatedSummary}
-                              </p>
-                            </div>
-                          ))}
-                        </div>
-                      </ScrollArea>
-                    </div>
-                  ) : (
-                    <div className="border rounded-lg p-6 bg-muted/50 text-center">
-                      <p className="text-sm text-muted-foreground">
-                        {resumenPuebloForm.pueblid
-                          ? "Este pueblo/nación no tiene edificios con resúmenes generados aún."
-                          : "Selecciona un pueblo/nación para ver sus edificios con resúmenes."
-                        }
-                      </p>
-                    </div>
-                  )}
-                  <Textarea
-                    className="hidden"
-                    value={resumenPuebloForm.allSummaries}
-                    onChange={(e) => setResumenPuebloForm({ ...resumenPuebloForm, allSummaries: e.target.value })}
-                    placeholder="Pega aquí los resúmenes de todos los edificios en este pueblo/nación..."
-                    rows={6}
-                  />
                 </div>
 
                 <div className="border rounded-lg p-4 bg-muted/50">
@@ -2802,6 +2864,50 @@ ${memoriesSections.join('\n')}
                 </div>
 
                 <div>
+                  <Label>Resúmenes de Todos los Pueblos/Naciones del Mundo</Label>
+                  {mundoPuebloSummaries.length > 0 ? (
+                    <div className="border rounded-lg p-4 bg-muted/50">
+                      <ScrollArea className="h-[300px] pr-4">
+                        <div className="space-y-3">
+                          {mundoPuebloSummaries.map((pueblo, index) => (
+                            <div key={pueblo.puebloId} className="border rounded-lg p-3 bg-background">
+                              <div className="flex items-start justify-between mb-2">
+                                <div className="flex items-center gap-2">
+                                  <Badge variant="secondary">Pueblo/Nación {index + 1}</Badge>
+                                  <span className="text-sm font-medium">{pueblo.puebloName}</span>
+                                </div>
+                                <span className="text-xs text-muted-foreground">
+                                  ID: {pueblo.puebloId}
+                                </span>
+                              </div>
+                              <p className="text-sm text-foreground line-clamp-4">
+                                {pueblo.consolidatedSummary}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      </ScrollArea>
+                    </div>
+                  ) : (
+                    <div className="border rounded-lg p-6 bg-muted/50 text-center">
+                      <p className="text-sm text-muted-foreground">
+                        {resumenMundoForm.mundoid
+                          ? "Este mundo no tiene pueblos/naciones con resúmenes generados aún."
+                          : "Selecciona un mundo para ver sus pueblos/naciones con resúmenes."
+                        }
+                      </p>
+                    </div>
+                  )}
+                  <Textarea
+                    className="hidden"
+                    value={resumenMundoForm.allSummaries}
+                    onChange={(e) => setResumenMundoForm({ ...resumenMundoForm, allSummaries: e.target.value })}
+                    placeholder="Pega aquí los resúmenes de todos los pueblos/naciones en este mundo..."
+                    rows={6}
+                  />
+                </div>
+
+                <div>
                   <div className="flex items-center justify-between mb-2">
                     <Label>System Prompt</Label>
                     {resumenMundoTemplateSaved && (
@@ -2816,7 +2922,7 @@ ${memoriesSections.join('\n')}
                     onChange={(e) => setResumenMundoForm({ ...resumenMundoForm, systemPrompt: e.target.value })}
                     placeholder="Escribe aquí el system prompt personalizado para generar el resumen consolidado del mundo. Puedes usar variables como {{mundo.name}}, {{pueblos_count}}, etc..."
                     rows={4}
-                    className="text-sm bg-muted/50"
+                    className="text-sm bg-muted/50 max-h-48 overflow-y-auto resize-none"
                   />
                   <p className="text-xs text-muted-foreground mt-1">
                     Soporta variables primarias y plantillas de Grimorio. Si se deja vacío, se usará el system prompt por defecto.
@@ -2878,50 +2984,6 @@ ${memoriesSections.join('\n')}
                       Eliminar Template
                     </Button>
                   </div>
-                </div>
-
-                <div>
-                  <Label>Resúmenes de Todos los Pueblos/Naciones del Mundo</Label>
-                  {mundoPuebloSummaries.length > 0 ? (
-                    <div className="border rounded-lg p-4 bg-muted/50">
-                      <ScrollArea className="h-[300px] pr-4">
-                        <div className="space-y-3">
-                          {mundoPuebloSummaries.map((pueblo, index) => (
-                            <div key={pueblo.puebloId} className="border rounded-lg p-3 bg-background">
-                              <div className="flex items-start justify-between mb-2">
-                                <div className="flex items-center gap-2">
-                                  <Badge variant="secondary">Pueblo/Nación {index + 1}</Badge>
-                                  <span className="text-sm font-medium">{pueblo.puebloName}</span>
-                                </div>
-                                <span className="text-xs text-muted-foreground">
-                                  ID: {pueblo.puebloId}
-                                </span>
-                              </div>
-                              <p className="text-sm text-foreground line-clamp-4">
-                                {pueblo.consolidatedSummary}
-                              </p>
-                            </div>
-                          ))}
-                        </div>
-                      </ScrollArea>
-                    </div>
-                  ) : (
-                    <div className="border rounded-lg p-6 bg-muted/50 text-center">
-                      <p className="text-sm text-muted-foreground">
-                        {resumenMundoForm.mundoid
-                          ? "Este mundo no tiene pueblos/naciones con resúmenes generados aún."
-                          : "Selecciona un mundo para ver sus pueblos/naciones con resúmenes."
-                        }
-                      </p>
-                    </div>
-                  )}
-                  <Textarea
-                    className="hidden"
-                    value={resumenMundoForm.allSummaries}
-                    onChange={(e) => setResumenMundoForm({ ...resumenMundoForm, allSummaries: e.target.value })}
-                    placeholder="Pega aquí los resúmenes de todos los pueblos/naciones en este mundo..."
-                    rows={6}
-                  />
                 </div>
 
                 <div className="border rounded-lg p-4 bg-muted/50">

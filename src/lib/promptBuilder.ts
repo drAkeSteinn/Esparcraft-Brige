@@ -1,5 +1,5 @@
 import { World, Pueblo, Edificio, NPC, Session, ChatMessage, PromptBuildContext, getCardField } from './types';
-import { npcStateManager, sessionManager, edificioStateManager, puebloStateManager, worldStateManager, grimorioManager } from './fileManager';
+import { sessionManager, edificioStateManager, puebloStateManager, worldStateManager, grimorioManager } from './fileManager';
 import { replaceVariables, VariableContext } from './utils';
 import { resolveAllVariables } from './grimorioUtils';
 
@@ -405,18 +405,12 @@ export function buildChatSystemPrompt(
 
   // Memoria del NPC
   if (npc) {
-    const memory = npcStateManager.getMemory(npc.id);
-    if (memory) {
+    // ✅ LEER DE creator_notes EN LA CARD (DB) en lugar de npcStateManager
+    const creatorNotes = getCardField(npc?.card, 'creator_notes', '');
+
+    if (creatorNotes) {
       prompt += `=== MEMORIA DEL PERSONAJE ===\n`;
-      if (memory.consolidatedSummary) {
-        prompt += `Resumen consolidado: ${memory.consolidatedSummary}\n`;
-      }
-      if (memory.importantEvents && memory.importantEvents.length > 0) {
-        prompt += `Eventos importantes: ${memory.importantEvents.join(', ')}\n`;
-      }
-      if (memory.relationships) {
-        prompt += `Relaciones: ${JSON.stringify(memory.relationships)}\n`;
-      }
+      prompt += `Resumen consolidado: ${creatorNotes}\n`;
       prompt += '\n';
     }
   }
