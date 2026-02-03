@@ -11,6 +11,7 @@ import {
   ChatMessage,
   VariableContext
 } from './types';
+import { handleChatTrigger, handleNuevoLoreTrigger } from './triggerHandlers';
 import { db } from './db';
 import { npcDbManager } from './npcDbManager';
 import { sessionDbManagerSingleton } from './sessionDbManager';
@@ -39,6 +40,7 @@ import { replaceVariables, resolveAllVariables } from './grimorioUtils';
 
 /**
  * Resultado de ejecución de un trigger
+ * FIXED v2 - Multiple nextVersion definitions resolved
  */
 export interface TriggerExecutionResult {
   success: boolean;
@@ -228,31 +230,7 @@ async function executeResumenSesion(
 
   // ✅ LLAMAR AL LLM
   const llmResponse = await callLLM(messages);
-
-  
-
-  // ✅ GUARDAR RESUMEN EN lore.eventos DEL MUNDO (EN LA DB)
-  const loreActual = world.lore || {};
-  await worldDbManager.update(mundoid, {
-    lore: {
-      ...loreActual,
-      eventos: [summary]
-    }
-  });
-  console.log(`[executeResumenMundo] Resumen guardado en lore.eventos del mundo ${mundoid}`);
-
-  // ✅ GUARDAR EN TABLA WorldSummary PARA HISTÓRICO (CON VERSIÓN)
-  const nextVersion = (lastWorldSummary?.version || 0) + 1;
-  await worldSummaryMgr.create({
-    worldId: mundoid,
-    summary,
-    puebloHash: currentHash,
-    version: nextVersion
-  });
-  console.log(`[executeResumenMundo] Mundo ${mundoid} - Resumen guardado en DB con versión ${nextVersion}`);
-
-
-  
+  const summary = llmResponse?.data?.response || llmResponse?.response || '';
 
   // ✅ GUARDAR EN DB
   await sessionSummaryDbManager.create({
@@ -398,31 +376,7 @@ ${memoriesSections.join('\n')}
 
   // ✅ LLAMAR AL LLM
   const llmResponse = await callLLM(messages);
-
-  
-
-  // ✅ GUARDAR RESUMEN EN lore.eventos DEL MUNDO (EN LA DB)
-  const loreActual = world.lore || {};
-  await worldDbManager.update(mundoid, {
-    lore: {
-      ...loreActual,
-      eventos: [summary]
-    }
-  });
-  console.log(`[executeResumenMundo] Resumen guardado en lore.eventos del mundo ${mundoid}`);
-
-  // ✅ GUARDAR EN TABLA WorldSummary PARA HISTÓRICO (CON VERSIÓN)
-  const nextVersion = (lastWorldSummary?.version || 0) + 1;
-  await worldSummaryMgr.create({
-    worldId: mundoid,
-    summary,
-    puebloHash: currentHash,
-    version: nextVersion
-  });
-  console.log(`[executeResumenMundo] Mundo ${mundoid} - Resumen guardado en DB con versión ${nextVersion}`);
-
-
-  
+  const summary = llmResponse?.data?.response || llmResponse?.response || '';
 
   // ✅ GUARDAR RESUMEN EN creator_notes DE LA CARD DEL NPC (EN LA DB)
   if (npc?.card) {
@@ -578,31 +532,7 @@ async function executeResumenEdificio(
 
   // ✅ LLAMAR AL LLM
   const llmResponse = await callLLM(messages);
-
-  
-
-  // ✅ GUARDAR RESUMEN EN lore.eventos DEL MUNDO (EN LA DB)
-  const loreActual = world.lore || {};
-  await worldDbManager.update(mundoid, {
-    lore: {
-      ...loreActual,
-      eventos: [summary]
-    }
-  });
-  console.log(`[executeResumenMundo] Resumen guardado en lore.eventos del mundo ${mundoid}`);
-
-  // ✅ GUARDAR EN TABLA WorldSummary PARA HISTÓRICO (CON VERSIÓN)
-  const nextVersion = (lastWorldSummary?.version || 0) + 1;
-  await worldSummaryMgr.create({
-    worldId: mundoid,
-    summary,
-    puebloHash: currentHash,
-    version: nextVersion
-  });
-  console.log(`[executeResumenMundo] Mundo ${mundoid} - Resumen guardado en DB con versión ${nextVersion}`);
-
-
-  
+  const summary = llmResponse?.data?.response || llmResponse?.response || '';
 
   // ✅ GUARDAR RESUMEN EN eventos_recientes DEL EDIFICIO (EN LA DB)
   await edificioDbManager.update(edificioid, {
@@ -745,12 +675,14 @@ async function executeResumenPueblo(
 
   // ✅ LLAMAR AL LLM
   const llmResponse = await callLLM(messages);
+  const summary = llmResponse?.data?.response || llmResponse?.response || '';
+
   // ✅ GUARDAR RESUMEN EN lore.eventos DEL PUEBLO (EN LA DB)
   const loreActual = pueblo.lore || {};
   await puebloDbManager.update(pueblid, {
     lore: {
       ...loreActual,
-      eventos: [llmResponse]
+      eventos: [summary]
     }
   });
   console.log(`[executeResumenPueblo] Resumen guardado en lore.eventos del pueblo ${pueblid}`);
@@ -759,7 +691,7 @@ async function executeResumenPueblo(
   const nextVersion = (lastPuebloSummary?.version || 0) + 1;
   await puebloSummaryMgr.create({
     puebloId: pueblid,
-    summary: llmResponse,
+    summary,
     edificioHash: currentHash,
     version: nextVersion
   });
@@ -767,7 +699,7 @@ async function executeResumenPueblo(
 
   return {
     success: true,
-    data: { summary: llmResponse, version: nextVersion }
+    data: { summary, version: nextVersion }
   };
 }
 
@@ -888,8 +820,8 @@ async function executeResumenMundo(
 
   // ✅ LLAMAR AL LLM
   const llmResponse = await callLLM(messages);
+  const summary = llmResponse?.data?.response || llmResponse?.response || '';
 
-  
 
   // ✅ GUARDAR RESUMEN EN lore.eventos DEL MUNDO (EN LA DB)
   const loreActual = world.lore || {};
@@ -925,15 +857,11 @@ async function executeResumenMundo(
 // ========================================================================
 
 async function executeChat(payload: ChatTriggerPayload): Promise<TriggerExecutionResult> {
-  // Importar dinámicamente para evitar dependencia circular
-  const { handleChatTrigger } = await import('./triggerHandlers');
   const result = await handleChatTrigger(payload);
   return result;
 }
 
 async function executeNuevoLore(payload: NuevoLoreTriggerPayload): Promise<TriggerExecutionResult> {
-  // Importar dinámicamente para evitar dependencia circular
-  const { handleNuevoLoreTrigger } = await import('./triggerHandlers');
   const result = await handleNuevoLoreTrigger(payload);
   return result;
 }

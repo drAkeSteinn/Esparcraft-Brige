@@ -1,16 +1,6 @@
 import { db } from '@/lib/db';
 import { World } from './types';
 
-// Verificar que db.world está disponible
-if (typeof db !== 'object' || db === null) {
-  throw new Error('Prisma db client is not initialized');
-}
-
-if (!db.world) {
-  console.error('db.world is undefined. db keys:', Object.keys(db));
-}
-
-
 // Helper para convertir entre modelos de DB y TypeScript
 function toDomainWorld(dbWorld: any): World {
   return {

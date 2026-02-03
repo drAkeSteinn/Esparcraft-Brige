@@ -4,6 +4,18 @@ import { db } from './db';
  * Session Summary Manager
  */
 export class SessionSummaryManager {
+  async getBySessionId(sessionId: string) {
+    return await db.sessionSummary.findMany({
+      where: { sessionId },
+      orderBy: { timestamp: 'desc' }
+    });
+  }
+
+  async getLatestBySessionId(sessionId: string) {
+    const summaries = await this.getBySessionId(sessionId);
+    return summaries[0] || null;
+  }
+
   async create(data: {
     sessionId: string;
     npcId: string;

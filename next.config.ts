@@ -7,7 +7,6 @@ const nextConfig: NextConfig = {
     ignoreBuildErrors: true,
   },
   reactStrictMode: false,
-  // Force restart for Prisma client regeneration
 };
 
 export default nextConfig;

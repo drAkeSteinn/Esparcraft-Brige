@@ -1,14 +1,11 @@
 import { PrismaClient } from '@prisma/client'
 
-// Force reload by changing cache key
 const globalForPrisma = globalThis as unknown as {
-  prismaV2: PrismaClient | undefined
+  prisma: PrismaClient | undefined
 }
 
-export const db =
-  globalForPrisma.prismaV2 ||
-  new PrismaClient({
-    log: ['query'],
-  })
+export const db = globalForPrisma.prisma ?? new PrismaClient({
+  log: ['query'],
+})
 
-globalForPrisma.prismaV2 = db
+if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = db
