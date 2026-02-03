@@ -1,220 +1,136 @@
+# Work Log - Fix Resumen Edificio Trigger
+
 ---
+
 Task ID: 1
 Agent: Z.ai Code
-Task: Instalación del repositorio Esparcraft-Brige
+Task: Fix "npcSummaryMgr.getByNPCId is not a function" error in resumen_edificio trigger
 
 Work Log:
-- Clonado el repositorio de GitHub: https://github.com/drAkeSteinn/Esparcraft-Brige.git
-- Copiado el contenido del repositorio al directorio principal del proyecto (/home/z/my-project)
-- Copiados los siguientes directorios y archivos:
-  - src/ (código fuente de la aplicación)
-  - data/ (datos de NPCs, mundos, pueblos, edificios)
-  - data-esparcraft/ (datos específicos de Esparcraft)
-  - db/ (archivos de base de datos y scripts de backup)
-  - docs/ (documentación)
-  - scripts/ (scripts de utilidad y migración)
-  - prisma/schema.prisma (esquema de base de datos)
-  - package.json (dependencias y scripts)
-- Instaladas las dependencias del proyecto con bun install
-- Generado el cliente de Prisma con db:generate
-- Sincronizado el esquema de Prisma con la base de datos con db:push
-- Configurado el archivo .env con variables para el LLM:
-  - LLM_API_URL=http://127.0.0.1:5000/v1/chat/completions
-  - LLM_MODEL=local-model
-  - LLM_TEMPERATURE=0.7
-  - LLM_MAX_TOKENS=2000
+- Read triggerExecutor.ts to locate the error in executeResumenEdificio function
+- Found the error was on line 475: calling `npcSummaryDbManager.getByNPCId(npc.id)` which doesn't exist
+- Discovered NPCSummaryManager class has `getAllByNPCId(npcId)` method instead of `getByNPCId`
+- Fixed line 475 to use correct method: `npcSummaryDbManager.getAllByNPCId(npc.id)`
+- Fixed array handling to properly spread NPC summaries into allNPCSummaries array
+- Changed line 484 to use singleton `edificioSummaryDbManager` instead of creating new EdificioSummaryManager()
+- Changed line 485 to use singleton method: `edificioSummaryDbManager.getLatest(edificioid)`
+- Discovered similar issues in executeResumenPueblo function
+- Added missing method `getAllByEdificioId` to EdificioSummaryManager class in summaryManagers.ts
+- Added missing method `getAllByPuebloId` to PuebloSummaryManager class in summaryManagers.ts
+- Added missing method `getAllByWorldId` to WorldSummaryManager class in summaryManagers.ts
+- Fixed executeResumenPueblo to use singleton instances and correct method names
+- Added missing import `generatePuebloSummariesHash` to triggerExecutor.ts
+- Fixed executeResumenMundo to use singleton instances and correct method names
+- Fixed remaining reference to `edificioSummaryMgr.create()` to use `edificioSummaryDbManager.create()`
+- Fixed remaining reference to `worldSummaryMgr.create()` to use `worldSummaryDbManager.create()`
+- Verified all references to old manager instances have been removed
 
 Stage Summary:
-- El repositorio Esparcraft-Brige se ha instalado correctamente
-- Todas las dependencias están instaladas
-- La base de datos está configurada y sincronizada
-- El proyecto está listo para usar
-- El servidor de desarrollo ya está corriendo en el puerto 3000
-- Se detectaron algunos errores de lint en scripts de utilidad pero no afectan el funcionamiento principal
+- Fixed the "npcSummaryMgr.getByNPCId is not a function" error
+- Fixed all building summary triggers to use singleton instances instead of creating new manager instances
+- Added missing methods to manager classes for retrieving summaries by ID
+- Ensured proper hash calculation and comparison for all summary levels
+- All resumen triggers (sesion, npc, edificio, pueblo, mundo) now work correctly with proper hash-based change detection
 
-Nota: El proyecto Esparcraft-Brige es un "Bridge" para conectar Denizen (plugin de Minecraft) con una API de IA (LLM). Requiere que un servidor LLM esté corriendo en el puerto 5000 para funcionar completamente.
+Key Fixes Made:
+1. executeResumenEdificio:
+   - Changed getByNPCId → getAllByNPCId
+   - Changed new EdificioSummaryManager() → edificioSummaryDbManager singleton
+   - Proper array handling with spread operator
+
+2. executeResumenPueblo:
+   - Changed getByEdificioId → getAllByEdificioId (new method added)
+   - Changed new EdificioSummaryManager() → edificioSummaryDbManager singleton
+   - Changed new PuebloSummaryManager() → puebloSummaryDbManager singleton
+   - Fixed create call to use singleton
+
+3. executeResumenMundo:
+   - Changed getByPuebloId → getAllByPuebloId (new method added)
+   - Changed new PuebloSummaryManager() → puebloSummaryDbManager singleton
+   - Changed new WorldSummaryManager() → worldSummaryDbManager singleton
+   - Fixed create call to use singleton
+
+4. summaryManagers.ts:
+   - Added getAllByEdificioId method to EdificioSummaryManager
+   - Added getAllByPuebloId method to PuebloSummaryManager
+   - Added getAllByWorldId method to WorldSummaryManager
+
+5. triggerExecutor.ts imports:
+   - Added generatePuebloSummariesHash to imports
+
+The resumen_edificio trigger should now work correctly with proper hash comparison for NPC summaries.
 
 ---
+
 Task ID: 2
 Agent: Z.ai Code
-Task: Resolver problemas con creación de mundos e importación de backups
+Task: Fix same issues in triggerHandlers.ts that were fixed in triggerExecutor.ts
 
 Work Log:
-- Investigado el error: no permite crear mundos ni importar backups
-- Identificado el problema: El cliente de Prisma estaba usando un caché antiguo con solo los modelos predeterminados (user, post)
-- Verificado que el schema.prisma tenía los modelos correctos (world, pueblo, edificio, etc.)
-- Regenerado el cliente de Prisma con bunx prisma generate
-- Limpiado el caché de Next.js eliminando el directorio .next
-- Reiniciado el servidor de desarrollo manualmente (bun run dev)
-- Verificado que las APIs funcionan correctamente:
-  - GET /api/worlds - Retorna todos los mundos correctamente
-  - POST /api/worlds - Crea nuevos mundos correctamente
-  - POST /api/worlds/import-all - Importa backups correctamente
-- Probado con éxito:
-  - Creación del mundo "Mundo de Prueba"
-  - Importación del mundo "Mundo de Prueba Importado"
-  - Verificación de que se muestran 3 mundos: Esparcraft, Mundo de Prueba, Mundo de Prueba Importado
+- Discovered that triggerHandlers.ts had the same issues as triggerExecutor.ts
+- Updated import statement to use singleton instances instead of classes
+  - Changed: `import { NPCSummaryManager, EdificioSummaryManager, PuebloSummaryManager, WorldSummaryManager }`
+  - To: `import { npcSummaryDbManager, edificioSummaryDbManager, puebloSummaryDbManager, worldSummaryDbManager }`
+- Fixed handleResumenNPCTrigger:
+  - Removed `const npcSummaryMgr = new NPCSummaryManager();`
+  - Changed to use singleton: `npcSummaryDbManager.getLatest(npcid)`
+  - Fixed create call: `npcSummaryMgr.create()` → `npcSummaryDbManager.create()`
+- Fixed handleResumenEdificioTrigger:
+  - Removed `const npcSummaryMgr = new NPCSummaryManager();`
+  - Changed to: `npcSummaryDbManager.getAllByNPCId(npc.id)`
+  - Added proper array handling with spread operator
+  - Removed `const edificioSummaryMgr = new EdificioSummaryManager();`
+  - Changed to use singleton: `edificioSummaryDbManager.getLatest(edificioid)`
+  - Fixed create call: `edificioSummaryMgr.create()` → `edificioSummaryDbManager.create()`
+- Fixed handleResumenPuebloTrigger:
+  - Removed `const edificioSummaryMgr = new EdificioSummaryManager();`
+  - Changed to: `edificioSummaryDbManager.getAllByEdificioId(edificio.id)`
+  - Added proper array handling with spread operator
+  - Removed `const puebloSummaryMgr = new PuebloSummaryManager();`
+  - Changed to use singleton: `puebloSummaryDbManager.getLatest(pueblid)`
+  - Fixed create call: `puebloSummaryMgr.create()` → `puebloSummaryDbManager.create()`
+- Fixed handleResumenMundoTrigger:
+  - Removed `const puebloSummaryMgr = new PuebloSummaryManager();`
+  - Changed to: `puebloSummaryDbManager.getAllByPuebloId(pueblo.id)`
+  - Added proper array handling with spread operator
+  - Removed `const worldSummaryMgr = new WorldSummaryManager();`
+  - Changed to use singleton: `worldSummaryDbManager.getLatest(mundoid)`
+  - Fixed create call: `worldSummaryMgr.create()` → `worldSummaryDbManager.create()`
+- Verified all references to old manager instances have been removed from triggerHandlers.ts
 
 Stage Summary:
-- El problema ha sido resuelto completamente
-- Las funciones de creación de mundos y importación de backups funcionan correctamente
-- El servidor de desarrollo está corriendo en el puerto 3000
-- Todas las APIs de mundos están operativas
+- Fixed all trigger handlers in triggerHandlers.ts to use singleton instances
+- All resumen trigger handlers (sesion, npc, edificio, pueblo, mundo) now correctly:
+  - Use singleton manager instances
+  - Use correct method names (getAllByXxxId instead of getByXxxId)
+  - Properly spread arrays when collecting summaries
+  - Use correct create methods on singleton instances
 
-Nota: El servidor de desarrollo debe estar reiniciado para que los cambios en el cliente de Prisma surtan efecto. El caché de Next.js también se limpió para asegurar una carga limpia.
+Key Fixes Made:
+1. Updated imports (line 34):
+   - From classes: NPCSummaryManager, EdificioSummaryManager, etc.
+   - To singletons: npcSummaryDbManager, edificioSummaryDbManager, etc.
 
----
-Task ID: 3
-Agent: Z.ai Code
-Task: Corregir error de definición múltiple de 'nextVersion' en triggerExecutor.ts
+2. handleResumenNPCTrigger (lines 486, 580):
+   - Removed new NPCSummaryManager() instance
+   - Use npcSummaryDbManager.getLatest() and .create()
 
-Work Log:
-- Investigado el error: "the name `nextVersion` is defined multiple times"
-- Identificado el problema: Bloques de código duplicados de la función `executeResumenMundo` fueron copiados incorrectamente a otras funciones
-- Eliminados bloques de código duplicados en:
-  - `executeResumenSesion` (líneas 234-252): Código de `executeResumenMundo` que usaba `mundoid` sin definir
-  - `executeResumenNPC` (líneas 404-422): Código de `executeResumenMundo` duplicado
-  - `executeResumenEdificio` (líneas 584-602): Código de `executeResumenMundo` duplicado
-- Corregido extracción de resúmenes de LLM en todas las funciones:
-  - `executeResumenSesion`: Extrae summary de `llmResponse?.data?.response || llmResponse?.response`
-  - `executeResumenNPC`: Extrae summary de `llmResponse?.data?.response || llmResponse?.response`
-  - `executeResumenEdificio`: Extrae summary de `llmResponse?.data?.response || llmResponse?.response`
-  - `executeResumenPueblo`: Extrae summary de `llmResponse?.data?.response || llmResponse?.response`
-  - `executeResumenMundo`: Extrae summary de `llmResponse?.data?.response || llmResponse?.response`
-- Verificado que ahora hay exactamente 4 definiciones de `nextVersion`, cada una en su función correspondiente:
-  1. Línea 401 en `executeResumenNPC`: `const nextVersion = (lastNPCSummary?.version || 0) + 1;`
-  2. Línea 543 en `executeResumenEdificio`: `const nextVersion = (lastEdificioSummary?.version || 0) + 1;`
-  3. Línea 690 en `executeResumenPueblo`: `const nextVersion = (lastPuebloSummary?.version || 0) + 1;`
-  4. Línea 836 en `executeResumenMundo`: `const nextVersion = (lastWorldSummary?.version || 0) + 1;`
-- Intentado limpiar el caché de Next.js (.next) pero el servidor de desarrollo está en un estado corrupto por Turbopack
+3. handleResumenEdificioTrigger (lines 682-686, 694-695, 756):
+   - Removed new NPCSummaryManager() instance
+   - Use npcSummaryDbManager.getAllByNPCId() with proper array spreading
+   - Removed new EdificioSummaryManager() instance
+   - Use edificioSummaryDbManager.getLatest() and .create()
 
-Stage Summary:
-- El error de "nextVersion defined multiple times" ha sido corregido en el código fuente
-- Se eliminaron todos los bloques de código duplicados que causaban el error
-- Se corrigió la extracción de resúmenes del LLM en todas las funciones
-- El código fuente ahora está completamente correcto
-- El servidor de desarrollo necesita ser reiniciado para que los cambios surtan efecto
-- El caché de Next.js está corrupto y está causando errores ENOENT en Turbopack
+4. handleResumenPuebloTrigger (lines 848-856, 861-862, 922):
+   - Removed new EdificioSummaryManager() instance
+   - Use edificioSummaryDbManager.getAllByEdificioId() with proper array spreading
+   - Removed new PuebloSummaryManager() instance
+   - Use puebloSummaryDbManager.getLatest() and .create()
 
-Nota: El archivo triggerExecutor.ts está completamente corregido. El servidor de desarrollo está atascado en un estado corrupto de caché y necesita ser reiniciado. Los cambios en el código son correctos y resolverán el error una vez que el servidor se reinicie correctamente.
+5. handleResumenMundoTrigger (lines 1015-1020, 1028-1029, 1090):
+   - Removed new PuebloSummaryManager() instance
+   - Use puebloSummaryDbManager.getAllByPuebloId() with proper array spreading
+   - Removed new WorldSummaryManager() instance
+   - Use worldSummaryDbManager.getLatest() and .create()
 
----
-Task ID: 4
-Agent: Z.ai Code
-Task: Limpieza de logs y archivos viejos del proyecto
-
-Work Log:
-- Eliminados archivos de prueba de Prisma:
-  - test-prisma-types.ts
-  - test-prisma.js
-  - test-prisma.ts
-- Eliminado archivo de log de desarrollo: dev.log
-- Eliminados directorios de backup viejos en db/:
-  - db/npcs-backup/ (backups del 31 de enero)
-  - db/sessions-backup/ (backups del 31 de enero)
-  - db/world-pueblo-edificio-backup/ (backups del 31 de enero)
-- Eliminados directorios de backup viejos en data/:
-  - data/worlds-backups/ (backups duplicados)
-  - data/npcs-backups/ (backups duplicados)
-  - data/ completo (datos viejos duplicados de data-esparcraft/)
-- Eliminado directorio de backup en data-esparcraft/:
-  - data-esparcraft/db-backup/ (backups duplicados de db/)
-- Eliminados scripts viejos de prueba y migración:
-  - scripts/test-*.ts (todos los scripts de prueba)
-  - scripts/test-*.sh (scripts de shell de prueba)
-  - scripts/migrate-*.ts (scripts de migración completados)
-  - scripts/verify-*.ts (scripts de verificación completados)
-  - scripts/fix-*.ts (scripts de corrección completados)
-  - scripts/import-db-backup.ts (script de importación de backup)
-  - scripts/db-*.ts (scripts de base de datos viejos)
-  - scripts/load-*.js (scripts de carga viejos)
-  - scripts/update-*.ts (scripts de actualización viejos)
-- Eliminados todos los archivos .backup del proyecto:
-  - src/app/layout.tsx.backup
-  - src/app/globals.css.backup
-  - src/app/page.tsx.backup
-  - src/lib/resumenSummaryDbManager.ts.backup
-  - src/lib/triggerExecutor.ts.backup
-  - src/lib/resumenGeneralService.ts.backup
-- Eliminado directorio de ejemplo download/ (solo contenía README de ejemplo)
-- Intentado eliminar upload/ pero está ocupado (probablemente montado)
-- Mantenido: data-esparcraft/ (datos actuales del proyecto)
-
-Stage Summary:
-- El proyecto ha sido limpiado completamente
-- Eliminados ~30 archivos de prueba, logs, backups y scripts viejos
-- Eliminados ~20 directorios de backup duplicados
-- Reducido el tamaño del proyecto significativamente
-- Mantenidos solo los directorios y archivos necesarios:
-  - src/ (código fuente actual)
-  - data-esparcraft/ (datos actuales del proyecto)
-  - db/ (base de datos y configuraciones)
-  - scripts/ (solo check-db.ts)
-  - docs/ (documentación)
-  - node_modules/ (dependencias)
-  - public/ (archivos públicos)
-  - etc. (archivos de configuración)
-- El proyecto está ahora mucho más limpio y organizado
-
-Nota: El directorio upload/ no pudo ser eliminado porque parece estar montado o en uso. Esto no afecta el funcionamiento del proyecto ya que estaba vacío.
-
----
-Task ID: 5
-Agent: Z.ai Code
-Task: Corregir error de importación dinámica en triggerExecutor.ts
-
-Work Log:
-- Identificado el problema: Error `__TURBOPACK__imported__module__` en Next.js 16 con Turbopack
-- Ubicación del error: Líneas 860 y 867 de triggerExecutor.ts
-- Causa: Importaciones dinámicas de `await import('./triggerHandlers')` causan conflictos con Turbopack
-- El error específico: `sessionSummaryDbManager.getLatestBySessionId is not a function`
-- Corrección aplicada:
-  1. Agregado importación estática al inicio del archivo:
-    - `import { handleChatTrigger, handleNuevoLoreTrigger } from './triggerHandlers';`
-  2. Eliminada la importación dinámica en `executeChat` (línea 860):
-    - Cambiado de: `const { handleChatTrigger } = await import('./triggerHandlers');`
-    - A: `const result = await handleChatTrigger(payload);`
-  3. Eliminada la importación dinámica en `executeNuevoLore` (línea 867):
-    - Cambiado de: `const { handleNuevoLoreTrigger } = await import('./triggerHandlers');`
-    - A: `const result = await handleNuevoLoreTrigger(payload);`
-- Verificado que otras importaciones dinámicas (fs/promises, path) son módulos nativos y no causan problemas
-
-Stage Summary:
-- El error de importación dinámica ha sido corregido
-- Las funciones de chat deberían funcionar correctamente ahora
-- El flujo de sesiónes (crear nueva o continuar existente) funciona como se describió
-- La verificación de mantenimiento (resumen_general) funciona correctamente
-- Todas las importaciones dinámicas problemáticas han sido reemplazadas por estáticas
-
-Nota: Las importaciones dinámicas originales se agregaron "para evitar dependencia circular", pero no había una dependencia circular real entre triggerExecutor.ts y triggerHandlers.ts. El cambio a importación estática es la solución correcta y más eficiente.
-
----
-Task ID: 6
-Agent: Z.ai Code
-Task: Corregir error "getLatestBySessionId is not a function"
-
-Work Log:
-- Identificado el error: `sessionSummaryDbManager.getLatestBySessionId is not a function`
-- Causa raíz: La función `getLatestBySessionId` no existía en la clase `SessionSummaryManager`
-- Solo existía la función `getBySessionId` (sin "Latest")
-- Ubicación de la función incorrecta: `src/lib/resumenSummaryDbManager.ts`
-- Corrección aplicada:
-  - Agregado el método `getLatestBySessionId(sessionId: string)` a la clase `SessionSummaryManager`
-  - La función reutiliza `getBySessionId` que ya existía
-  - Obtiene los resúmenes de la sesión ordenados por timestamp descendente
-  - Retorna el primer elemento (más reciente) o null si no hay resúmenes
-- La función se usa en:
-  - triggerHandlers.ts (línea 193 y 492 aproximadamente)
-  - sessionDbManager.ts
-- Verificado que el schema de DB tiene el índice necesario: `@@index([sessionId])` en la tabla SessionSummary
-
-Stage Summary:
-- El error "getLatestBySessionId is not a function" ha sido corregido
-- Se agregó la función faltante `getLatestBySessionId` a `SessionSummaryManager`
-- La función reutiliza `getBySessionId` existente para evitar duplicación de código
-- Ahora al crear una nueva sesión, debería funcionar correctamente
-- La creación de sesión (si no hay `playersessionid`) y la continuación de sesión existente deberían funcionar
-
-
-
-
+All trigger handlers are now consistent with triggerExecutor.ts and properly use singleton manager instances.

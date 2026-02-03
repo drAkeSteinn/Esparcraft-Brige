@@ -31,7 +31,7 @@ import { edificioDbManager } from './edificioDbManager';
 import { sessionDbManager } from './sessionDbManager';
 // Importar managers de resúmenes
 import { sessionSummaryDbManager } from './resumenSummaryDbManager';
-import { NPCSummaryManager, EdificioSummaryManager, PuebloSummaryManager, WorldSummaryManager } from './summaryManagers';
+import { npcSummaryDbManager, edificioSummaryDbManager, puebloSummaryDbManager, worldSummaryDbManager } from './summaryManagers';
 import {
   buildChatMessagesWithOptions,
   buildCompleteChatPrompt,
@@ -483,8 +483,7 @@ export async function handleResumenNPCTrigger(payload: ResumenNPCTriggerPayload)
   const currentHash = generateSessionSummariesHash(npcSummaries);
 
   // ✅ OBTENER ÚLTIMO RESUMEN GUARDADO DEL NPC
-  const npcSummaryMgr = new NPCSummaryManager();
-  const lastNPCSummary = await npcSummaryMgr.getLatest(npcid);
+  const lastNPCSummary = await npcSummaryDbManager.getLatest(npcid);
 
   console.log(`[handleResumenNPCTrigger] NPC \${npcid} - Último hash guardado: \${lastNPCSummary?.sessionHash || 'N/A'}, Versión: \${lastNPCSummary?.version || 0}`);
 
@@ -578,7 +577,7 @@ MEMORIAS DE LOS AVENTUREROS
 
   // ✅ GUARDAR EN TABLA NPCSummary PARA HISTÓRICO (CON VERSIÓN)
   const nextVersion = (lastNPCSummary?.version || 0) + 1;
-  await npcSummaryMgr.create({
+  await npcSummaryDbManager.create({
     npcId: npcid,
     summary: response,
     sessionHash: currentHash,
@@ -679,21 +678,19 @@ export async function handleResumenEdificioTrigger(payload: ResumenEdificioTrigg
   console.log(`[handleResumenEdificioTrigger] Obtenidos resúmenes de ${npcs.length} NPCs para el edificio ${edificioid}`);
 
   // ✅ CALCULAR HASH DE LOS RESÚMENES DE NPCs DEL EDIFICIO
-  const npcSummaryMgr = new NPCSummaryManager();
   const allNPCSummaries = [];
 
   for (const npc of npcs) {
-    const npcSummaries = await npcSummaryMgr.getByNPCId(npc.id);
-    if (npcSummaries) {
-      allNPCSummaries.push(npcSummaries);
+    const npcSummaries = await npcSummaryDbManager.getAllByNPCId(npc.id);
+    if (npcSummaries && npcSummaries.length > 0) {
+      allNPCSummaries.push(...npcSummaries);
     }
   }
 
   const currentHash = generateNPCSummariesHash(allNPCSummaries);
 
   // ✅ OBTENER ÚLTIMO RESUMEN GUARDADO DEL EDIFICIO
-  const edificioSummaryMgr = new EdificioSummaryManager();
-  const lastEdificioSummary = await edificioSummaryMgr.getLatest(edificioid);
+  const lastEdificioSummary = await edificioSummaryDbManager.getLatest(edificioid);
 
   console.log(`[handleResumenEdificioTrigger] Edificio ${edificioid} - Hash actual: ${currentHash}, Último hash: ${lastEdificioSummary?.npcHash || 'N/A'}`);
 
@@ -756,7 +753,7 @@ export async function handleResumenEdificioTrigger(payload: ResumenEdificioTrigg
 
   // ✅ GUARDAR EN TABLA EdificioSummary PARA HISTÓRICO (CON VERSIÓN)
   const nextVersion = (lastEdificioSummary?.version || 0) + 1;
-  await edificioSummaryMgr.create({
+  await edificioSummaryDbManager.create({
     edificioId: edificioid,
     summary: response,
     npcHash: currentHash,
@@ -848,21 +845,19 @@ export async function handleResumenPuebloTrigger(payload: ResumenPuebloTriggerPa
   console.log(`[handleResumenPuebloTrigger] Obtenidos resúmenes de ${edificios.length} edificios para el pueblo ${pueblid}`);
 
   // ✅ CALCULAR HASH DE LOS RESÚMENES DE EDIFICIOS DEL PUEBLO
-  const edificioSummaryMgr = new EdificioSummaryManager();
   const allEdificioSummaries = [];
 
   for (const edificio of edificios) {
-    const edificioSummaries = await edificioSummaryMgr.getByEdificioId(edificio.id);
-    if (edificioSummaries) {
-      allEdificioSummaries.push(edificioSummaries);
+    const edificioSummaries = await edificioSummaryDbManager.getAllByEdificioId(edificio.id);
+    if (edificioSummaries && edificioSummaries.length > 0) {
+      allEdificioSummaries.push(...edificioSummaries);
     }
   }
 
   const currentHash = generateEdificioSummariesHash(allEdificioSummaries);
 
   // ✅ OBTENER ÚLTIMO RESUMEN GUARDADO DEL PUEBLO
-  const puebloSummaryMgr = new PuebloSummaryManager();
-  const lastPuebloSummary = await puebloSummaryMgr.getLatest(pueblid);
+  const lastPuebloSummary = await puebloSummaryDbManager.getLatest(pueblid);
 
   console.log(`[handleResumenPuebloTrigger] Pueblo ${pueblid} - Hash actual: ${currentHash}, Último hash: ${lastPuebloSummary?.edificioHash || 'N/A'}`);
 
@@ -924,7 +919,7 @@ export async function handleResumenPuebloTrigger(payload: ResumenPuebloTriggerPa
 
   // ✅ GUARDAR EN TABLA PuebloSummary PARA HISTÓRICO (CON VERSIÓN)
   const nextVersion = (lastPuebloSummary?.version || 0) + 1;
-  await puebloSummaryMgr.create({
+  await puebloSummaryDbManager.create({
     puebloId: pueblid,
     summary: response,
     edificioHash: currentHash,
@@ -1017,21 +1012,19 @@ export async function handleResumenMundoTrigger(payload: ResumenMundoTriggerPayl
 
 
   // ✅ CALCULAR HASH DE LOS RESÚMENES DE PUEBLOS DEL MUNDO
-  const puebloSummaryMgr = new PuebloSummaryManager();
   const allPuebloSummaries = [];
 
   for (const pueblo of pueblos) {
-    const puebloSummaries = await puebloSummaryMgr.getByPuebloId(pueblo.id);
-    if (puebloSummaries) {
-      allPuebloSummaries.push(puebloSummaries);
+    const puebloSummaries = await puebloSummaryDbManager.getAllByPuebloId(pueblo.id);
+    if (puebloSummaries && puebloSummaries.length > 0) {
+      allPuebloSummaries.push(...puebloSummaries);
     }
   }
 
   const currentHash = generatePuebloSummariesHash(allPuebloSummaries);
 
   // ✅ OBTENER ÚLTIMO RESUMEN GUARDADO DEL MUNDO
-  const worldSummaryMgr = new WorldSummaryManager();
-  const lastWorldSummary = await worldSummaryMgr.getLatest(mundoid);
+  const lastWorldSummary = await worldSummaryDbManager.getLatest(mundoid);
 
   console.log(`[handleResumenMundoTrigger] Mundo ${mundoid} - Hash actual: ${currentHash}, Último hash: ${lastWorldSummary?.puebloHash || "N/A"}`);
 
@@ -1094,7 +1087,7 @@ export async function handleResumenMundoTrigger(payload: ResumenMundoTriggerPayl
 
   // ✅ GUARDAR EN TABLA WorldSummary PARA HISTÓRICO (CON VERSIÓN)
   const nextVersion = (lastWorldSummary?.version || 0) + 1;
-  await worldSummaryMgr.create({
+  await worldSummaryDbManager.create({
     worldId: mundoid,
     summary: response,
     puebloHash: currentHash,

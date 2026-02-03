@@ -101,6 +101,13 @@ export class EdificioSummaryManager {
       orderBy: { createdAt: 'desc' }
     });
   }
+
+  async getAllByEdificioId(edificioId: string) {
+    return await db.edificioSummary.findMany({
+      where: { edificioId },
+      orderBy: { createdAt: 'desc' }
+    });
+  }
 }
 
 /**
@@ -130,6 +137,13 @@ export class PuebloSummaryManager {
       orderBy: { createdAt: 'desc' }
     });
   }
+
+  async getAllByPuebloId(puebloId: string) {
+    return await db.puebloSummary.findMany({
+      where: { puebloId },
+      orderBy: { createdAt: 'desc' }
+    });
+  }
 }
 
 /**
@@ -156,6 +170,13 @@ export class WorldSummaryManager {
 
   async getAll() {
     return await db.worldSummary.findMany({
+      orderBy: { createdAt: 'desc' }
+    });
+  }
+
+  async getAllByWorldId(worldId: string) {
+    return await db.worldSummary.findMany({
+      where: { worldId },
       orderBy: { createdAt: 'desc' }
     });
   }
