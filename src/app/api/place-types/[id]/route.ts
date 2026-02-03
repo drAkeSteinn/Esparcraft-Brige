@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { placeTypeManager } from '@/lib/fileManager';
+import { placeTypeDbManager } from '@/lib/placeTypeDbManager';
 
 // GET place type by ID
 export async function GET(
@@ -8,7 +8,7 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    const placeType = placeTypeManager.getById(id);
+    const placeType = await placeTypeDbManager.getById(id);
 
     if (!placeType) {
       return NextResponse.json(
@@ -40,7 +40,7 @@ export async function PUT(
     const body = await request.json();
 
     // Check if place type exists
-    const existing = placeTypeManager.getById(id);
+    const existing = await placeTypeDbManager.getById(id);
     if (!existing) {
       return NextResponse.json(
         { error: 'Place type not found' },
@@ -48,7 +48,7 @@ export async function PUT(
       );
     }
 
-    const updated = placeTypeManager.update(id, {
+    const updated = await placeTypeDbManager.update(id, {
       name: body.name,
       icon: body.icon,
       color: body.color
@@ -76,7 +76,7 @@ export async function DELETE(
     const { id } = await params;
 
     // Check if place type exists
-    const existing = placeTypeManager.getById(id);
+    const existing = await placeTypeDbManager.getById(id);
     if (!existing) {
       return NextResponse.json(
         { error: 'Place type not found' },
@@ -85,7 +85,7 @@ export async function DELETE(
     }
 
     // Check if place type is in use
-    const isInUse = placeTypeManager.isInUse(id);
+    const isInUse = await placeTypeDbManager.isInUse(id);
     if (isInUse) {
       return NextResponse.json(
         { error: 'Cannot delete: this place type is in use by one or more points of interest' },
@@ -93,7 +93,7 @@ export async function DELETE(
       );
     }
 
-    const deleted = placeTypeManager.delete(id);
+    const deleted = await placeTypeDbManager.delete(id);
 
     if (!deleted) {
       return NextResponse.json(

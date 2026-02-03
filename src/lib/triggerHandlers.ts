@@ -406,16 +406,6 @@ export async function handleResumenSesionTrigger(payload: ResumenSesionTriggerPa
   // Call LLM
   const summary = await callLLM(messages);
 
-  // ✅ GUARDAR EN TABLA WorldSummary PARA HISTÓRICO (CON VERSIÓN)
-  const nextVersion = (lastWorldSummary?.version || 0) + 1;
-  await worldSummaryMgr.create({
-    worldId: mundoid,
-    summary: response,
-    puebloHash: currentHash,
-    version: nextVersion
-  });
-  console.log(`[handleResumenMundoTrigger] Mundo ${mundoid} - Resumen guardado en DB con versión ${nextVersion}`);
-
 
   // ✅ OBTENER METADATA PARA EL RESUMEN
   const npcName = getCardField(npc?.card, 'name', '');
@@ -444,6 +434,7 @@ export async function handleResumenSesionTrigger(payload: ResumenSesionTriggerPa
 }
 
 // Resumen NPC trigger handler
+// Resumen NPC trigger handler - VERSIÓN CORREGIDA CON VERIFICACIÓN ANTES DE LLM
 export async function handleResumenNPCTrigger(payload: ResumenNPCTriggerPayload): Promise<{ success: boolean; memory: Record<string, any> }> {
   const { npcid, systemPrompt: payloadSystemPrompt, allSummaries: payloadAllSummaries } = payload;
 
@@ -486,7 +477,27 @@ export async function handleResumenNPCTrigger(payload: ResumenNPCTriggerPayload)
 
   // ✅ OBTENER RESÚMENES DE SESIONES DEL NPC CON METADATA
   const npcSummaries = await sessionSummaryDbManager.getByNPCId(npcid);
-  console.log(`[handleResumenNPCTrigger] Obtenidos ${npcSummaries.length} resúmenes para el NPC ${npcid}`);
+  console.log(`[handleResumenNPCTrigger] Obtenidos \${npcSummaries.length} resúmenes para el NPC \${npcid}`);
+
+  // ✅ CALCULAR HASH ACTUAL DE LOS RESÚMENES DE SESIONES DEL NPC
+  const currentHash = generateSessionSummariesHash(npcSummaries);
+
+  // ✅ OBTENER ÚLTIMO RESUMEN GUARDADO DEL NPC
+  const npcSummaryMgr = new NPCSummaryManager();
+  const lastNPCSummary = await npcSummaryMgr.getLatest(npcid);
+
+  console.log(`[handleResumenNPCTrigger] NPC \${npcid} - Último hash guardado: \${lastNPCSummary?.sessionHash || 'N/A'}, Versión: \${lastNPCSummary?.version || 0}`);
+
+  // ✅ VERIFICAR SI HUBO CAMBIOS EN LOS RESÚMENES DE SESIONES DEL NPC - ANTES DE LLAMAR AL LLM
+  if (lastNPCSummary?.sessionHash === currentHash) {
+    console.log(`[handleResumenNPCTrigger] NPC \${npcid} - SIN CAMBIOS, SKIP`);
+    return {
+      success: false,
+      error: `No hubo cambios en las sesiones del NPC \${npcid}. Los resúmenes son iguales.`
+    };
+  }
+
+  console.log(`[handleResumenNPCTrigger] NPC \${npcid} - HAY CAMBIOS, PROCEDIENDO CON RESUMEN`);
 
   // ✅ FORMATEAR LA LISTA DE RESÚMENES CON EL NUEVO FORMATO
   let allSummariesFormatted = payloadAllSummaries;
@@ -505,7 +516,7 @@ export async function handleResumenNPCTrigger(payload: ResumenNPCTriggerPayload)
     // Construir el formato especificado
     const memoriesSections: string[] = [];
     for (const [playerName, summaries] of Object.entries(summariesByPlayer)) {
-      memoriesSections.push(`Memoria de ${playerName}`);
+      memoriesSections.push(`Memoria de \${playerName}`);
       summaries.forEach(s => {
         memoriesSections.push(s.summary);
       });
@@ -513,7 +524,7 @@ export async function handleResumenNPCTrigger(payload: ResumenNPCTriggerPayload)
 
     allSummariesFormatted = `***
 MEMORIAS DE LOS AVENTUREROS
-${memoriesSections.join('\n')}
+\${memoriesSections.join('\\n')}
 ***`;
     console.log('[handleResumenNPCTrigger] Resúmenes formateados correctamente');
   }
@@ -562,19 +573,18 @@ ${memoriesSections.join('\n')}
 
   console.log('[handleResumenNPCTrigger] System Prompt procesado con variables y plantillas');
 
-  // Call LLM
+  // Call LLM - SOLO SE EJECUTA SI HUBO CAMBIOS
   const response = await callLLM(messages);
 
-  // ✅ GUARDAR EN TABLA WorldSummary PARA HISTÓRICO (CON VERSIÓN)
-  const nextVersion = (lastWorldSummary?.version || 0) + 1;
-  await worldSummaryMgr.create({
-    worldId: mundoid,
+  // ✅ GUARDAR EN TABLA NPCSummary PARA HISTÓRICO (CON VERSIÓN)
+  const nextVersion = (lastNPCSummary?.version || 0) + 1;
+  await npcSummaryMgr.create({
+    npcId: npcid,
     summary: response,
-    puebloHash: currentHash,
+    sessionHash: currentHash,
     version: nextVersion
   });
-  console.log(`[handleResumenMundoTrigger] Mundo ${mundoid} - Resumen guardado en DB con versión ${nextVersion}`);
-
+  console.log(`[handleResumenNPCTrigger] NPC \${npcid} - Resumen guardado en DB con versión \${nextVersion}`);
 
   // ✅ GUARDAR RESUMEN EN creator_notes DE LA CARD DEL NPC
   // Reemplazar siempre el contenido de creator_notes con el resumen generado
@@ -598,36 +608,6 @@ ${memoriesSections.join('\n')}
     await npcDbManager.update(npcid, { card: updatedCard });
     console.log('[handleResumenNPCTrigger] Resumen guardado en creator_notes de la Card del NPC');
   }
-
-  // ✅ CALCULAR HASH ACTUAL DE LOS RESÚMENES DE SESIONES DEL NPC
-  const currentHash = generateSessionSummariesHash(npcSummaries);
-
-  // ✅ OBTENER ÚLTIMO RESUMEN GUARDADO DEL NPC
-  const npcSummaryMgr = new NPCSummaryManager();
-  const lastNPCSummary = await npcSummaryMgr.getLatest(npcid);
-
-  console.log(`[handleResumenNPCTrigger] NPC ${npcid} - Último hash guardado: ${lastNPCSummary?.sessionHash || 'N/A'}, Versión: ${lastNPCSummary?.version || 0}`);
-
-  // ✅ VERIFICAR SI HUBO CAMBIOS EN LOS RESÚMENES DE SESIONES
-  if (lastNPCSummary?.sessionHash === currentHash) {
-    console.log(`[handleResumenNPCTrigger] NPC ${npcid} - SIN CAMBIOS, SKIP`);
-    return {
-      success: false,
-      error: `No hubo cambios en las sesiones del NPC ${npcid}. Los resúmenes son iguales.`
-    };
-  }
-
-  console.log(`[handleResumenNPCTrigger] NPC ${npcid} - HAY CAMBIOS, PROCEDIENDO CON RESUMEN`);
-
-  // ✅ GUARDAR EN TABLA NPCSummary PARA HISTÓRICO (CON VERSIÓN)
-  const nextVersion = (lastNPCSummary?.version || 0) + 1;
-  await npcSummaryMgr.create({
-    npcId: npcid,
-    summary: response,
-    sessionHash: currentHash,
-    version: nextVersion
-  });
-  console.log(`[handleResumenNPCTrigger] NPC ${npcid} - Resumen guardado en DB con versión ${nextVersion}`);
 
   return {
     success: true,
@@ -774,17 +754,6 @@ export async function handleResumenEdificioTrigger(payload: ResumenEdificioTrigg
   // Call LLM
   const response = await callLLM(messages);
 
-  // ✅ GUARDAR EN TABLA WorldSummary PARA HISTÓRICO (CON VERSIÓN)
-  const nextVersion = (lastWorldSummary?.version || 0) + 1;
-  await worldSummaryMgr.create({
-    worldId: mundoid,
-    summary: response,
-    puebloHash: currentHash,
-    version: nextVersion
-  });
-  console.log(`[handleResumenMundoTrigger] Mundo ${mundoid} - Resumen guardado en DB con versión ${nextVersion}`);
-
-
   // ✅ GUARDAR EN TABLA EdificioSummary PARA HISTÓRICO (CON VERSIÓN)
   const nextVersion = (lastEdificioSummary?.version || 0) + 1;
   await edificioSummaryMgr.create({
@@ -799,10 +768,10 @@ export async function handleResumenEdificioTrigger(payload: ResumenEdificioTrigg
   // Reemplazar siempre el contenido de eventos_recientes con el resumen generado
   if (edificio) {
     const updatedEdificio: Partial<Edificio> = {
-      eventos_recientes: eventos: [response]
+      eventos_recientes: [response]
     };
 
-  await edificioDbManager.update(edificioid, updatedEdificio);
+    await edificioDbManager.update(edificioid, updatedEdificio);
     console.log('[handleResumenEdificioTrigger] Resumen guardado en eventos_recientes del edificio');
   }
 
@@ -953,17 +922,6 @@ export async function handleResumenPuebloTrigger(payload: ResumenPuebloTriggerPa
   // Call LLM
   const response = await callLLM(messages);
 
-  // ✅ GUARDAR EN TABLA WorldSummary PARA HISTÓRICO (CON VERSIÓN)
-  const nextVersion = (lastWorldSummary?.version || 0) + 1;
-  await worldSummaryMgr.create({
-    worldId: mundoid,
-    summary: response,
-    puebloHash: currentHash,
-    version: nextVersion
-  });
-  console.log(`[handleResumenMundoTrigger] Mundo ${mundoid} - Resumen guardado en DB con versión ${nextVersion}`);
-
-
   // ✅ GUARDAR EN TABLA PuebloSummary PARA HISTÓRICO (CON VERSIÓN)
   const nextVersion = (lastPuebloSummary?.version || 0) + 1;
   await puebloSummaryMgr.create({
@@ -981,7 +939,7 @@ export async function handleResumenPuebloTrigger(payload: ResumenPuebloTriggerPa
     const updatedPueblo: Partial<Pueblo> = {
       lore: {
         ...loreActual,
-        eventos: eventos: [response]  // ✅ REEMPLAZAR el array completo (en lugar de lore.rumores)
+        eventos: [response]  // ✅ REEMPLAZAR el array completo (en lugar de lore.rumores)
       }
     };
 
@@ -1148,12 +1106,11 @@ export async function handleResumenMundoTrigger(payload: ResumenMundoTriggerPayl
   // ✅ GUARDAR RESUMEN EN lore.eventos DE LA CARD DEL MUNDO
   // Reemplazar siempre el contenido de lore.eventos con el resumen generado
   if (world) {
+    const loreActual = world.lore || {};
     const updatedWorld: Partial<World> = {
       lore: {
-        ...world, loreActual: world.lore || {};
-        const updatedWorld: Partial<World> = {
-          lore: {
-        eventos: eventos: [response]  // ✅ REEMPLAZAR el array completo (en lugar de lore.rumores)
+        ...loreActual,
+        eventos: [response]  // ✅ REEMPLAZAR el array completo (en lugar de lore.rumores)
       }
     };
 
@@ -1200,54 +1157,39 @@ export async function handleNuevoLoreTrigger(payload: NuevoLoreTriggerPayload): 
   // Call LLM
   const lore = await callLLM(messages);
 
-  // ✅ GUARDAR EN TABLA WorldSummary PARA HISTÓRICO (CON VERSIÓN)
-  const nextVersion = (lastWorldSummary?.version || 0) + 1;
-  await worldSummaryMgr.create({
-    worldId: mundoid,
-    summary: response,
-    puebloHash: currentHash,
-    version: nextVersion
-  });
-  console.log(`[handleResumenMundoTrigger] Mundo ${mundoid} - Resumen guardado en DB con versión ${nextVersion}`);
-
-
   // Update lore
   if (scope === 'mundo' && world) {
     if (loreType === 'rumores') {
+      const loreActual = world.lore || {};
       await worldDbManager.update(world.id, {
         lore: {
-          ...world, loreActual: world.lore || {};
-        const updatedWorld: Partial<World> = {
-          lore: {
-          rumores: [...world.lore.rumores, lore]
+          ...loreActual,
+          rumores: [...loreActual.rumores || [], lore]
         }
       });
     } else if (loreType === 'estado_mundo') {
+      const loreActual = world.lore || {};
       await worldDbManager.update(world.id, {
         lore: {
-          ...world, loreActual: world.lore || {};
-        const updatedWorld: Partial<World> = {
-          lore: {
+          ...loreActual,
           estado_mundo: lore
         }
       });
     }
   } else if (scope === 'pueblo' && pueblo) {
     if (loreType === 'rumores') {
+      const loreActual = pueblo.lore || {};
       await puebloDbManager.update(pueblo.id, {
         lore: {
-          ...pueblo, loreActual: world.lore || {};
-        const updatedWorld: Partial<World> = {
-          lore: {
-          rumores: [...pueblo.lore.rumores, lore]
+          ...loreActual,
+          rumores: [...loreActual.rumores || [], lore]
         }
       });
     } else if (loreType === 'estado_pueblo') {
+      const loreActual = pueblo.lore || {};
       await puebloDbManager.update(pueblo.id, {
         lore: {
-          ...pueblo, loreActual: world.lore || {};
-        const updatedWorld: Partial<World> = {
-          lore: {
+          ...loreActual,
           estado_pueblo: lore
         }
       });
@@ -1620,3 +1562,13 @@ ${memoriesSections.join('\n')}
       return {
         systemPrompt,
         messages,
+        estimatedTokens: 0,
+        lastPrompt,
+        sections: extractPromptSections(lastPrompt)
+      };
+    }
+
+    default:
+      throw new Error(`Unknown trigger mode: ${mode}`);
+  }
+}

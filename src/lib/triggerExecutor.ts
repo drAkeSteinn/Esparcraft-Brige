@@ -745,38 +745,12 @@ async function executeResumenPueblo(
 
   // ✅ LLAMAR AL LLM
   const llmResponse = await callLLM(messages);
-
-  
-
-  // ✅ GUARDAR RESUMEN EN lore.eventos DEL MUNDO (EN LA DB)
-  const loreActual = world.lore || {};
-  await worldDbManager.update(mundoid, {
-    lore: {
-      ...loreActual,
-      eventos: [summary]
-    }
-  });
-  console.log(`[executeResumenMundo] Resumen guardado en lore.eventos del mundo ${mundoid}`);
-
-  // ✅ GUARDAR EN TABLA WorldSummary PARA HISTÓRICO (CON VERSIÓN)
-  const nextVersion = (lastWorldSummary?.version || 0) + 1;
-  await worldSummaryMgr.create({
-    worldId: mundoid,
-    summary,
-    puebloHash: currentHash,
-    version: nextVersion
-  });
-  console.log(`[executeResumenMundo] Mundo ${mundoid} - Resumen guardado en DB con versión ${nextVersion}`);
-
-
-  
-
   // ✅ GUARDAR RESUMEN EN lore.eventos DEL PUEBLO (EN LA DB)
   const loreActual = pueblo.lore || {};
   await puebloDbManager.update(pueblid, {
     lore: {
       ...loreActual,
-      eventos: [summary]
+      eventos: [llmResponse]
     }
   });
   console.log(`[executeResumenPueblo] Resumen guardado en lore.eventos del pueblo ${pueblid}`);
@@ -785,7 +759,7 @@ async function executeResumenPueblo(
   const nextVersion = (lastPuebloSummary?.version || 0) + 1;
   await puebloSummaryMgr.create({
     puebloId: pueblid,
-    summary,
+    summary: llmResponse,
     edificioHash: currentHash,
     version: nextVersion
   });
@@ -793,7 +767,7 @@ async function executeResumenPueblo(
 
   return {
     success: true,
-    data: { summary, version: nextVersion }
+    data: { summary: llmResponse, version: nextVersion }
   };
 }
 

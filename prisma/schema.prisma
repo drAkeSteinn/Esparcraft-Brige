@@ -113,6 +113,16 @@ model Edificio {
   @@index([puebloId])
 }
 
+// PlaceType Model - Tipos de lugares para POIs
+model PlaceType {
+  id          String   @id @default(cuid())
+  name        String   // Nombre del tipo de lugar (ej: 'Puerta', 'Mesa')
+  icon        String   // Icono de Lucide (ej: 'Door', 'Table', 'Monitor')
+  color       String?  // Color personalizado opcional (ej: '#FF5733', '#3498DB')
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
 // Session Model - Sesiones de chat
 model Session {
   id             String   @id @default(cuid())

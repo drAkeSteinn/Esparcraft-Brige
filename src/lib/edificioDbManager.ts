@@ -261,6 +261,19 @@ export const edificioDbManager = {
    */
   async count(): Promise<number> {
     return await db.edificio.count();
+  },
+
+  /**
+   * Elimina todos los edificios de la base de datos
+   */
+  async deleteAll(): Promise<number> {
+    try {
+      const result = await db.edificio.deleteMany({});
+      return result.count;
+    } catch (error) {
+      console.error('Error deleting all edificios:', error);
+      return 0;
+    }
   }
 };
 

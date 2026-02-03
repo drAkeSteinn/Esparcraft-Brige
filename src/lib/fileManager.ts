@@ -238,6 +238,17 @@ export const placeTypeManager = {
       }
     }
     return false;
+  },
+
+  deleteAll(): number {
+    const placeTypes = this.getAll();
+    let deletedCount = 0;
+    for (const placeType of placeTypes) {
+      if (this.delete(placeType.id)) {
+        deletedCount++;
+      }
+    }
+    return deletedCount;
   }
 };
 

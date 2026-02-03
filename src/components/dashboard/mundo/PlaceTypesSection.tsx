@@ -11,6 +11,7 @@ import { PlaceType } from '@/lib/types';
 import { toast } from '@/hooks/use-toast';
 import * as Icons from 'lucide-react';
 
+import GenericBackupSection from '../GenericBackupSection';
 // Lista de iconos de Lucide recomendados para tipos de lugares
 const AVAILABLE_ICONS = [
   'Door', 'Table', 'Chair', 'Monitor', 'Keyboard', 'Coffee', 'Utensils',
@@ -383,6 +384,13 @@ export default function PlaceTypesSection() {
             </Button>
           </DialogFooter>
         </DialogContent>
+
+      <GenericBackupSection
+        entityType="place-types"
+        entityName="Tipo de Lugar"
+        entityNamePlural="Tipos de Lugares"
+        apiPath="place-types"
+      />
       </Dialog>
     </div>
   );

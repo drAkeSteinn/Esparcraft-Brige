@@ -204,6 +204,23 @@ export const npcDbManager = {
       orderBy: { createdAt: 'desc' }
     });
     return npcs.map(toDomainNPC);
+  },
+
+  /**
+   * Elimina todos los NPCs de la base de datos
+   */
+  async deleteAll(): Promise<number> {
+    try {
+      // Primero borrar todas las sesiones relacionadas (foreign key constraint)
+      await db.session.deleteMany({});
+
+      // Luego borrar todos los NPCs
+      const result = await db.nPC.deleteMany({});
+      return result.count;
+    } catch (error) {
+      console.error('Error deleting all NPCs:', error);
+      return 0;
+    }
   }
 };
 

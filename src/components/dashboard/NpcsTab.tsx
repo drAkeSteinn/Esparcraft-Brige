@@ -13,6 +13,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { NPC, World, Pueblo, Edificio, SillyTavernCard, getCardField } from '@/lib/types';
 import { toast } from '@/hooks/use-toast';
+import NPCBackupSection from './NPCBackupSection';
 
 export default function NpcsTab() {
   const [npcs, setNpcs] = useState<NPC[]>([]);
@@ -677,6 +678,8 @@ export default function NpcsTab() {
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  </div>
-);
+
+      <NPCBackupSection />
+    </div>
+  );
 }

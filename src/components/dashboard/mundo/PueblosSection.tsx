@@ -11,6 +11,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
 import { Pueblo, World, Edificio } from '@/lib/types';
 import { toast } from '@/hooks/use-toast';
+import GenericBackupSection from '../GenericBackupSection';
 
 interface FormData {
   worldId: string;
@@ -482,6 +483,13 @@ export default function PueblosSection() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+      <GenericBackupSection
+        entityType="pueblos"
+        entityName="Pueblo"
+        entityNamePlural="Pueblos/Naciones"
+        apiPath="pueblos"
+      />
+
   </div>
   );
 }

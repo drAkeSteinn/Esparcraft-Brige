@@ -193,6 +193,19 @@ export const worldDbManager = {
    */
   async count(): Promise<number> {
     return await db.world.count();
+  },
+
+  /**
+   * Elimina todos los mundos de la base de datos
+   */
+  async deleteAll(): Promise<number> {
+    try {
+      const result = await db.world.deleteMany({});
+      return result.count;
+    } catch (error) {
+      console.error('Error deleting all worlds:', error);
+      return 0;
+    }
   }
 };
 

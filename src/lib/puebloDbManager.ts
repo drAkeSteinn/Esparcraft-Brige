@@ -240,6 +240,19 @@ export const puebloDbManager = {
    */
   async count(): Promise<number> {
     return await db.pueblo.count();
+  },
+
+  /**
+   * Elimina todos los pueblos de la base de datos
+   */
+  async deleteAll(): Promise<number> {
+    try {
+      const result = await db.pueblo.deleteMany({});
+      return result.count;
+    } catch (error) {
+      console.error('Error deleting all pueblos:', error);
+      return 0;
+    }
   }
 };
 

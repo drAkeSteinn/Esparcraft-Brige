@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { placeTypeManager } from '@/lib/fileManager';
+import { placeTypeDbManager } from '@/lib/placeTypeDbManager';
 
 // GET all place types
 export async function GET() {
   try {
-    const placeTypes = placeTypeManager.getAll();
+    const placeTypes = await placeTypeDbManager.getAll();
 
     return NextResponse.json({
       success: true,
@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
       color: body.color // optional
     };
 
-    const newPlaceType = placeTypeManager.create(placeTypeData, body.id);
+    const newPlaceType = await placeTypeDbManager.create(placeTypeData, body.id);
 
     return NextResponse.json({
       success: true,

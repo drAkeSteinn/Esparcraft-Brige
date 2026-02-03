@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { World, Pueblo } from '@/lib/types';
 import { toast } from '@/hooks/use-toast';
+import GenericBackupSection from '../GenericBackupSection';
 
 export default function MundosSection() {
   const [worlds, setWorlds] = useState<World[]>([]);
@@ -408,6 +409,13 @@ export default function MundosSection() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <GenericBackupSection
+        entityType="worlds"
+        entityName="Mundo"
+        entityNamePlural="Mundos"
+        apiPath="worlds"
+      />
     </div>
   );
 }

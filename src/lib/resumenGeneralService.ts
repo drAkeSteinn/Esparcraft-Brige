@@ -684,10 +684,17 @@ export class ResumenGeneralService {
     const mundos = await worldDbManager.getAll();
     const summariesByMundo = new Map<string, any[]>();
 
-    for (const summary of await puebloSummaryDbManager.getAll()) {
-      const existing = summariesByMundo.get(summary.mundoId) || [];
+    // ✅ CORREGIDO: Agrupar resúmenes de pueblos por mundoId
+    // PuebloSummary tiene puebloId, necesitamos obtener el pueblo para obtener su worldId
+    const allPuebloSummaries = await puebloSummaryDbManager.getAll();
+
+    for (const summary of allPuebloSummaries) {
+      const pueblo = await puebloDbManager.getById(summary.puebloId);
+      if (!pueblo) continue;
+
+      const existing = summariesByMundo.get(pueblo.worldId) || [];
       existing.push(summary);
-      summariesByMundo.set(summary.mundoId, existing);
+      summariesByMundo.set(pueblo.worldId, existing);
     }
 
     console.log(`[ResumenGeneral] Procesando ${mundos.length} mundos`);
@@ -726,20 +733,15 @@ export class ResumenGeneralService {
           version: (lastWorldSummary?.version || 0) + 1
         });
 
-        // ✅ GUARDAR RESUMEN EN lore.eventos DEL MUNDO
+        // ✅ GUARDAR RESUMEN EN lore.eventos DEL MUNDO (REEMPLAZANDO)
         const loreActual = mundo.lore || {};
-        const timestamp = new Date().toISOString();
-        const eventoResumen = {
-          tipo: 'resumen',
-          timestamp,
-          contenido: result.data.summary,
-          version: (lastWorldSummary?.version || 0) + 1
-        };
         await worldDbManager.update(mundo.id, {
-          ...loreActual,
-          eventos: [result.data.summary]
+          lore: {
+            ...loreActual,
+            eventos: [result.data.summary]
+          }
         });
-        console.log(`[ResumenGeneral] Resumen guardado en lore.eventos de mundo ${mundo.id}`);
+        console.log(`[ResumenGeneral] Resumen guardado en lore.eventos de mundo ${mundo.id} (reemplazando)`);
 
         completed++;
 

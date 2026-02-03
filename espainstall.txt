@@ -1,10 +1,10 @@
   "scripts": {
-    "dev": "next dev -p 3000",
-    "build": "next build",
+    "dev": "npx prisma db push && next dev -p 3000",
+    "build": "npx prisma generate && next build",
     "start": "next start -p 3000",
     "lint": "eslint .",
     "db:push": "prisma db push",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:reset": "prisma migrate reset"
-},
+  },

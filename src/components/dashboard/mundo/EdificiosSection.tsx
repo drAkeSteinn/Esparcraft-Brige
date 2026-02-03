@@ -13,6 +13,7 @@ import { Edificio, PointOfInterest, PlaceType, NPC } from '@/lib/types';
 import { toast } from '@/hooks/use-toast';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
+import GenericBackupSection from '../GenericBackupSection';
 
 export default function EdificiosSection() {
   const [edificios, setEdificios] = useState<Edificio[]>([]);
@@ -835,6 +836,13 @@ export default function EdificiosSection() {
             </Button>
           </DialogFooter>
         </DialogContent>
+
+      <GenericBackupSection
+        entityType="edificios"
+        entityName="Edificio"
+        entityNamePlural="Edificios"
+        apiPath="edificios"
+      />
       </Dialog>
     </div>
   );
