@@ -5,7 +5,6 @@ import {
   downloadGenericBackup
 } from '@/lib/genericBackupManager';
 import { puebloDbManager } from '@/lib/puebloDbManager';
-import { createGenericBackup } from '@/lib/genericBackupManager';
 import { Pueblo } from '@/lib/types';
 
 interface RouteContext {
@@ -14,6 +13,7 @@ interface RouteContext {
   };
 }
 
+// GET - Descargar un backup específico de pueblos
 export async function GET(
   request: NextRequest,
   context: RouteContext
@@ -31,6 +31,7 @@ export async function GET(
       );
     }
 
+    // Retornar como descarga
     return new NextResponse(content, {
       status: 200,
       headers: {
@@ -39,7 +40,7 @@ export async function GET(
       }
     });
   } catch (error) {
-    console.error('Error downloading pueblo backup:', error);
+    console.error('[API:pueblos/backups] Error downloading pueblo backup:', error);
     return NextResponse.json(
       { error: 'Failed to download backup' },
       { status: 500 }
@@ -47,6 +48,7 @@ export async function GET(
   }
 }
 
+// POST - Restaurar un backup específico de pueblos
 export async function POST(
   request: NextRequest,
   context: RouteContext
@@ -58,43 +60,47 @@ export async function POST(
     const pueblos = await getGenericBackup<Pueblo>('pueblos', decodedFilename);
 
     if (!pueblos) {
+      console.error(`[API:pueblos/backups] No se pudo leer el backup o no hay coincidencia de checksum: ${decodedFilename}`);
       return NextResponse.json(
         { error: 'Failed to read backup or checksum mismatch' },
         { status: 400 }
       );
     }
 
+    // Crear backup automático del estado actual antes de restaurar
     const currentPueblos = await puebloDbManager.getAll();
     if (currentPueblos.length > 0) {
       await createGenericBackup('pueblos', currentPueblos, 'auto', `pre-restore-${Date.now()}`);
     }
 
+    // Borrar todos los pueblos actuales
     await puebloDbManager.deleteAll();
 
-    for (const item of pueblos) {
+    // Importar pueblos del backup
+    for (const pueblo of pueblos) {
       await puebloDbManager.create(
         {
-          worldId: item.worldId,
-          name: item.name,
-          type: item.type,
-          description: item.description,
-          lore: item.lore,
-          area: item.area
+          name: pueblo.name,
+          type: pueblo.type,
+          description: pueblo.description,
+          worldId: pueblo.worldId,
+          lore: pueblo.lore,
+          area: pueblo.area ? JSON.parse(pueblo.area) : undefined
         },
-        item.id
+        pueblo.id
       );
     }
 
     return NextResponse.json({
       success: true,
-      message: `Backup restored successfully with ${pueblos.length} pueblos`,
+      message: `Backup restaurado exitosamente con ${pueblos.length} pueblos`,
       data: {
         itemCount: pueblos.length,
         filename: decodedFilename
       }
     });
   } catch (error) {
-    console.error('Error restoring pueblo backup:', error);
+    console.error('[API:pueblos/backups] Error restoring pueblo backup:', error);
     return NextResponse.json(
       { error: 'Failed to restore backup' },
       { status: 500 }
@@ -102,6 +108,7 @@ export async function POST(
   }
 }
 
+// DELETE - Eliminar un backup específico de pueblos
 export async function DELETE(
   request: NextRequest,
   context: RouteContext
@@ -109,22 +116,26 @@ export async function DELETE(
   try {
     const { filename } = context.params;
     const decodedFilename = decodeURIComponent(filename);
+    console.log(`[API:pueblos/backups] Eliminando backup: ${decodedFilename}`);
 
     const success = await deleteGenericBackup('pueblos', decodedFilename);
+    console.log(`[API:pueblos/backups] deleteGenericBackup result: ${success}`);
 
     if (!success) {
+      console.error(`[API:pueblos/backups] No se pudo eliminar el backup: ${decodedFilename}`);
       return NextResponse.json(
         { error: 'Failed to delete backup' },
         { status: 400 }
       );
     }
 
+    console.log(`[API:pueblos/backups] Backup eliminado exitosamente: ${decodedFilename}`);
     return NextResponse.json({
       success: true,
       message: 'Backup deleted successfully'
     });
   } catch (error) {
-    console.error('Error deleting pueblo backup:', error);
+    console.error('[API:pueblos/backups] Error deleting pueblo backup:', error);
     return NextResponse.json(
       { error: 'Failed to delete backup' },
       { status: 500 }

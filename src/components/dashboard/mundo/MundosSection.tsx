@@ -34,41 +34,92 @@ export default function MundosSection() {
   const fetchData = async () => {
     try {
       setLoading(true);
+      console.log('[MundosSection] Iniciando fetchData...');
+      
       const [worldsRes, pueblosRes] = await Promise.all([
         fetch('/api/worlds'),
         fetch('/api/pueblos')
       ]);
+      
+      console.log('[MundosSection] Respuestas HTTP:');
+      console.log('[MundosSection] /api/worlds status:', worldsRes.status);
+      console.log('[MundosSection] /api/pueblos status:', pueblosRes.status);
+      
       const worldsResult = await worldsRes.json();
       const pueblosResult = await pueblosRes.json();
-      if (worldsResult.success) setWorlds(worldsResult.data);
-      if (pueblosResult.success) setPueblos(pueblosResult.data);
-
-      // Cargar memorias de mundos en paralelo
-      const memoriaPromises = worldsResult.data.map(world =>
-        fetch(`/api/worlds/${world.id}/memory`)
-      );
-
-      const memoriaResponses = await Promise.all(memoriaPromises);
-      const memories: Record<string, any> = {};
-      memoriaResponses.forEach((response, index) => {
-        if (response.ok) {
-          const result = response.json();
-          if (result.success && result.data.memory) {
-            memories[worldsResult.data[index].id] = result.data.memory;
-          }
+      
+      console.log('[MundosSection] worldsResult:', worldsResult);
+      console.log('[MundosSection] pueblosResult:', pueblosResult);
+      
+      if (worldsResult.success) {
+        console.log('[MundosSection] worldsData existe:', !!worldsResult.data);
+        setWorlds(worldsResult.data);
+      } else {
+        console.error('[MundosSection] Error cargando mundos:', worldsResult.error);
+        toast({
+          title: 'Error',
+          description: worldsResult.error || 'No se pudieron cargar los mundos',
+          variant: 'destructive'
+        });
+      }
+      
+      if (pueblosResult.success) {
+        setPueblos(pueblosResult.data);
+      } else {
+        console.error('[MundosSection] Error cargando pueblos:', pueblosResult.error);
+        toast({
+          title: 'Error',
+          description: pueblosResult.error || 'No se pudieron cargar las regiones',
+          variant: 'destructive'
+        });
+      }
+      
+      // Cargar memorias de mundos en paralelo (SOLO si cargamos mundos exitosamente)
+      if (worldsResult.success && worldsResult.data && worldsResult.data.length > 0) {
+        console.log('[MundosSection] Cargando memorias para', worldsResult.data.length, 'mundos...');
+        try {
+          const memoriaPromises = worldsResult.data.map((world) => {
+            console.log(`[MundosSection] Requesting memory for world: ${world.id} (${world.name})`);
+            return fetch(`/api/worlds/${world.id}/memory`);
+          });
+          
+          const memoriaResponses = await Promise.all(memoriaPromises);
+          
+          console.log('[MundosSection] Respuestas de memoria recibidas');
+          const memories: Record<string, any> = {};
+          
+          memoriaResponses.forEach((response, index) => {
+            if (response.ok) {
+              const result = response.json();
+              console.log(`[MundosSection] Memory response for world ${index}:`, result);
+              if (result.success && result.data.memory) {
+                memories[worldsResult.data[index].id] = result.data.memory;
+                console.log(`[MundosSection] Memory guardada para world ${worldsResult.data[index].id}`);
+              } else {
+                console.warn(`[MundosSection] No memory data for world ${worldsResult.data[index].id}`);
+              }
+            } else {
+              console.error(`[MundosSection] Error fetching memory for world ${index}: status ${response.status}`);
+            }
+          });
+          
+          setWorldMemories(memories);
+          console.log('[MundosSection] Memorias cargadas exitosamente');
+        } catch (error) {
+          console.error('[MundosSection] Error cargando memorias:', error);
         }
-      });
-
-      setWorldMemories(memories);
+      } else {
+        console.warn('[MundosSection] Omitiendo carga de memorias: no hay mundos o no se cargaron exitosamente');
+      }
+      setLoading(false);
     } catch (error) {
-      console.error('Error fetching data:', error);
+      console.error('[MundosSection] Error en fetchData:', error);
+      setLoading(false);
       toast({
         title: 'Error',
         description: 'No se pudieron cargar los datos',
         variant: 'destructive'
       });
-    } finally {
-      setLoading(false);
     }
   };
 

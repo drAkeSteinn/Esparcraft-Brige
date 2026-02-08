@@ -3,14 +3,33 @@ import { World } from './types';
 
 // Helper para convertir entre modelos de DB y TypeScript
 function toDomainWorld(dbWorld: any): World {
+  let loreParsed: any;
+
+  // Intentar parsear el lore como JSON
+  try {
+    if (dbWorld.lore && typeof dbWorld.lore === 'string') {
+      loreParsed = JSON.parse(dbWorld.lore);
+    } else {
+      loreParsed = {
+        estado_mundo: '',
+        rumores: [],
+        eventos: []
+      };
+    }
+  } catch (error) {
+    // Si falla el parseo, lore es texto plano
+    loreParsed = {
+      estado_mundo: '',
+      rumores: [],
+      eventos: [],
+      _originalText: dbWorld.lore || ''
+    };
+  }
+
   return {
     id: dbWorld.id,
     name: dbWorld.name,
-    lore: dbWorld.lore ? JSON.parse(dbWorld.lore) : {
-      estado_mundo: '',
-      rumores: [],
-      eventos: []
-    },
+    lore: loreParsed,
     area: dbWorld.area ? JSON.parse(dbWorld.area) : undefined,
   };
 }

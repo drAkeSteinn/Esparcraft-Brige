@@ -1,20 +1,44 @@
 import { NextResponse } from 'next/server';
 import { getEmbeddingClient } from '@/lib/embeddings/client';
+import { getEmbeddingsProviderConfig } from '@/app/api/settings/embeddings-provider/route';
 
 /**
  * GET /api/embeddings/connections
  * Verifica el estado de las conexiones del sistema de embeddings
+ * Ahora usa LanceDB (corre en Node.js) en lugar de PostgreSQL
  */
 export async function GET() {
   try {
-    const embeddingClient = getEmbeddingClient();
-    const connections = await embeddingClient.checkConnections();
-    const provider = embeddingClient.getProvider();
+    // Obtener la configuración del proveedor
+    const providerConfig = getEmbeddingsProviderConfig();
+
+    console.log('=== /api/embeddings/connections ===');
+    console.log('Proveedor configurado:', providerConfig.provider);
+    console.log('Configuración completa:', providerConfig);
+
+    // Actualizar el cliente singleton con el proveedor correcto
+    const client = getEmbeddingClient();
+    client.setProvider(providerConfig.provider, {
+      ...(providerConfig.provider === 'textgen' ? {
+        textGenWebUIUrl: providerConfig.textGenUrl || 'http://localhost:5000',
+        model: providerConfig.textGenModel || 'all-MiniLM-L6-v2',
+        dimension: parseInt(providerConfig.textGenDimension || '384'),
+      } : {
+        textGenWebUIUrl: providerConfig.ollamaUrl || 'http://localhost:11434',
+        model: providerConfig.ollamaModel || 'nomic-embed-text',
+        dimension: parseInt(providerConfig.ollamaDimension || '768'),
+      })
+    });
+
+    console.log('Verificando conexiones...');
+    const connections = await client.checkConnections();
+    console.log('Resultados de conexiones:', connections);
 
     return NextResponse.json({
       success: true,
       data: {
-        provider,
+        provider: providerConfig.provider,
+        // LanceDB corre en el mismo proceso Node.js, siempre disponible
         db: connections.db,
         textGen: connections.textGen,
         ollama: connections.ollama,

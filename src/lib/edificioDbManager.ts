@@ -4,13 +4,32 @@ import { Edificio } from './types';
 
 // Helper para convertir entre modelos de DB y TypeScript
 function toDomainEdificio(dbEdificio: any): Edificio {
+  let loreParsed: any;
+
+  // Intentar parsear el lore como JSON
+  try {
+    if (dbEdificio.lore && typeof dbEdificio.lore === 'string') {
+      loreParsed = JSON.parse(dbEdificio.lore);
+    } else {
+      loreParsed = { rumores: [], eventos: [] };
+    }
+  } catch (error) {
+    // Si falla el parseo, lore es texto plano
+    loreParsed = {
+      rumores: [],
+      eventos: [],
+      _originalText: dbEdificio.lore || ''
+    };
+  }
+
   return {
     id: dbEdificio.id,
     worldId: dbEdificio.worldId,
     puebloId: dbEdificio.puebloId,
     name: dbEdificio.name,
-    lore: dbEdificio.lore,
+    lore: loreParsed,
     rumores: dbEdificio.rumores ? JSON.parse(dbEdificio.rumores) : undefined,
+    eventos: dbEdificio.eventos ? JSON.parse(dbEdificio.eventos) : undefined,
     eventos_recientes: dbEdificio.eventos_recientes ? JSON.parse(dbEdificio.eventos_recientes) : [],
     area: dbEdificio.area ? JSON.parse(dbEdificio.area) : { start: { x: 0, y: 0, z: 0 }, end: { x: 0, y: 0, z: 0 } },
     puntosDeInteres: dbEdificio.puntosDeInteres ? JSON.parse(dbEdificio.puntosDeInteres) : undefined,
@@ -274,7 +293,7 @@ export const edificioDbManager = {
       console.error('Error deleting all edificios:', error);
       return 0;
     }
-  }
+  },
 };
 
 export default edificioDbManager;

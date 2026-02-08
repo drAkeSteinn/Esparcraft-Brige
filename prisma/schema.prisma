@@ -59,8 +59,8 @@ model NPC {
 model World {
   id             String   @id @default(cuid())
   name           String
-  lore           String   // JSON string de {estado_mundo, rumores, eventos}
-  area           String?  // JSON string de {start, end}
+  lore           String   // JSON string: {rumores, eventos}
+  area           String?  // JSON string of {start, end}
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
@@ -96,8 +96,9 @@ model Edificio {
   worldId             String
   puebloId            String
   name                String
-  lore                String
+  lore                String   // JSON string: {rumores, eventos}
   rumores             String?  // JSON string
+  eventos             String?  // JSON string
   eventos_recientes  String?  // JSON string
   area                String   // JSON string de {start, end}
   puntosDeInteres    String?  // JSON string de PointOfInterest[]

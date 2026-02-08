@@ -222,6 +222,8 @@ export interface ChatTriggerPayload extends TriggerPayload {
     reputacion?: string;
     hora?: string;
     clima?: string;
+    compra?: string;
+    humor_delta?: number;
   };
   templateUser?: string; // Plantilla del usuario opcional
   lastSummary?: string; // Último resumen de la sesión (opcional)

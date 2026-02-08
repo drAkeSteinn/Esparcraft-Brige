@@ -129,11 +129,12 @@ export const npcDbManager = {
     const updated: NPC = {
       ...existing,
       ...npc,
-      id: existing.id, // Mantener el ID original
+      // Si se proporciona un nuevo ID en el payload, usarlo, de lo contrario mantener el original
+      ...(npc.id ? { id: npc.id } : {})
     };
 
     const result = await db.nPC.update({
-      where: { id },
+      where: { id: existing.id }, // Siempre buscar por el ID original
       data: toDBNPC(updated)
     });
 

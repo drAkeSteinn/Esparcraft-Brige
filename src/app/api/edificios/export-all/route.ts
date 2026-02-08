@@ -1,33 +1,38 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { edificioDbManager } from '@/lib/edificioDbManager';
-import { createHash } from 'crypto';
 
+// GET - Exportar todos los edificios
 export async function GET() {
   try {
     const edificios = await edificioDbManager.getAll();
-    const edificiosString = JSON.stringify(edificios, null, 2);
-    const checksum = createHash('sha256').update(edificiosString).digest('hex');
 
+    if (edificios.length === 0) {
+      return NextResponse.json(
+        { error: 'No edificios to export' },
+        { status: 400 }
+      );
+    }
+
+    // Crear payload de exportación con metadatos
     const exportData = {
-      version: '1.0',
       exportDate: new Date().toISOString(),
-      entityType: 'edificios' as const,
-      itemCount: edificios.length,
-      checksum,
+      version: '1.0',
+      itemType: 'edificios',
       items: edificios
     };
 
-    const fileName = `edificios-export-${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
+    // Retornar como descarga
+    const content = JSON.stringify(exportData, null, 2);
 
-    return new NextResponse(JSON.stringify(exportData, null, 2), {
+    return new NextResponse(content, {
       status: 200,
       headers: {
         'Content-Type': 'application/json',
-        'Content-Disposition': `attachment; filename="${fileName}"`
+        'Content-Disposition': `attachment; filename="edificios-${new Date().toISOString().replace(/[:.]/g, '-')}.json"`
       }
     });
   } catch (error) {
-    console.error('Error exporting edificios:', error);
+    console.error('[API:edificios/export-all] Error exporting all edificios:', error);
     return NextResponse.json(
       { error: 'Failed to export edificios' },
       { status: 500 }

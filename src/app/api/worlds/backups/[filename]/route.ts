@@ -113,22 +113,26 @@ export async function DELETE(
   try {
     const { filename } = context.params;
     const decodedFilename = decodeURIComponent(filename);
+    console.log(`[API:worlds/backups] Eliminando backup: ${decodedFilename}`);
 
     const success = await deleteGenericBackup('worlds', decodedFilename);
+    console.log(`[API:worlds/backups] deleteGenericBackup result: ${success}`);
 
     if (!success) {
+      console.error(`[API:worlds/backups] No se pudo eliminar el backup: ${decodedFilename}`);
       return NextResponse.json(
         { error: 'Failed to delete backup' },
         { status: 400 }
       );
     }
 
+    console.log(`[API:worlds/backups] Backup eliminado exitosamente: ${decodedFilename}`);
     return NextResponse.json({
       success: true,
       message: 'Backup deleted successfully'
     });
   } catch (error) {
-    console.error('Error deleting world backup:', error);
+    console.error('[API:worlds/backups] Error deleting world backup:', error);
     return NextResponse.json(
       { error: 'Failed to delete backup' },
       { status: 500 }

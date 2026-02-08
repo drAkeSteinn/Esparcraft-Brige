@@ -1,34 +1,38 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { puebloDbManager } from '@/lib/puebloDbManager';
-import { createHash } from 'crypto';
 
-// GET - Exporta todos los pueblos como archivo JSON
+// GET - Exportar todos los pueblos
 export async function GET() {
   try {
     const pueblos = await puebloDbManager.getAll();
-    const pueblosString = JSON.stringify(pueblos, null, 2);
-    const checksum = createHash('sha256').update(pueblosString).digest('hex');
 
+    if (pueblos.length === 0) {
+      return NextResponse.json(
+        { error: 'No pueblos to export' },
+        { status: 400 }
+      );
+    }
+
+    // Crear payload de exportación con metadatos
     const exportData = {
-      version: '1.0',
       exportDate: new Date().toISOString(),
-      entityType: 'pueblos' as const,
-      itemCount: pueblos.length,
-      checksum,
+      version: '1.0',
+      itemType: 'pueblos',
       items: pueblos
     };
 
-    const fileName = `pueblos-export-${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
+    // Retornar como descarga
+    const content = JSON.stringify(exportData, null, 2);
 
-    return new NextResponse(JSON.stringify(exportData, null, 2), {
+    return new NextResponse(content, {
       status: 200,
       headers: {
         'Content-Type': 'application/json',
-        'Content-Disposition': `attachment; filename="${fileName}"`
+        'Content-Disposition': `attachment; filename="pueblos-${new Date().toISOString().replace(/[:.]/g, '-')}.json"`
       }
     });
   } catch (error) {
-    console.error('Error exporting pueblos:', error);
+    console.error('[API:pueblos/export-all] Error exporting all pueblos:', error);
     return NextResponse.json(
       { error: 'Failed to export pueblos' },
       { status: 500 }

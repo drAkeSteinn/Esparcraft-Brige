@@ -1,90 +1,62 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { edificioDbManager } from '@/lib/edificioDbManager';
-import { createHash } from 'crypto';
-import { createGenericBackup } from '@/lib/genericBackupManager';
+import { Edificio } from '@/lib/types';
 
-function validateImportData(data: any): { valid: boolean; error?: string } {
-  if (!data.version || typeof data.version !== 'string') {
-    return { valid: false, error: 'Missing or invalid version' };
-  }
-  if (!data.items || !Array.isArray(data.items)) {
-    return { valid: false, error: 'Missing or invalid items array' };
-  }
-  if (data.items.length === 0) {
-    return { valid: false, error: 'No items to import' };
-  }
-  for (const item of data.items) {
-    if (!item.id || typeof item.id !== 'string') {
-      return { valid: false, error: 'Edificio missing id' };
-    }
-    if (!item.name || typeof item.name !== 'string') {
-      return { valid: false, error: `Edificio ${item.id} missing name` };
-    }
-    if (!item.worldId || !item.puebloId) {
-      return { valid: false, error: `Edificio ${item.id} missing worldId or puebloId` };
-    }
-  }
-  if (data.checksum) {
-    const itemsString = JSON.stringify(data.items, null, 2);
-    const calculatedChecksum = createHash('sha256').update(itemsString).digest('hex');
-    if (calculatedChecksum !== data.checksum) {
-      return { valid: false, error: 'Checksum mismatch - file may be corrupted' };
-    }
-  }
-  return { valid: true };
-}
-
+// POST - Importar todos los edificios desde un archivo
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { data, createBackup: shouldCreateBackup = true } = body;
 
-    const validation = validateImportData(data);
-    if (!validation.valid) {
+    if (!body.data || !Array.isArray(body.data.items)) {
       return NextResponse.json(
-        { error: validation.error },
+        { error: 'Archivo inválido: no contiene items' },
         { status: 400 }
       );
     }
 
-    if (shouldCreateBackup) {
-      const currentEdificios = await edificioDbManager.getAll();
-      await createGenericBackup('edificios', currentEdificios, 'auto-backup-before-import');
+    const edificios = body.data.items as Edificio[];
+
+    // Crear backup automático del estado actual antes de importar
+    const currentEdificios = await edificioDbManager.getAll();
+    if (currentEdificios.length > 0) {
+      await createGenericBackup('edificios', currentEdificios, 'auto', `pre-import-${Date.now()}`);
     }
 
+    // Borrar todos los edificios actuales
     await edificioDbManager.deleteAll();
 
-    const importedEdificios: any[] = [];
-    for (const item of data.items) {
-      const newEdificio = await edificioDbManager.create(
-        {
-          worldId: item.worldId,
-          puebloId: item.puebloId,
-          name: item.name,
-          lore: item.lore,
-          rumores: item.rumores,
-          eventos_recientes: item.eventos_recientes,
-          area: item.area,
-          puntosDeInteres: item.puntosDeInteres
-        },
-        item.id
-      );
-      importedEdificios.push(newEdificio);
+    // Importar edificios del archivo
+    let importedCount = 0;
+    for (const edificio of edificios) {
+      try {
+        await edificioDbManager.create(
+          {
+            name: edificio.name,
+            description: edificio.description,
+            worldId: edificio.worldId,
+            puebloId: edificio.puebloId,
+            lore: edificio.lore,
+            area: edificio.area ? JSON.parse(edificio.area) : undefined
+          },
+          edificio.id
+        );
+        importedCount++;
+      } catch (error) {
+        console.error(`[API:edificios/import-all] Error importando edificio: ${edificio.name}`, error);
+      }
     }
 
     return NextResponse.json({
       success: true,
-      message: `Successfully imported ${importedEdificios.length} edificios`,
+      message: `${importedCount} edificios importados correctamente`,
       data: {
-        importedCount: importedEdificios.length,
-        backupCreated: shouldCreateBackup,
-        importDate: new Date().toISOString()
+        importedCount
       }
     });
   } catch (error) {
-    console.error('Error importing edificios:', error);
+    console.error('[API:edificios/import-all] Error importing all edificios:', error);
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to import edificios' },
+      { error: 'Failed to import edificios' },
       { status: 500 }
     );
   }

@@ -5,13 +5,16 @@ import { World } from '@/lib/types';
 // GET all worlds
 export async function GET() {
   try {
+    console.log('[API:worlds] Iniciando GET all worlds...');
     const worlds = await worldDbManager.getAll();
+    console.log('[API:worlds] Mundos obtenidos:', worlds.length);
+    
     return NextResponse.json({
       success: true,
       data: worlds
     });
   } catch (error) {
-    console.error('Error fetching worlds:', error);
+    console.error('[API:worlds] Error fetching worlds:', error);
     return NextResponse.json(
       { error: 'Failed to fetch worlds' },
       { status: 500 }
