@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 
 interface ConnectionStatus {
-  lancedb?: boolean;
+  postgres?: boolean;
   embeddings?: {
     provider?: 'textgen' | 'ollama';
     db: boolean;
@@ -25,7 +25,7 @@ export default function ConnectionStatus() {
   const checkConnections = async () => {
     setLoading(true);
     try {
-      // Verificar LanceDB embeddings
+      // Verificar PostgreSQL embeddings
       const embeddingsRes = await fetch('/api/embeddings/connections');
       const embeddingsData = await embeddingsRes.json();
 
@@ -102,7 +102,7 @@ export default function ConnectionStatus() {
         </div>
 
         <div className="grid gap-4 md:grid-cols-3">
-          {/* LanceDB Embeddings */}
+          {/* PostgreSQL Embeddings */}
           <div className="flex items-start gap-3 p-4 bg-muted rounded-lg">
             <div className="flex-shrink-0 mt-1">
               {loading ? (
@@ -114,10 +114,10 @@ export default function ConnectionStatus() {
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 mb-1">
                 <Database className="h-4 w-4 text-muted-foreground" />
-                <span className="font-medium text-sm">LanceDB</span>
+                <span className="font-medium text-sm">PostgreSQL</span>
               </div>
               <p className="text-xs text-muted-foreground mb-2">
-                Base de datos vectorial (embeddings)
+                Base de datos de embeddings
               </p>
               {getStatusBadge(connections?.embeddings?.db)}
             </div>

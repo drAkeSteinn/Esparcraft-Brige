@@ -1,0 +1,18 @@
+{
+  "worldId": "WORLD_ESPARCRAFT",
+  "name": "Meslajho",
+  "type": "pueblo",
+  "description": "Pueblo inicial",
+  "lore": {
+    "estado_pueblo": "Nada en especial...",
+    "rumores": [
+      "El tabernero sabe más de lo que dice sobre las desapariciones",
+      "Un viajero misterioso llegó hace dos noches y se hospeda en la posada",
+      "El herrero ha recibido pedidos de armas en grandes cantidades",
+      "Los niños hablan de sombras que bailan en el cementerio",
+      "El alcalde no ha salido de su casa desde la última luna llena"
+    ],
+    "eventos": []
+  },
+  "id": "PUEBLO_1768819105950"
+}

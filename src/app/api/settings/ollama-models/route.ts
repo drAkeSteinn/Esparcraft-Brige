@@ -36,30 +36,18 @@ export async function POST(request: NextRequest) {
       }
 
       const data = await response.json();
+
       // Filtrar solo modelos que soportan embeddings
       // Modelos típicos de embeddings en Ollama:
       // - nomic-embed-text (768 dims)
-      // - nomic-embed-text-v1 (768 dims)
       // - mxbai-embed-large (1024 dims)
-      // - bge-m3:567m (768 dims, no contiene "embed" en nombre)
       // - llama2 (768 dims con configuración específica)
       const allModels = data.models || [];
-      // Modelos de embeddings por dimensión (embeddings típicamente son grandes, 768+ dims)
+
+      // Modelos conocidos de embeddings
       const embeddingModels = allModels.filter((model: any) => {
         const name = model.name?.toLowerCase();
-        // Modelos específicos conocidos
-        if (name.includes('nomic-embed-text') ||
-            name.includes('nomic-embed-text-v1') ||
-            name.includes('nomic-embed-text:latest') ||
-            name.includes('mxbai-embed-large') ||
-            name.includes('bge-m3:567m') ||
-            name.includes('llama2')) {
-          return true;
-        }
-        // Modelos de embeddings por dimensión (embeddings típicamente son grandes, 768+ dims)
-        const size = model.size;
-        if (size >= 384) return true;
-        return false;
+        return name?.includes('embed') || name?.includes('nomic');
       });
 
       return NextResponse.json({
@@ -79,6 +67,7 @@ export async function POST(request: NextRequest) {
       });
     } catch (error: any) {
       let message = 'No se pudo conectar a Ollama';
+
       if (error.name === 'AbortError') {
         message = 'Tiempo de espera agotado. Verifica que Ollama esté ejecutándose.';
       } else if (error.cause?.code === 'ECONNREFUSED') {
@@ -89,7 +78,6 @@ export async function POST(request: NextRequest) {
 
       return NextResponse.json({
         success: false,
-        error: message,
         data: {
           message,
           availableModels: []
@@ -98,6 +86,7 @@ export async function POST(request: NextRequest) {
     }
   } catch (error: any) {
     console.error('Error al obtener modelos de Ollama:', error);
+
     return NextResponse.json(
       {
         success: false,

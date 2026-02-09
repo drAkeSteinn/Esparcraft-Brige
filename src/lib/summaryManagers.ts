@@ -43,7 +43,7 @@ export class SessionSummaryManager {
  */
 export class NPCSummaryManager {
   async getLatest(npcId: string) {
-    return await db.npcSummary.findFirst({
+    return await db.nPCSummary.findFirst({
       where: { npcId },
       orderBy: { createdAt: 'desc' }
     });
@@ -55,19 +55,19 @@ export class NPCSummaryManager {
     sessionHash: string;
     version: number;
   }) {
-    return await db.npcSummary.create({
+    return await db.nPCSummary.create({
       data
     });
   }
 
   async getAll() {
-    return await db.npcSummary.findMany({
+    return await db.nPCSummary.findMany({
       orderBy: { createdAt: 'desc' }
     });
   }
 
   async getAllByNPCId(npcId: string) {
-    return await db.npcSummary.findMany({
+    return await db.nPCSummary.findMany({
       where: { npcId },
       orderBy: { createdAt: 'desc' }
     });
@@ -101,13 +101,6 @@ export class EdificioSummaryManager {
       orderBy: { createdAt: 'desc' }
     });
   }
-
-  async getAllByEdificioId(edificioId: string) {
-    return await db.edificioSummary.findMany({
-      where: { edificioId },
-      orderBy: { createdAt: 'desc' }
-    });
-  }
 }
 
 /**
@@ -137,13 +130,6 @@ export class PuebloSummaryManager {
       orderBy: { createdAt: 'desc' }
     });
   }
-
-  async getAllByPuebloId(puebloId: string) {
-    return await db.puebloSummary.findMany({
-      where: { puebloId },
-      orderBy: { createdAt: 'desc' }
-    });
-  }
 }
 
 /**
@@ -170,13 +156,6 @@ export class WorldSummaryManager {
 
   async getAll() {
     return await db.worldSummary.findMany({
-      orderBy: { createdAt: 'desc' }
-    });
-  }
-
-  async getAllByWorldId(worldId: string) {
-    return await db.worldSummary.findMany({
-      where: { worldId },
       orderBy: { createdAt: 'desc' }
     });
   }

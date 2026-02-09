@@ -30,8 +30,8 @@ model Post {
   updatedAt DateTime @updatedAt
 }
 
-// Npc Model - Migrado desde sistema de archivos JSON
-model Npc {
+// NPC Model - Migrado desde sistema de archivos JSON
+model NPC {
   id             String   @id @default(cuid())
   locationScope  String   // 'mundo' | 'pueblo' | 'edificio'
   worldId        String
@@ -42,12 +42,12 @@ model Npc {
   updatedAt      DateTime @updatedAt
 
   // Relaciones FK hacia entidades padre
-  mundo          World?     @relation("Npc_Mundo", fields: [worldId], references: [id])
-  pueblo         Pueblo?    @relation("Npc_Pueblo", fields: [puebloId], references: [id])
-  edificio       Edificio?   @relation("Npc_Edificio", fields: [edificioId], references: [id])
+  mundo          World?     @relation("NPC_Mundo", fields: [worldId], references: [id])
+  pueblo         Pueblo?    @relation("NPC_Pueblo", fields: [puebloId], references: [id])
+  edificio       Edificio?   @relation("NPC_Edificio", fields: [edificioId], references: [id])
 
   // Relaciones hacia entidades hijas
-  sessions       Session[]  @relation("Session_Npc")
+  sessions       Session[]  @relation("Session_NPC")
 
   @@index([worldId])
   @@index([puebloId])
@@ -59,13 +59,13 @@ model Npc {
 model World {
   id             String   @id @default(cuid())
   name           String
-  lore           String   // JSON string: {rumores, eventos}
-  area           String?  // JSON string of {start, end}
+  lore           String   // JSON string de {estado_mundo, rumores, eventos}
+  area           String?  // JSON string de {start, end}
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
   // Relaciones FK
-  npcs           Npc[]      @relation("Npc_Mundo")
+  npcs           NPC[]      @relation("NPC_Mundo")
   edificios      Edificio[] @relation("Edificio_Mundo")
   pueblos        Pueblo[]    @relation("Pueblo_Mundo")
 }
@@ -85,7 +85,7 @@ model Pueblo {
   // Relaciones FK
   mundo          World?     @relation("Pueblo_Mundo", fields: [worldId], references: [id])
   edificios      Edificio[] @relation("Edificio_Pueblo")
-  npcs           Npc[]      @relation("Npc_Pueblo")
+  npcs           NPC[]      @relation("NPC_Pueblo")
 
   @@index([worldId])
 }
@@ -96,9 +96,8 @@ model Edificio {
   worldId             String
   puebloId            String
   name                String
-  lore                String   // Plain text description
+  lore                String
   rumores             String?  // JSON string
-  eventos             String?  // JSON string
   eventos_recientes  String?  // JSON string
   area                String   // JSON string de {start, end}
   puntosDeInteres    String?  // JSON string de PointOfInterest[]
@@ -108,7 +107,7 @@ model Edificio {
   // Relaciones FK
   mundo              World?     @relation("Edificio_Mundo", fields: [worldId], references: [id])
   pueblo             Pueblo?    @relation("Edificio_Pueblo", fields: [puebloId], references: [id])
-  npcs               Npc[]      @relation("Npc_Edificio")
+  npcs               NPC[]      @relation("NPC_Edificio")
 
   @@index([worldId])
   @@index([puebloId])
@@ -138,7 +137,7 @@ model Session {
   summaryId      String?  // FK al último resumen (opcional)
 
   // Relaciones FK
-  npc            Npc?       @relation("Session_Npc", fields: [npcId], references: [id])
+  npc            NPC?       @relation("Session_NPC", fields: [npcId], references: [id])
 
   @@index([npcId])
   @@index([playerId])
@@ -177,7 +176,7 @@ model SystemConfig {
 }
 
 // NPC Summary - Resúmenes consolidados de NPCs
-model NpcSummary {
+model NPCSummary {
   id             String   @id @default(cuid())
   npcId          String
   summary        String

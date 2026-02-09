@@ -652,122 +652,18 @@ export default function GrimorioTab() {
 
             {formData.tipo === 'plantilla' && (
               <div className="bg-fantasy-deep-black rounded-lg p-4 border border-fantasy-textured">
-                <div className="flex items-center gap-2 mb-3">
+                <div className="flex items-center gap-2 mb-2">
                   <Book className="h-4 w-4 text-fantasy-aged-gold" />
                   <h3 className="text-sm font-semibold text-fantasy-aged-gold">Variables Disponibles:</h3>
                 </div>
-                <div className="max-h-64 overflow-y-auto space-y-4 pr-2 custom-scrollbar">
-                  {/* Jugador */}
-                  <div>
-                    <h4 className="text-xs font-bold text-fantasy-aged-gold mb-1">Jugador (jugador.*)</h4>
-                    <div className="grid grid-cols-2 gap-1 text-xs">
-                      <code className="text-fantasy-aged-gold hover:bg-fantasy-aged-gold/10 px-1 rounded cursor-text">jugador.nombre</code>
-                      <code className="text-fantasy-aged-gold hover:bg-fantasy-aged-gold/10 px-1 rounded cursor-text">jugador.raza</code>
-                      <code className="text-fantasy-aged-gold hover:bg-fantasy-aged-gold/10 px-1 rounded cursor-text">jugador.nivel</code>
-                      <code className="text-fantasy-aged-gold hover:bg-fantasy-aged-gold/10 px-1 rounded cursor-text">jugador.salud_actual</code>
-                      <code className="text-fantasy-aged-gold hover:bg-fantasy-aged-gold/10 px-1 rounded cursor-text">jugador.reputacion</code>
-                      <code className="text-fantasy-aged-gold hover:bg-fantasy-aged-gold/10 px-1 rounded cursor-text">jugador.almakos</code>
-                      <code className="text-fantasy-aged-gold hover:bg-fantasy-aged-gold/10 px-1 rounded cursor-text">jugador.deuda</code>
-                      <code className="text-fantasy-aged-gold hover:bg-fantasy-aged-gold/10 px-1 rounded cursor-text">jugador.piedras_del_alma</code>
-                      <code className="text-fantasy-aged-gold hover:bg-fantasy-aged-gold/10 px-1 rounded cursor-text">jugador.hora</code>
-                      <code className="text-fantasy-aged-gold hover:bg-fantasy-aged-gold/10 px-1 rounded cursor-text">jugador.clima</code>
-                    </div>
-                  </div>
-
-                  {/* NPC */}
-                  <div>
-                    <h4 className="text-xs font-bold text-fantasy-aged-gold mb-1">NPC (npc.*)</h4>
-                    <div className="grid grid-cols-2 gap-1 text-xs">
-                      <code className="text-fantasy-aged-gold hover:bg-fantasy-aged-gold/10 px-1 rounded cursor-text">npc.name</code>
-                      <code className="text-fantasy-aged-gold hover:bg-fantasy-aged-gold/10 px-1 rounded cursor-text">npc.description</code>
-                      <code className="text-fantasy-aged-gold hover:bg-fantasy-aged-gold/10 px-1 rounded cursor-text">npc.personality</code>
-                      <code className="text-fantasy-aged-gold hover:bg-fantasy-aged-gold/10 px-1 rounded cursor-text">npc.scenario</code>
-                      <code className="text-fantasy-aged-gold hover:bg-fantasy-aged-gold/10 px-1 rounded cursor-text">npc.system_prompt</code>
-                      <code className="text-fantasy-aged-gold hover:bg-fantasy-aged-gold/10 px-1 rounded cursor-text">npc.mes_example</code>
-                      <code className="text-fantasy-aged-gold hover:bg-fantasy-aged-gold/10 px-1 rounded cursor-text">npc.creator_notes</code>
-                      <code className="text-fantasy-aged-gold hover:bg-fantasy-aged-gold/10 px-1 rounded cursor-text">npc.historial</code>
-                    </div>
-                  </div>
-
-                  {/* Mundo */}
-                  <div>
-                    <h4 className="text-xs font-bold text-fantasy-aged-gold mb-1">Mundo (mundo.*)</h4>
-                    <div className="grid grid-cols-2 gap-1 text-xs">
-                      <code className="text-fantasy-aged-gold hover:bg-fantasy-aged-gold/10 px-1 rounded cursor-text">mundo.name</code>
-                      <code className="text-fantasy-aged-gold hover:bg-fantasy-aged-gold/10 px-1 rounded cursor-text">mundo.estado</code>
-                      <code className="text-fantasy-aged-gold hover:bg-fantasy-aged-gold/10 px-1 rounded cursor-text">mundo.rumores</code>
-                      <code className="text-fantasy-aged-gold hover:bg-fantasy-aged-gold/10 px-1 rounded cursor-text">mundo.eventos</code>
-                    </div>
-                  </div>
-
-                  {/* Pueblo */}
-                  <div>
-                    <h4 className="text-xs font-bold text-fantasy-aged-gold mb-1">Pueblo (pueblo.*)</h4>
-                    <div className="grid grid-cols-2 gap-1 text-xs">
-                      <code className="text-fantasy-aged-gold hover:bg-fantasy-aged-gold/10 px-1 rounded cursor-text">pueblo.name</code>
-                      <code className="text-fantasy-aged-gold hover:bg-fantasy-aged-gold/10 px-1 rounded cursor-text">pueblo.tipo</code>
-                      <code className="text-fantasy-aged-gold hover:bg-fantasy-aged-gold/10 px-1 rounded cursor-text">pueblo.descripcion</code>
-                      <code className="text-fantasy-aged-gold hover:bg-fantasy-aged-gold/10 px-1 rounded cursor-text">pueblo.estado</code>
-                      <code className="text-fantasy-aged-gold hover:bg-fantasy-aged-gold/10 px-1 rounded cursor-text">pueblo.rumores</code>
-                      <code className="text-fantasy-aged-gold hover:bg-fantasy-aged-gold/10 px-1 rounded cursor-text">pueblo.eventos</code>
-                    </div>
-                  </div>
-
-                  {/* Edificio */}
-                  <div>
-                    <h4 className="text-xs font-bold text-fantasy-aged-gold mb-1">Edificio (edificio.*)</h4>
-                    <div className="grid grid-cols-2 gap-1 text-xs">
-                      <code className="text-fantasy-aged-gold hover:bg-fantasy-aged-gold/10 px-1 rounded cursor-text">edificio.name</code>
-                      <code className="text-fantasy-aged-gold hover:bg-fantasy-aged-gold/10 px-1 rounded cursor-text">edificio.descripcion</code>
-                      <code className="text-fantasy-aged-gold hover:bg-fantasy-aged-gold/10 px-1 rounded cursor-text">edificio.rumores</code>
-                      <code className="text-fantasy-aged-gold hover:bg-fantasy-aged-gold/10 px-1 rounded cursor-text">edificio.eventos</code>
-                      <code className="text-fantasy-aged-gold hover:bg-fantasy-aged-gold/10 px-1 rounded cursor-text">edificio.eventos_recientes</code>
-                      <code className="text-fantasy-aged-gold hover:bg-fantasy-aged-gold/10 px-1 rounded cursor-text">edificio.type</code>
-                      <code className="text-fantasy-aged-gold hover:bg-fantasy-aged-gold/10 px-1 rounded cursor-text">edificio.puntos_de_interes</code>
-                    </div>
-                  </div>
-
-                  {/* Generales */}
-                  <div>
-                    <h4 className="text-xs font-bold text-fantasy-aged-gold mb-1">Variables Generales</h4>
-                    <div className="grid grid-cols-2 gap-1 text-xs">
-                      <code className="text-fantasy-aged-gold hover:bg-fantasy-aged-gold/10 px-1 rounded cursor-text">char</code>
-                      <code className="text-fantasy-aged-gold hover:bg-fantasy-aged-gold/10 px-1 rounded cursor-text">npcid</code>
-                      <code className="text-fantasy-aged-gold hover:bg-fantasy-aged-gold/10 px-1 rounded cursor-text">npc</code>
-                      <code className="text-fantasy-aged-gold hover:bg-fantasy-aged-gold/10 px-1 rounded cursor-text">mundo</code>
-                      <code className="text-fantasy-aged-gold hover:bg-fantasy-aged-gold/10 px-1 rounded cursor-text">pueblo</code>
-                      <code className="text-fantasy-aged-gold hover:bg-fantasy-aged-gold/10 px-1 rounded cursor-text">edificio</code>
-                      <code className="text-fantasy-aged-gold hover:bg-fantasy-aged-gold/10 px-1 rounded cursor-text">playername</code>
-                      <code className="text-fantasy-aged-gold hover:bg-fantasy-aged-gold/10 px-1 rounded cursor-text">nombre</code>
-                      <code className="text-fantasy-aged-gold hover:bg-fantasy-aged-gold/10 px-1 rounded cursor-text">raza</code>
-                      <code className="text-fantasy-aged-gold hover:bg-fantasy-aged-gold/10 px-1 rounded cursor-text">nivel</code>
-                      <code className="text-fantasy-aged-gold hover:bg-fantasy-aged-gold/10 px-1 rounded cursor-text">salud</code>
-                      <code className="text-fantasy-aged-gold hover:bg-fantasy-aged-gold/10 px-1 rounded cursor-text">reputacion</code>
-                      <code className="text-fantasy-aged-gold hover:bg-fantasy-aged-gold/10 px-1 rounded cursor-text">almakos</code>
-                      <code className="text-fantasy-aged-gold hover:bg-fantasy-aged-gold/10 px-1 rounded cursor-text">deuda</code>
-                      <code className="text-fantasy-aged-gold hover:bg-fantasy-aged-gold/10 px-1 rounded cursor-text">piedras</code>
-                      <code className="text-fantasy-aged-gold hover:bg-fantasy-aged-gold/10 px-1 rounded cursor-text">hora</code>
-                      <code className="text-fantasy-aged-gold hover:bg-fantasy-aged-gold/10 px-1 rounded cursor-text">clima</code>
-                    </div>
-                  </div>
-
-                  {/* Sesión y Mensajes */}
-                  <div>
-                    <h4 className="text-xs font-bold text-fantasy-aged-gold mb-1">Sesión y Mensajes</h4>
-                    <div className="grid grid-cols-2 gap-1 text-xs">
-                      <code className="text-fantasy-aged-gold hover:bg-fantasy-aged-gold/10 px-1 rounded cursor-text">lastSummary</code>
-                      <code className="text-fantasy-aged-gold hover:bg-fantasy-aged-gold/10 px-1 rounded cursor-text">ultimo_resumen</code>
-                      <code className="text-fantasy-aged-gold hover:bg-fantasy-aged-gold/10 px-1 rounded cursor-text">chatHistory</code>
-                      <code className="text-fantasy-aged-gold hover:bg-fantasy-aged-gold/10 px-1 rounded cursor-text">chat_history</code>
-                      <code className="text-fantasy-aged-gold hover:bg-fantasy-aged-gold/10 px-1 rounded cursor-text">userMessage</code>
-                      <code className="text-fantasy-aged-gold hover:bg-fantasy-aged-gold/10 px-1 rounded cursor-text">user_message</code>
-                      <code className="text-fantasy-aged-gold hover:bg-fantasy-aged-gold/10 px-1 rounded cursor-text">mensaje</code>
-                      <code className="text-fantasy-aged-gold hover:bg-fantasy-aged-gold/10 px-1 rounded cursor-text">templateUser</code>
-                      <code className="text-fantasy-aged-gold hover:bg-fantasy-aged-gold/10 px-1 rounded cursor-text">template_user</code>
-                      <code className="text-fantasy-aged-gold hover:bg-fantasy-aged-gold/10 px-1 rounded cursor-text">playerId</code>
-                      <code className="text-fantasy-aged-gold hover:bg-fantasy-aged-gold/10 px-1 rounded cursor-text">session.playerId</code>
-                    </div>
-                  </div>
+                <div className="text-xs text-foreground space-y-2">
+                  <p>Variables primarias: jugador.*, npc.*, mundo.*, etc.</p>
+                  <p className="text-xs text-fantasy-aged-gold">
+                    Ejemplos: <span className="font-mono text-fantasy-aged-gold">user_data</span>, <span className="font-mono text-fantasy-aged-gold">quest_info</span>
+                  </p>
+                  <p className="text-xs text-fantasy-aged-gold">
+                    Las plantillas pueden incluir variables primarias del sistema.
+                  </p>
                 </div>
               </div>
             )}

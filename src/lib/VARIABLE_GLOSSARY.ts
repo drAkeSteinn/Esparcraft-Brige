@@ -156,28 +156,6 @@ export const VARIABLE_GLOSSARY: Record<string, VariableDefinition> = {
     nested: false
   },
 
-  'jugador.compra': {
-    name: 'jugador.compra',
-    aliases: ['compra'],
-    description: 'Indicador de compra del jugador (SI/NO)',
-    type: 'string',
-    example: 'SI',
-    category: 'player',
-    required: false,
-    nested: false
-  },
-
-  'jugador.humor_delta': {
-    name: 'jugador.humor_delta',
-    aliases: ['humor_delta'],
-    description: 'Variación del humor del jugador (-10 a 10)',
-    type: 'number',
-    example: '5',
-    category: 'player',
-    required: false,
-    nested: false
-  },
-
   'jugador.mensaje': {
     name: 'jugador.mensaje',
     aliases: ['mensaje'],

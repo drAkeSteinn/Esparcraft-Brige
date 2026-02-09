@@ -103,8 +103,6 @@ export interface EmbeddingStats {
   totalNamespaces: number;
   embeddingsByNamespace: Record<string, number>;
   embeddingsBySourceType: Record<string, number>;
-  unique_sources?: number;
-  storage_size_mb?: number;
 }
 
 /**

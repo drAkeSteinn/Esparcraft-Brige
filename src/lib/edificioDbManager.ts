@@ -9,7 +9,7 @@ function toDomainEdificio(dbEdificio: any): Edificio {
     worldId: dbEdificio.worldId,
     puebloId: dbEdificio.puebloId,
     name: dbEdificio.name,
-    lore: dbEdificio.lore || '',
+    lore: dbEdificio.lore,
     rumores: dbEdificio.rumores ? JSON.parse(dbEdificio.rumores) : undefined,
     eventos_recientes: dbEdificio.eventos_recientes ? JSON.parse(dbEdificio.eventos_recientes) : [],
     area: dbEdificio.area ? JSON.parse(dbEdificio.area) : { start: { x: 0, y: 0, z: 0 }, end: { x: 0, y: 0, z: 0 } },
@@ -23,7 +23,7 @@ function toDBEdificio(edificio: Edificio): any {
     worldId: edificio.worldId,
     puebloId: edificio.puebloId,
     name: edificio.name,
-    lore: typeof edificio.lore === 'string' ? edificio.lore : '',
+    lore: edificio.lore,
     rumores: edificio.rumores ? JSON.stringify(edificio.rumores) : null,
     eventos_recientes: edificio.eventos_recientes ? JSON.stringify(edificio.eventos_recientes) : null,
     area: JSON.stringify(edificio.area),
@@ -274,7 +274,7 @@ export const edificioDbManager = {
       console.error('Error deleting all edificios:', error);
       return 0;
     }
-  },
+  }
 };
 
 export default edificioDbManager;

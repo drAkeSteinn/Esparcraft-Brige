@@ -65,19 +65,14 @@ export default function GenericBackupSection({
   }, [entityType]);
 
   const loadBackups = async () => {
-    console.log(`[GenericBackupSection] Cargando backups para ${entityType} (${apiPath})`);
     try {
       const response = await fetch(`/api/${apiPath}/backups`);
-      console.log('[GenericBackupSection] Response status:', response.status);
       const result = await response.json();
-      console.log('[GenericBackupSection] Backups recibidos:', result);
-      
       if (result.success) {
         setBackups(result.data.backups);
-        console.log('[GenericBackupSection] Backups actualizados en estado:', result.data.backups.length);
       }
     } catch (error) {
-      console.error('[GenericBackupSection] Error loading backups:', error);
+      console.error('Error loading backups:', error);
     } finally {
       setLoading(false);
     }
@@ -238,40 +233,23 @@ export default function GenericBackupSection({
   };
 
   const handleDeleteBackup = async (filename: string) => {
-    console.log('[GenericBackupSection] Intentando eliminar backup:', filename);
-    if (!confirm('¿Estás seguro de que deseas eliminar este backup?')) {
-      console.log('[GenericBackupSection] Cancelado por usuario');
-      return;
-    }
+    if (!confirm('¿Estás seguro de que deseas eliminar este backup?')) return;
 
     try {
-      const url = `/api/${apiPath}/backups/${encodeURIComponent(filename)}`;
-      console.log('[GenericBackupSection] URL de DELETE:', url);
-      
-      const response = await fetch(url, {
+      const response = await fetch(`/api/${apiPath}/backups/${encodeURIComponent(filename)}`, {
         method: 'DELETE'
       });
-      
-      console.log('[GenericBackupSection] Status de respuesta:', response.status);
       const result = await response.json();
-      console.log('[GenericBackupSection] Resultado:', result);
 
       if (result.success) {
         toast({
           title: 'Backup eliminado',
           description: 'El backup ha sido eliminado correctamente'
         });
-        await loadBackups();
-      } else {
-        console.error('[GenericBackupSection] Error al eliminar:', result);
-        toast({
-          title: 'Error',
-          description: result.error || 'No se pudo eliminar el backup',
-          variant: 'destructive'
-        });
+        loadBackups();
       }
     } catch (error) {
-      console.error('[GenericBackupSection] Error eliminando backup:', error);
+      console.error('Error deleting backup:', error);
       toast({
         title: 'Error',
         description: 'No se pudo eliminar el backup',

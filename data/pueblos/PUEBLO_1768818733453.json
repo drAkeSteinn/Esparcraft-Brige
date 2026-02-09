@@ -1,0 +1,15 @@
+{
+  "worldId": "WORLD_ESPARCRAFT",
+  "name": "Hexen",
+  "type": "nacion",
+  "lore": {
+    "estado_pueblo": "Algo tenebroso y lugubre traen estos malvados...",
+    "rumores": [
+      "asd",
+      "asd2"
+    ],
+    "eventos": []
+  },
+  "id": "PUEBLO_1768818733453",
+  "description": "Nacion de los Vampiros"
+}

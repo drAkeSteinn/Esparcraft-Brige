@@ -1,0 +1,40 @@
+{
+  "version": "1.0",
+  "backupId": "backup-2026-02-02T22-40-12-100Z",
+  "backupDate": "2026-02-02T22:40:12.100Z",
+  "entityType": "worlds",
+  "source": "manual",
+  "itemCount": 1,
+  "checksum": "fa678919e9d16f58cafe25dda02025acbdcc828ccd3dab516e5959092edd5ff3",
+  "items": [
+    {
+      "id": "WORLD_ESPARCRAFT",
+      "name": "Esparcraft",
+      "lore": {
+        "estado_mundo": "El mundo se encuentra bajo el Decreto del Dolor. Oscuridad ha caído sobre las tierras, y los habitantes viven en constante temor.",
+        "rumores": [
+          "Se dice que en las montañas del norte se ha visto una luz extraña",
+          "Los comerciantes hablan de caravanas que desaparecen en la frontera",
+          "Un antiguo profeta predijo la llegada de un héroe que rompería el Decreto",
+          "En las ruinas del templo se escuchan cánticos nocturnos",
+          "El rey ha cerrado las puertas del castillo hace tres lunas."
+        ],
+        "eventos": [
+          "Evento1"
+        ]
+      },
+      "area": {
+        "start": {
+          "x": -28,
+          "y": 68,
+          "z": -74
+        },
+        "end": {
+          "x": 95,
+          "y": 112,
+          "z": 385
+        }
+      }
+    }
+  ]
+}

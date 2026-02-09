@@ -168,26 +168,12 @@ export async function deleteGenericBackup(
   filename: string
 ): Promise<boolean> {
   try {
-    // Asegurar que el directorio de backups existe
-    await ensureBackupsDir(entityType);
-    
     const backupsDir = getBackupsDir(entityType);
     const filePath = path.join(backupsDir, filename);
-    console.log(`[genericBackupManager] Intentando eliminar: ${filePath}`);
-    
-    // Verificar si el archivo existe antes de intentar eliminarlo
-    try {
-      await fs.access(filePath);
-    } catch {
-      console.log(`[genericBackupManager] El archivo no existe: ${filePath}`);
-      return false;
-    }
-    
     await fs.unlink(filePath);
-    console.log(`[genericBackupManager] Archivo eliminado: ${filePath}`);
     return true;
   } catch (error) {
-    console.error(`[genericBackupManager] Error eliminando backup (${filename}):`, error);
+    console.error('Error deleting backup:', error);
     return false;
   }
 }

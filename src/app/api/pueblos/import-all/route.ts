@@ -1,63 +1,88 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { puebloDbManager } from '@/lib/puebloDbManager';
-import { Pueblo } from '@/lib/types';
+import { createHash } from 'crypto';
 import { createGenericBackup } from '@/lib/genericBackupManager';
 
-// POST - Importar todos los pueblos desde un archivo
+function validateImportData(data: any): { valid: boolean; error?: string } {
+  if (!data.version || typeof data.version !== 'string') {
+    return { valid: false, error: 'Missing or invalid version' };
+  }
+  if (!data.items || !Array.isArray(data.items)) {
+    return { valid: false, error: 'Missing or invalid items array' };
+  }
+  if (data.items.length === 0) {
+    return { valid: false, error: 'No items to import' };
+  }
+  for (const item of data.items) {
+    if (!item.id || typeof item.id !== 'string') {
+      return { valid: false, error: 'Pueblo missing id' };
+    }
+    if (!item.name || typeof item.name !== 'string') {
+      return { valid: false, error: `Pueblo ${item.id} missing name` };
+    }
+    if (!item.worldId) {
+      return { valid: false, error: `Pueblo ${item.id} missing worldId` };
+    }
+  }
+  if (data.checksum) {
+    const itemsString = JSON.stringify(data.items, null, 2);
+    const calculatedChecksum = createHash('sha256').update(itemsString).digest('hex');
+    if (calculatedChecksum !== data.checksum) {
+      return { valid: false, error: 'Checksum mismatch - file may be corrupted' };
+    }
+  }
+  return { valid: true };
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
+    const { data, createBackup: shouldCreateBackup = true } = body;
 
-    if (!body.data || !Array.isArray(body.data.items)) {
+    const validation = validateImportData(data);
+    if (!validation.valid) {
       return NextResponse.json(
-        { error: 'Archivo inválido: no contiene items' },
+        { error: validation.error },
         { status: 400 }
       );
     }
 
-    const pueblos = body.data.items as Pueblo[];
-
-    // Crear backup automático del estado actual antes de importar
-    const currentPueblos = await puebloDbManager.getAll();
-    if (currentPueblos.length > 0) {
-      await createGenericBackup('pueblos', currentPueblos, 'auto', `pre-import-${Date.now()}`);
+    if (shouldCreateBackup) {
+      const currentPueblos = await puebloDbManager.getAll();
+      await createGenericBackup('pueblos', currentPueblos, 'auto-backup-before-import');
     }
 
-    // Borrar todos los pueblos actuales
     await puebloDbManager.deleteAll();
 
-    // Importar pueblos del archivo
-    let importedCount = 0;
-    for (const pueblo of pueblos) {
-      try {
-        await puebloDbManager.create(
-          {
-            name: pueblo.name,
-            type: pueblo.type,
-            description: pueblo.description,
-            worldId: pueblo.worldId,
-            lore: pueblo.lore,
-            area: pueblo.area || undefined
-          },
-          pueblo.id
-        );
-        importedCount++;
-      } catch (error) {
-        console.error(`[API:pueblos/import-all] Error importando pueblo: ${pueblo.name}`, error);
-      }
+    const importedPueblos: any[] = [];
+    for (const item of data.items) {
+      const newPueblo = await puebloDbManager.create(
+        {
+          worldId: item.worldId,
+          name: item.name,
+          type: item.type,
+          description: item.description,
+          lore: item.lore,
+          area: item.area
+        },
+        item.id
+      );
+      importedPueblos.push(newPueblo);
     }
 
     return NextResponse.json({
       success: true,
-      message: `${importedCount} pueblos importados correctamente`,
+      message: `Successfully imported ${importedPueblos.length} pueblos`,
       data: {
-        importedCount
+        importedCount: importedPueblos.length,
+        backupCreated: shouldCreateBackup,
+        importDate: new Date().toISOString()
       }
     });
   } catch (error) {
-    console.error('[API:pueblos/import-all] Error importing all pueblos:', error);
+    console.error('Error importing pueblos:', error);
     return NextResponse.json(
-      { error: 'Failed to import pueblos' },
+      { error: error instanceof Error ? error.message : 'Failed to import pueblos' },
       { status: 500 }
     );
   }

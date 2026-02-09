@@ -2,13 +2,12 @@
  * Cliente Unificado de Embeddings
  *
  * Combina Text Generation WebUI u Ollama (para generar embeddings)
- * con LanceDB (para almacenar y buscar vectorialmente)
- * LanceDB corre directamente en Node.js, sin servicios externos
+ * con la base de datos PostgreSQL (para almacenar y buscar)
  */
 
 import { TextGenWebUIEmbeddingClient } from './text-gen-client';
 import { OllamaEmbeddingClient } from './ollama-client';
-import { LanceEmbeddingsDB } from './lance-embeddings';
+import { EmbeddingsDB } from '../embeddings-db';
 import type {
   CreateEmbeddingParams,
   SearchParams,
@@ -26,7 +25,7 @@ type EmbeddingProvider = 'textgen' | 'ollama';
 export class EmbeddingClient {
   private textGenClient: TextGenWebUIEmbeddingClient;
   private ollamaClient: OllamaEmbeddingClient;
-  private db = LanceEmbeddingsDB;
+  private db = EmbeddingsDB;
   private provider: EmbeddingProvider;
 
   constructor(provider: EmbeddingProvider = 'textgen', config?: any) {
@@ -268,8 +267,26 @@ export class EmbeddingClient {
     metadata?: Record<string, any>
   ): Promise<void> {
     try {
-      // LanceDB maneja la actualización internamente
-      await this.db.updateEmbedding(id, content, metadata);
+      // 1. Generar nuevo vector
+      const vector = await this.getActiveClient().embedText(content);
+
+      // 2. Actualizar en la base de datos
+      const client = this.db.getPool().connect();
+
+      try {
+        await client.query(
+          `UPDATE embeddings
+           SET content = $1,
+               vector = $2,
+               metadata = $3,
+               updated_at = NOW()
+           WHERE id = $4`,
+          [content, `[${vector.join(',')}]`, JSON.stringify(metadata || {}), id]
+        );
+        console.log(`✅ Embedding actualizado: ${id}`);
+      } finally {
+        client.release();
+      }
     } catch (error) {
       console.error('Error al actualizar embedding:', error);
       throw error;
@@ -352,7 +369,7 @@ export class EmbeddingClient {
     ollama: boolean;
   }> {
     const [db, textGen, ollama] = await Promise.all([
-      LanceEmbeddingsDB.checkConnection(),
+      EmbeddingsDB.checkConnection(),
       this.textGenClient.checkConnection(),
       this.ollamaClient.checkConnection()
     ]);
@@ -369,11 +386,9 @@ export class EmbeddingClient {
 
   /**
    * Cierra todas las conexiones
-   * LanceDB maneja la persistencia automáticamente, no necesita cerrar conexiones
    */
   async close(): Promise<void> {
-    // LanceDB maneja esto automáticamente
-    console.log('ℹ️  LanceDB maneja la persistencia automáticamente');
+    await EmbeddingsDB.close();
   }
 }
 

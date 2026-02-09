@@ -3,36 +3,17 @@ import { Pueblo } from './types';
 
 // Helper para convertir entre modelos de DB y TypeScript
 function toDomainPueblo(dbPueblo: any): Pueblo {
-  let loreParsed: any;
-
-  // Intentar parsear el lore como JSON
-  try {
-    if (dbPueblo.lore && typeof dbPueblo.lore === 'string') {
-      loreParsed = JSON.parse(dbPueblo.lore);
-    } else {
-      loreParsed = {
-        estado_pueblo: '',
-        rumores: [],
-        eventos: []
-      };
-    }
-  } catch (error) {
-    // Si falla el parseo, lore es texto plano
-    loreParsed = {
-      estado_pueblo: '',
-      rumores: [],
-      eventos: [],
-      _originalText: dbPueblo.lore || ''
-    };
-  }
-
   return {
     id: dbPueblo.id,
     worldId: dbPueblo.worldId,
     name: dbPueblo.name,
     type: dbPueblo.type as 'pueblo' | 'nacion',
     description: dbPueblo.description,
-    lore: loreParsed,
+    lore: dbPueblo.lore ? JSON.parse(dbPueblo.lore) : {
+      estado_pueblo: '',
+      rumores: [],
+      eventos: []
+    },
     area: dbPueblo.area ? JSON.parse(dbPueblo.area) : undefined,
   };
 }

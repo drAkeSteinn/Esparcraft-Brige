@@ -27,8 +27,7 @@ export interface VariableContext {
     name: string;
     lore?: {
       estado_mundo?: string;
-      rumores?: string[];
-      eventos?: string[];
+      rumors?: string[];
     };
   };
   pueblo?: {
@@ -37,17 +36,13 @@ export interface VariableContext {
     description?: string;
     lore?: {
       estado_pueblo?: string;
-      rumores?: string[];
-      eventos?: string[];
+      rumors?: string[];
     };
   };
   edificio?: {
     name: string;
     type?: string;
-    lore?: {
-      rumores?: string[];
-      eventos?: string[];
-    };
+    lore?: string;
     eventos_recientes?: string[];
     puntosDeInteres?: Array<{
       name?: string;
@@ -200,8 +195,6 @@ export function replaceVariables(text: string, context: VariableContext): string
         if (jugadorKey === 'almakos') return context.jugador?.almakos || '';
         if (jugadorKey === 'deuda') return context.jugador?.deuda || '';
         if (jugadorKey === 'piedras_del_alma' || jugadorKey === 'piedras') return context.jugador?.piedras_del_alma || '';
-        if (jugadorKey === 'compra') return context.jugador?.compra || '';
-        if (jugadorKey === 'humor_delta') return String(context.jugador?.humor_delta ?? 0);
         if (jugadorKey === 'mensaje') return context.mensaje || ''; // Mensaje del jugador actual
       }
 
@@ -220,56 +213,9 @@ export function replaceVariables(text: string, context: VariableContext): string
       if (key.startsWith('edificio.')) {
         const edificioKey = key.replace('edificio.', '');
         if (edificioKey === 'name' || edificioKey === 'nombre') return context.edificio?.name || '';
-        if (edificioKey === 'descripcion') {
-          // Lore como string (compatibilidad)
-          if (typeof context.edificio?.lore === 'string') {
-            return context.edificio.lore;
-          }
-          return '';
-        }
-        if (edificioKey === 'lore') {
-          // Lore como string (compatibilidad)
-          if (typeof context.edificio?.lore === 'string') {
-            return context.edificio.lore;
-          }
-          // Lore como objeto
-          if (context.edificio?.lore && typeof context.edificio.lore === 'object') {
-            const lore = context.edificio.lore as any;
-            const parts: string[] = [];
-            if (lore.rumores && lore.rumores.length > 0) {
-              parts.push('RUMORES:\n' + lore.rumores.map(r => `- ${r}`).join('\n'));
-            }
-            if (lore.eventos && lore.eventos.length > 0) {
-              parts.push('EVENTOS:\n' + lore.eventos.map(e => `- ${e}`).join('\n'));
-            }
-            return parts.join('\n\n');
-          }
-          return '';
-        }
-        if (edificioKey === 'rumores') {
-          if (context.edificio?.lore && typeof context.edificio.lore === 'object') {
-            const rumores = (context.edificio.lore as any).rumores;
-            if (rumores && rumores.length > 0) {
-              return rumores.map(r => `- ${r}`).join('\n');
-            }
-          }
-          return ''; // ✅ Dejar vacío si no hay rumores
-        }
-        if (edificioKey === 'eventos') {
-          // Primero intentar de lore.eventos
-          if (context.edificio?.lore && typeof context.edificio.lore === 'object') {
-            const eventos = (context.edificio.lore as any).eventos;
-            if (eventos && eventos.length > 0) {
-              return eventos.map(e => `- ${e}`).join('\n');
-            }
-          }
-          // Fallback a eventos_recientes
-          if (context.edificio?.eventos_recientes && context.edificio.eventos_recientes.length > 0) {
-            return context.edificio.eventos_recientes.map(e => `- ${e}`).join('\n');
-          }
-          return ''; // ✅ Dejar vacío si no hay eventos
-        }
-        if (edificioKey === 'eventos_recientes') {
+        if (edificioKey === 'descripcion') return context.edificio?.lore || ''; // lore es un string directo en edificios
+        if (edificioKey === 'lore') return context.edificio?.lore || '';
+        if (edificioKey === 'eventos' || edificioKey === 'eventos_recientes') {
           if (context.edificio?.eventos_recientes && context.edificio.eventos_recientes.length > 0) {
             return context.edificio.eventos_recientes.map(e => `- ${e}`).join('\n');
           }
@@ -297,18 +243,10 @@ export function replaceVariables(text: string, context: VariableContext): string
         if (puebloKey === 'descripcion') return context.pueblo?.description || ''; // Descripción general
         if (puebloKey === 'estado') return context.pueblo?.lore?.estado_pueblo || '';
         if (puebloKey === 'rumores') {
-          // Usar rumores (español) o rumors (inglés, para compatibilidad)
-          const rumores = context.pueblo?.lore?.rumores || context.pueblo?.lore?.rumors;
-          if (rumores && rumores.length > 0) {
-            return rumores.map(r => `- ${r}`).join('\n');
+          if (context.pueblo?.lore?.rumores && context.pueblo.lore.rumores.length > 0) {
+            return context.pueblo.lore.rumores.map(r => `- ${r}`).join('\n');
           }
           return ''; // ✅ Dejar vacío si no hay rumores
-        }
-        if (puebloKey === 'eventos') {
-          if (context.pueblo?.lore?.eventos && context.pueblo.lore.eventos.length > 0) {
-            return context.pueblo.lore.eventos.map(e => `- ${e}`).join('\n');
-          }
-          return ''; // ✅ Dejar vacío si no hay eventos
         }
       }
 
@@ -318,18 +256,10 @@ export function replaceVariables(text: string, context: VariableContext): string
         if (mundoKey === 'name' || mundoKey === 'nombre') return context.world?.name || '';
         if (mundoKey === 'estado' || mundoKey === 'estado_mundo') return context.world?.lore?.estado_mundo || '';
         if (mundoKey === 'rumores') {
-          // Usar rumores (español) o rumors (inglés, para compatibilidad)
-          const rumores = context.world?.lore?.rumores || context.world?.lore?.rumors;
-          if (rumores && rumores.length > 0) {
-            return rumores.map(r => `- ${r}`).join('\n');
+          if (context.world?.lore?.rumors && context.world.lore.rumors.length > 0) {
+            return context.world.lore.rumors.map(r => `- ${r}`).join('\n');
           }
           return ''; // ✅ Dejar vacío si no hay rumores
-        }
-        if (mundoKey === 'eventos') {
-          if (context.world?.lore?.eventos && context.world.lore.eventos.length > 0) {
-            return context.world.lore.eventos.map(e => `- ${e}`).join('\n');
-          }
-          return ''; // ✅ Dejar vacío si no hay eventos
         }
       }
 

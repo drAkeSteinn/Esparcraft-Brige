@@ -31,7 +31,7 @@ import { edificioDbManager } from './edificioDbManager';
 import { sessionDbManager } from './sessionDbManager';
 // Importar managers de resúmenes
 import { sessionSummaryDbManager } from './resumenSummaryDbManager';
-import { npcSummaryDbManager, edificioSummaryDbManager, puebloSummaryDbManager, worldSummaryDbManager } from './summaryManagers';
+import { NPCSummaryManager, EdificioSummaryManager, PuebloSummaryManager, WorldSummaryManager } from './summaryManagers';
 import {
   buildChatMessagesWithOptions,
   buildCompleteChatPrompt,
@@ -483,7 +483,8 @@ export async function handleResumenNPCTrigger(payload: ResumenNPCTriggerPayload)
   const currentHash = generateSessionSummariesHash(npcSummaries);
 
   // ✅ OBTENER ÚLTIMO RESUMEN GUARDADO DEL NPC
-  const lastNPCSummary = await npcSummaryDbManager.getLatest(npcid);
+  const npcSummaryMgr = new NPCSummaryManager();
+  const lastNPCSummary = await npcSummaryMgr.getLatest(npcid);
 
   console.log(`[handleResumenNPCTrigger] NPC \${npcid} - Último hash guardado: \${lastNPCSummary?.sessionHash || 'N/A'}, Versión: \${lastNPCSummary?.version || 0}`);
 
@@ -577,7 +578,7 @@ MEMORIAS DE LOS AVENTUREROS
 
   // ✅ GUARDAR EN TABLA NPCSummary PARA HISTÓRICO (CON VERSIÓN)
   const nextVersion = (lastNPCSummary?.version || 0) + 1;
-  await npcSummaryDbManager.create({
+  await npcSummaryMgr.create({
     npcId: npcid,
     summary: response,
     sessionHash: currentHash,
@@ -678,19 +679,21 @@ export async function handleResumenEdificioTrigger(payload: ResumenEdificioTrigg
   console.log(`[handleResumenEdificioTrigger] Obtenidos resúmenes de ${npcs.length} NPCs para el edificio ${edificioid}`);
 
   // ✅ CALCULAR HASH DE LOS RESÚMENES DE NPCs DEL EDIFICIO
+  const npcSummaryMgr = new NPCSummaryManager();
   const allNPCSummaries = [];
 
   for (const npc of npcs) {
-    const npcSummaries = await npcSummaryDbManager.getAllByNPCId(npc.id);
-    if (npcSummaries && npcSummaries.length > 0) {
-      allNPCSummaries.push(...npcSummaries);
+    const npcSummaries = await npcSummaryMgr.getByNPCId(npc.id);
+    if (npcSummaries) {
+      allNPCSummaries.push(npcSummaries);
     }
   }
 
   const currentHash = generateNPCSummariesHash(allNPCSummaries);
 
   // ✅ OBTENER ÚLTIMO RESUMEN GUARDADO DEL EDIFICIO
-  const lastEdificioSummary = await edificioSummaryDbManager.getLatest(edificioid);
+  const edificioSummaryMgr = new EdificioSummaryManager();
+  const lastEdificioSummary = await edificioSummaryMgr.getLatest(edificioid);
 
   console.log(`[handleResumenEdificioTrigger] Edificio ${edificioid} - Hash actual: ${currentHash}, Último hash: ${lastEdificioSummary?.npcHash || 'N/A'}`);
 
@@ -753,7 +756,7 @@ export async function handleResumenEdificioTrigger(payload: ResumenEdificioTrigg
 
   // ✅ GUARDAR EN TABLA EdificioSummary PARA HISTÓRICO (CON VERSIÓN)
   const nextVersion = (lastEdificioSummary?.version || 0) + 1;
-  await edificioSummaryDbManager.create({
+  await edificioSummaryMgr.create({
     edificioId: edificioid,
     summary: response,
     npcHash: currentHash,
@@ -845,19 +848,21 @@ export async function handleResumenPuebloTrigger(payload: ResumenPuebloTriggerPa
   console.log(`[handleResumenPuebloTrigger] Obtenidos resúmenes de ${edificios.length} edificios para el pueblo ${pueblid}`);
 
   // ✅ CALCULAR HASH DE LOS RESÚMENES DE EDIFICIOS DEL PUEBLO
+  const edificioSummaryMgr = new EdificioSummaryManager();
   const allEdificioSummaries = [];
 
   for (const edificio of edificios) {
-    const edificioSummaries = await edificioSummaryDbManager.getAllByEdificioId(edificio.id);
-    if (edificioSummaries && edificioSummaries.length > 0) {
-      allEdificioSummaries.push(...edificioSummaries);
+    const edificioSummaries = await edificioSummaryMgr.getByEdificioId(edificio.id);
+    if (edificioSummaries) {
+      allEdificioSummaries.push(edificioSummaries);
     }
   }
 
   const currentHash = generateEdificioSummariesHash(allEdificioSummaries);
 
   // ✅ OBTENER ÚLTIMO RESUMEN GUARDADO DEL PUEBLO
-  const lastPuebloSummary = await puebloSummaryDbManager.getLatest(pueblid);
+  const puebloSummaryMgr = new PuebloSummaryManager();
+  const lastPuebloSummary = await puebloSummaryMgr.getLatest(pueblid);
 
   console.log(`[handleResumenPuebloTrigger] Pueblo ${pueblid} - Hash actual: ${currentHash}, Último hash: ${lastPuebloSummary?.edificioHash || 'N/A'}`);
 
@@ -919,7 +924,7 @@ export async function handleResumenPuebloTrigger(payload: ResumenPuebloTriggerPa
 
   // ✅ GUARDAR EN TABLA PuebloSummary PARA HISTÓRICO (CON VERSIÓN)
   const nextVersion = (lastPuebloSummary?.version || 0) + 1;
-  await puebloSummaryDbManager.create({
+  await puebloSummaryMgr.create({
     puebloId: pueblid,
     summary: response,
     edificioHash: currentHash,
@@ -1012,19 +1017,21 @@ export async function handleResumenMundoTrigger(payload: ResumenMundoTriggerPayl
 
 
   // ✅ CALCULAR HASH DE LOS RESÚMENES DE PUEBLOS DEL MUNDO
+  const puebloSummaryMgr = new PuebloSummaryManager();
   const allPuebloSummaries = [];
 
   for (const pueblo of pueblos) {
-    const puebloSummaries = await puebloSummaryDbManager.getAllByPuebloId(pueblo.id);
-    if (puebloSummaries && puebloSummaries.length > 0) {
-      allPuebloSummaries.push(...puebloSummaries);
+    const puebloSummaries = await puebloSummaryMgr.getByPuebloId(pueblo.id);
+    if (puebloSummaries) {
+      allPuebloSummaries.push(puebloSummaries);
     }
   }
 
   const currentHash = generatePuebloSummariesHash(allPuebloSummaries);
 
   // ✅ OBTENER ÚLTIMO RESUMEN GUARDADO DEL MUNDO
-  const lastWorldSummary = await worldSummaryDbManager.getLatest(mundoid);
+  const worldSummaryMgr = new WorldSummaryManager();
+  const lastWorldSummary = await worldSummaryMgr.getLatest(mundoid);
 
   console.log(`[handleResumenMundoTrigger] Mundo ${mundoid} - Hash actual: ${currentHash}, Último hash: ${lastWorldSummary?.puebloHash || "N/A"}`);
 
@@ -1087,7 +1094,7 @@ export async function handleResumenMundoTrigger(payload: ResumenMundoTriggerPayl
 
   // ✅ GUARDAR EN TABLA WorldSummary PARA HISTÓRICO (CON VERSIÓN)
   const nextVersion = (lastWorldSummary?.version || 0) + 1;
-  await worldSummaryDbManager.create({
+  await worldSummaryMgr.create({
     worldId: mundoid,
     summary: response,
     puebloHash: currentHash,
@@ -1519,338 +1526,6 @@ ${memoriesSections.join('\n')}
 
       return {
         systemPrompt: systemPromptResolved,
-        messages,
-        estimatedTokens: 0,
-        lastPrompt,
-        sections: extractPromptSections(lastPrompt)
-      };
-    }
-
-    case 'resumen_edificio': {
-      const edificioPayload = payload as ResumenEdificioTriggerPayload;
-      const edificio = await edificioDbManager.getById(edificioPayload.edificioid);
-      if (!edificio) {
-        throw new Error(`Edificio with id ${edificioPayload.edificioid} not found`);
-      }
-
-      // Get context (world, pueblo)
-      const world = await worldDbManager.getById(edificio.worldId);
-      const pueblo = edificio.puebloId ? await puebloDbManager.getById(edificio.puebloId) : undefined;
-
-      // ✅ LEER CONFIGURACIÓN DE SYSTEM PROMPT
-      let configSystemPrompt = edificioPayload.systemPrompt;
-      if (!configSystemPrompt) {
-        try {
-          const fs = await import('fs/promises');
-          const path = await import('path');
-          const configPath = path.join(process.cwd(), 'db', 'resumen-edificio-trigger-config.json');
-          try {
-            const configContent = await fs.readFile(configPath, 'utf-8');
-            const config = JSON.parse(configContent);
-            configSystemPrompt = config.systemPrompt || '';
-            console.log('[previewTriggerPrompt] System Prompt cargado del archivo de configuración');
-          } catch (error) {
-            console.log('[previewTriggerPrompt] No hay configuración de System Prompt guardada, usando default');
-            configSystemPrompt = '';
-          }
-        } catch (error) {
-          console.error('[previewTriggerPrompt] Error cargando configuración de System Prompt:', error);
-          configSystemPrompt = '';
-        }
-      }
-
-      // ✅ OBTENER Y FORMATEAR RESÚMENES DE LOS NPCs
-      const npcs = await npcDbManager.getByEdificioId(edificioPayload.edificioid);
-      let npcSummariesFormatted = '';
-
-      if (npcs.length > 0) {
-        const npcSummaries = npcs
-          .map(npc => {
-            const creatorNotes = npc?.card?.data?.creator_notes || '';
-            return {
-              npcId: npc.id,
-              npcName: npc.card?.data?.name || npc.card?.name || 'Unknown',
-              consolidatedSummary: creatorNotes
-            };
-          })
-          .filter(n => n.consolidatedSummary !== '');
-
-        if (npcSummaries.length > 0) {
-          npcSummariesFormatted = npcSummaries
-            .map(n => `NPC: ${n.npcName} (ID: ${n.npcId})\n${n.consolidatedSummary}`)
-            .join('\n\n');
-        }
-      }
-
-      // ✅ CONSTRUIR EL SYSTEM PROMPT PARA RESUMEN EDIFICIO
-      const edificioName = edificio.name;
-      const varContext: VariableContext = {
-        edificio,
-        world,
-        pueblo,
-        char: edificioName
-      };
-
-      let messages = buildEdificioSummaryPrompt(
-        edificio,
-        [],
-        undefined,
-        {
-          systemPrompt: configSystemPrompt
-        }
-      );
-
-      // ✅ REEMPLAZAR VARIABLES PRIMARIAS Y PLANTILLAS DE GRIMORIO
-      const grimorioCards = grimorioManager.getAll();
-      const systemPromptRaw = messages[0]?.content || '';
-      const { result: systemPromptResolved } = resolveAllVariables(
-        systemPromptRaw,
-        varContext,
-        grimorioCards
-      );
-
-      // ✅ AGREGAR RESÚMENES DE NPCs COMO MENSAJE USER
-      messages = [
-        {
-          role: 'system',
-          content: systemPromptResolved,
-          timestamp: new Date().toISOString()
-        },
-        ...(npcSummariesFormatted ? [{
-          role: 'user',
-          content: npcSummariesFormatted,
-          timestamp: new Date().toISOString()
-        }] : [])
-      ];
-
-      console.log('[previewTriggerPrompt] System Prompt procesado con variables y plantillas');
-
-      const lastPrompt = messages.map(m => `[${m.role}]\n${m.content}`).join('\n\n');
-      const systemPrompt = messages.find(m => m.role === 'system')?.content || '';
-
-      return {
-        systemPrompt,
-        messages,
-        estimatedTokens: 0,
-        lastPrompt,
-        sections: extractPromptSections(lastPrompt)
-      };
-    }
-
-    case 'resumen_pueblo': {
-      const puebloPayload = payload as ResumenPuebloTriggerPayload;
-      const pueblo = await puebloDbManager.getById(puebloPayload.pueblid);
-      if (!pueblo) {
-        throw new Error(`Pueblo with id ${puebloPayload.pueblid} not found`);
-      }
-
-      // Get context (world)
-      const world = await worldDbManager.getById(pueblo.worldId);
-
-      // ✅ LEER CONFIGURACIÓN DE SYSTEM PROMPT
-      let configSystemPrompt = puebloPayload.systemPrompt;
-      if (!configSystemPrompt) {
-        try {
-          const fs = await import('fs/promises');
-          const path = await import('path');
-          const configPath = path.join(process.cwd(), 'db', 'resumen-pueblo-trigger-config.json');
-          try {
-            const configContent = await fs.readFile(configPath, 'utf-8');
-            const config = JSON.parse(configContent);
-            configSystemPrompt = config.systemPrompt || '';
-            console.log('[previewTriggerPrompt] System Prompt cargado del archivo de configuración');
-          } catch (error) {
-            console.log('[previewTriggerPrompt] No hay configuración de System Prompt guardada, usando default');
-            configSystemPrompt = '';
-          }
-        } catch (error) {
-          console.error('[previewTriggerPrompt] Error cargando configuración de System Prompt:', error);
-          configSystemPrompt = '';
-        }
-      }
-
-      // ✅ OBTENER Y FORMATEAR RESÚMENES DE LOS EDIFICIOS
-      const edificios = await edificioDbManager.getByPuebloId(puebloPayload.pueblid);
-      let edificioSummariesFormatted = '';
-
-      if (edificios.length > 0) {
-        const edificioSummaries = edificios
-          .map(edificio => {
-            const eventosRecientes = edificio.eventos_recientes || [];
-            const consolidatedSummary = eventosRecientes.length > 0
-              ? eventosRecientes.join('\n')
-              : '';
-            return {
-              edificioId: edificio.id,
-              edificioName: edificio.name,
-              consolidatedSummary
-            };
-          })
-          .filter(e => e.consolidatedSummary !== '');
-
-        if (edificioSummaries.length > 0) {
-          edificioSummariesFormatted = edificioSummaries
-            .map(e => `Edificio: ${e.edificioName} (ID: ${e.edificioId})\n${e.consolidatedSummary}`)
-            .join('\n\n');
-        }
-      }
-
-      // ✅ CONSTRUIR EL SYSTEM PROMPT PARA RESUMEN PUEBLO
-      const puebloName = pueblo.name;
-      const varContext: VariableContext = {
-        pueblo,
-        world,
-        char: puebloName
-      };
-
-      let messages = buildPuebloSummaryPrompt(
-        pueblo,
-        [],
-        undefined,
-        {
-          systemPrompt: configSystemPrompt
-        }
-      );
-
-      // ✅ REEMPLAZAR VARIABLES PRIMARIAS Y PLANTILLAS DE GRIMORIO
-      const grimorioCards = grimorioManager.getAll();
-      const systemPromptRaw = messages[0]?.content || '';
-      const { result: systemPromptResolved } = resolveAllVariables(
-        systemPromptRaw,
-        varContext,
-        grimorioCards
-      );
-
-      // ✅ AGREGAR RESÚMENES DE EDIFICIOS COMO MENSAJE USER
-      messages = [
-        {
-          role: 'system',
-          content: systemPromptResolved,
-          timestamp: new Date().toISOString()
-        },
-        ...(edificioSummariesFormatted ? [{
-          role: 'user',
-          content: edificioSummariesFormatted,
-          timestamp: new Date().toISOString()
-        }] : [])
-      ];
-
-      console.log('[previewTriggerPrompt] System Prompt procesado con variables y plantillas');
-
-      const lastPrompt = messages.map(m => `[${m.role}]\n${m.content}`).join('\n\n');
-      const systemPrompt = messages.find(m => m.role === 'system')?.content || '';
-
-      return {
-        systemPrompt,
-        messages,
-        estimatedTokens: 0,
-        lastPrompt,
-        sections: extractPromptSections(lastPrompt)
-      };
-    }
-
-    case 'resumen_mundo': {
-      const mundoPayload = payload as ResumenMundoTriggerPayload;
-      const world = await worldDbManager.getById(mundoPayload.mundoid);
-      if (!world) {
-        throw new Error(`World with id ${mundoPayload.mundoid} not found`);
-      }
-
-      // ✅ LEER CONFIGURACIÓN DE SYSTEM PROMPT
-      let configSystemPrompt = mundoPayload.systemPrompt;
-      if (!configSystemPrompt) {
-        try {
-          const fs = await import('fs/promises');
-          const path = await import('path');
-          const configPath = path.join(process.cwd(), 'db', 'resumen-mundo-trigger-config.json');
-          try {
-            const configContent = await fs.readFile(configPath, 'utf-8');
-            const config = JSON.parse(configContent);
-            configSystemPrompt = config.systemPrompt || '';
-            console.log('[previewTriggerPrompt] System Prompt cargado del archivo de configuración');
-          } catch (error) {
-            console.log('[previewTriggerPrompt] No hay configuración de System Prompt guardada, usando default');
-            configSystemPrompt = '';
-          }
-        } catch (error) {
-          console.error('[previewTriggerPrompt] Error cargando configuración de System Prompt:', error);
-          configSystemPrompt = '';
-        }
-      }
-
-      // ✅ OBTENER Y FORMATEAR RESÚMENES DE LOS PUEBLOS
-      const pueblos = await puebloDbManager.getByWorldId(mundoPayload.mundoid);
-      let puebloSummariesFormatted = '';
-
-      if (pueblos.length > 0) {
-        const puebloSummaries = pueblos
-          .map(pueblo => {
-            const lore = pueblo.lore || {};
-            const eventos = lore.eventos || [];
-            const consolidatedSummary = eventos.length > 0
-              ? eventos.join('\n')
-              : '';
-            return {
-              puebloId: pueblo.id,
-              puebloName: pueblo.name,
-              consolidatedSummary
-            };
-          })
-          .filter(p => p.consolidatedSummary !== '');
-
-        if (puebloSummaries.length > 0) {
-          puebloSummariesFormatted = puebloSummaries
-            .map(p => `Pueblo: ${p.puebloName} (ID: ${p.puebloId})\n${p.consolidatedSummary}`)
-            .join('\n\n');
-        }
-      }
-
-      // ✅ CONSTRUIR EL SYSTEM PROMPT PARA RESUMEN MUNDO
-      const mundoName = world.name;
-      const varContext: VariableContext = {
-        world,
-        char: mundoName
-      };
-
-      let messages = buildWorldSummaryPrompt(
-        world,
-        [],
-        undefined,
-        {
-          systemPrompt: configSystemPrompt
-        }
-      );
-
-      // ✅ REEMPLAZAR VARIABLES PRIMARIAS Y PLANTILLAS DE GRIMORIO
-      const grimorioCards = grimorioManager.getAll();
-      const systemPromptRaw = messages[0]?.content || '';
-      const { result: systemPromptResolved } = resolveAllVariables(
-        systemPromptRaw,
-        varContext,
-        grimorioCards
-      );
-
-      // ✅ AGREGAR RESÚMENES DE PUEBLOS COMO MENSAJE USER
-      messages = [
-        {
-          role: 'system',
-          content: systemPromptResolved,
-          timestamp: new Date().toISOString()
-        },
-        ...(puebloSummariesFormatted ? [{
-          role: 'user',
-          content: puebloSummariesFormatted,
-          timestamp: new Date().toISOString()
-        }] : [])
-      ];
-
-      console.log('[previewTriggerPrompt] System Prompt procesado con variables y plantillas');
-
-      const lastPrompt = messages.map(m => `[${m.role}]\n${m.content}`).join('\n\n');
-      const systemPrompt = messages.find(m => m.role === 'system')?.content || '';
-
-      return {
-        systemPrompt,
         messages,
         estimatedTokens: 0,
         lastPrompt,

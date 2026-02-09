@@ -84,9 +84,7 @@ export default function RouterTab() {
       salud_actual: '10',
       reputacion: '6',
       hora: '10:30pm',
-      clima: 'soleado',
-      compra: '',
-      humor_delta: 0
+      clima: 'soleado'
     },
     mensaje: '', // Mensaje del jugador (context por mensaje)
     historyLimit: 10, // Número de mensajes del historial a enviar
@@ -1055,7 +1053,7 @@ ${memoriesSections.join('\n')}
     // Agregar jugador si existe
     if (payload.jugador) {
       script += `    "jugador":\n`;
-      const jugadorKeys = ['nombre', 'raza', 'nivel', 'almakos', 'deuda', 'piedras_del_alma', 'salud_actual', 'reputacion', 'hora', 'clima', 'compra', 'humor_delta'];
+      const jugadorKeys = ['nombre', 'raza', 'nivel', 'almakos', 'deuda', 'piedras_del_alma', 'salud_actual', 'reputacion', 'hora', 'clima'];
       jugadorKeys.forEach(key => {
         if (payload.jugador[key] !== undefined) {
           const value = typeof payload.jugador[key] === 'string'
@@ -1492,25 +1490,6 @@ ${memoriesSections.join('\n')}
                         value={chatForm.jugador.clima}
                         onChange={(e) => setChatForm({ ...chatForm, jugador: { ...chatForm.jugador, clima: e.target.value } })}
                         placeholder="Ej: soleado, lluvioso, etc."
-                      />
-                    </div>
-                    <div>
-                      <Label>Compra</Label>
-                      <Input
-                        value={chatForm.jugador.compra || ''}
-                        onChange={(e) => setChatForm({ ...chatForm, jugador: { ...chatForm.jugador, compra: e.target.value } })}
-                        placeholder="SI/NO"
-                      />
-                    </div>
-                    <div>
-                      <Label>Humor Delta</Label>
-                      <Input
-                        type="number"
-                        min={-10}
-                        max={10}
-                        value={chatForm.jugador.humor_delta ?? 0}
-                        onChange={(e) => setChatForm({ ...chatForm, jugador: { ...chatForm.jugador, humor_delta: parseInt(e.target.value) || 0 } })}
-                        placeholder="Ej: 5"
                       />
                     </div>
                     <div className="grid grid-cols-2 gap-4">

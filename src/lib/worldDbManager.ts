@@ -1,35 +1,26 @@
 import { db } from '@/lib/db';
 import { World } from './types';
 
+// Verificar que db.world está disponible
+if (typeof db !== 'object' || db === null) {
+  throw new Error('Prisma db client is not initialized');
+}
+
+if (!db.world) {
+  console.error('db.world is undefined. db keys:', Object.keys(db));
+}
+
+
 // Helper para convertir entre modelos de DB y TypeScript
 function toDomainWorld(dbWorld: any): World {
-  let loreParsed: any;
-
-  // Intentar parsear el lore como JSON
-  try {
-    if (dbWorld.lore && typeof dbWorld.lore === 'string') {
-      loreParsed = JSON.parse(dbWorld.lore);
-    } else {
-      loreParsed = {
-        estado_mundo: '',
-        rumores: [],
-        eventos: []
-      };
-    }
-  } catch (error) {
-    // Si falla el parseo, lore es texto plano
-    loreParsed = {
-      estado_mundo: '',
-      rumores: [],
-      eventos: [],
-      _originalText: dbWorld.lore || ''
-    };
-  }
-
   return {
     id: dbWorld.id,
     name: dbWorld.name,
-    lore: loreParsed,
+    lore: dbWorld.lore ? JSON.parse(dbWorld.lore) : {
+      estado_mundo: '',
+      rumores: [],
+      eventos: []
+    },
     area: dbWorld.area ? JSON.parse(dbWorld.area) : undefined,
   };
 }
