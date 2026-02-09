@@ -20,7 +20,7 @@ export async function GET(
   context: RouteContext
 ) {
   try {
-    const { filename } = context.params;
+    const { filename } = await context.params;
     const decodedFilename = decodeURIComponent(filename);
 
     const content = await downloadGenericBackup('edificios', decodedFilename);
@@ -55,7 +55,7 @@ export async function POST(
   context: RouteContext
 ) {
   try {
-    const { filename } = context.params;
+    const { filename } = await context.params;
     const decodedFilename = decodeURIComponent(filename);
 
     const edificios = await getGenericBackup<Edificio>('edificios', decodedFilename);
@@ -86,7 +86,7 @@ export async function POST(
           worldId: edificio.worldId,
           puebloId: edificio.puebloId,
           lore: edificio.lore,
-          area: edificio.area ? JSON.parse(edificio.area) : undefined
+          area: edificio.area || undefined
         },
         edificio.id
       );
@@ -115,7 +115,7 @@ export async function DELETE(
   context: RouteContext
 ) {
   try {
-    const { filename } = context.params;
+    const { filename } = await context.params;
     const decodedFilename = decodeURIComponent(filename);
     console.log(`[API:edificios/backups] Eliminando backup: ${decodedFilename}`);
 

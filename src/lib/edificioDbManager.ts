@@ -4,32 +4,13 @@ import { Edificio } from './types';
 
 // Helper para convertir entre modelos de DB y TypeScript
 function toDomainEdificio(dbEdificio: any): Edificio {
-  let loreParsed: any;
-
-  // Intentar parsear el lore como JSON
-  try {
-    if (dbEdificio.lore && typeof dbEdificio.lore === 'string') {
-      loreParsed = JSON.parse(dbEdificio.lore);
-    } else {
-      loreParsed = { rumores: [], eventos: [] };
-    }
-  } catch (error) {
-    // Si falla el parseo, lore es texto plano
-    loreParsed = {
-      rumores: [],
-      eventos: [],
-      _originalText: dbEdificio.lore || ''
-    };
-  }
-
   return {
     id: dbEdificio.id,
     worldId: dbEdificio.worldId,
     puebloId: dbEdificio.puebloId,
     name: dbEdificio.name,
-    lore: loreParsed,
+    lore: dbEdificio.lore || '',
     rumores: dbEdificio.rumores ? JSON.parse(dbEdificio.rumores) : undefined,
-    eventos: dbEdificio.eventos ? JSON.parse(dbEdificio.eventos) : undefined,
     eventos_recientes: dbEdificio.eventos_recientes ? JSON.parse(dbEdificio.eventos_recientes) : [],
     area: dbEdificio.area ? JSON.parse(dbEdificio.area) : { start: { x: 0, y: 0, z: 0 }, end: { x: 0, y: 0, z: 0 } },
     puntosDeInteres: dbEdificio.puntosDeInteres ? JSON.parse(dbEdificio.puntosDeInteres) : undefined,
@@ -42,7 +23,7 @@ function toDBEdificio(edificio: Edificio): any {
     worldId: edificio.worldId,
     puebloId: edificio.puebloId,
     name: edificio.name,
-    lore: edificio.lore,
+    lore: typeof edificio.lore === 'string' ? edificio.lore : '',
     rumores: edificio.rumores ? JSON.stringify(edificio.rumores) : null,
     eventos_recientes: edificio.eventos_recientes ? JSON.stringify(edificio.eventos_recientes) : null,
     area: JSON.stringify(edificio.area),

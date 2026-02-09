@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getEmbeddingClient } from '@/lib/embeddings/text-gen-client';
-import { EmbeddingsDB } from '@/lib/embeddings-db';
+import { getEmbeddingClient } from '@/lib/embeddings/client';
+import { LanceEmbeddingsDB } from '@/lib/embeddings/lance-embeddings';
 
 /**
  * POST /api/search/vector
@@ -55,7 +55,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const textGenClient = getEmbeddingClient();
+    const embeddingClient = getEmbeddingClient();
     let queryVector: number[];
 
     // Usar vector proporcionado o generarlo desde la query
@@ -63,7 +63,7 @@ export async function POST(request: NextRequest) {
       queryVector = body.queryVector;
     } else {
       // Generar embedding de la query de texto
-      queryVector = await textGenClient.embedText(body.query);
+      queryVector = await embeddingClient.getActiveClient().embedText(body.query);
     }
 
     // Preparar parámetros de búsqueda
@@ -77,8 +77,8 @@ export async function POST(request: NextRequest) {
       searchParams.namespace = body.namespace;
     }
 
-    // Hacer la búsqueda vectorial usando la base de datos
-    const results = await EmbeddingsDB.searchSimilar(searchParams);
+    // Hacer la búsqueda vectorial usando LanceDB
+    const results = await LanceEmbeddingsDB.searchSimilar(searchParams);
 
     // Filtrar si se especificó source_type
     let filteredResults = results;

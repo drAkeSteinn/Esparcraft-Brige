@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { edificioDbManager } from '@/lib/edificioDbManager';
 import { Edificio } from '@/lib/types';
+import { createGenericBackup } from '@/lib/genericBackupManager';
 
 // POST - Importar todos los edificios desde un archivo
 export async function POST(request: NextRequest) {
@@ -36,7 +37,7 @@ export async function POST(request: NextRequest) {
             worldId: edificio.worldId,
             puebloId: edificio.puebloId,
             lore: edificio.lore,
-            area: edificio.area ? JSON.parse(edificio.area) : undefined
+            area: edificio.area || undefined
           },
           edificio.id
         );

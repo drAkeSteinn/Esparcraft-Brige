@@ -20,7 +20,7 @@ export async function GET(
   context: RouteContext
 ) {
   try {
-    const { filename } = context.params;
+    const { filename } = await context.params;
     const decodedFilename = decodeURIComponent(filename);
 
     const content = await downloadGenericBackup('place-types', decodedFilename);
@@ -55,7 +55,7 @@ export async function POST(
   context: RouteContext
 ) {
   try {
-    const { filename } = context.params;
+    const { filename } = await context.params;
     const decodedFilename = decodeURIComponent(filename);
 
     const placeTypes = await getGenericBackup<PlaceType>('place-types', decodedFilename);
@@ -111,7 +111,7 @@ export async function DELETE(
   context: RouteContext
 ) {
   try {
-    const { filename } = context.params;
+    const { filename } = await context.params;
     const decodedFilename = decodeURIComponent(filename);
 
     const success = await deleteGenericBackup('place-types', decodedFilename);

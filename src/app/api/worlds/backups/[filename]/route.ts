@@ -20,7 +20,7 @@ export async function GET(
   context: RouteContext
 ) {
   try {
-    const { filename } = context.params;
+    const { filename } = await context.params;
     const decodedFilename = decodeURIComponent(filename);
 
     const content = await downloadGenericBackup('worlds', decodedFilename);
@@ -55,7 +55,7 @@ export async function POST(
   context: RouteContext
 ) {
   try {
-    const { filename } = context.params;
+    const { filename } = await context.params;
     const decodedFilename = decodeURIComponent(filename);
 
     const worlds = await getGenericBackup<World>('worlds', decodedFilename);
@@ -111,7 +111,7 @@ export async function DELETE(
   context: RouteContext
 ) {
   try {
-    const { filename } = context.params;
+    const { filename } = await context.params;
     const decodedFilename = decodeURIComponent(filename);
     console.log(`[API:worlds/backups] Eliminando backup: ${decodedFilename}`);
 

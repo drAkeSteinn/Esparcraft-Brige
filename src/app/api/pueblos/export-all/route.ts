@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { puebloDbManager } from '@/lib/puebloDbManager';
+import { createHash } from 'crypto';
 
 // GET - Exportar todos los pueblos
 export async function GET() {
@@ -13,22 +14,28 @@ export async function GET() {
       );
     }
 
+    // Calcular checksum del contenido
+    const pueblosString = JSON.stringify(pueblos, null, 2);
+    const checksum = createHash('sha256').update(pueblosString).digest('hex');
+
     // Crear payload de exportación con metadatos
     const exportData = {
-      exportDate: new Date().toISOString(),
       version: '1.0',
-      itemType: 'pueblos',
+      exportDate: new Date().toISOString(),
+      entityType: 'pueblos' as const,
+      itemCount: pueblos.length,
+      checksum,
       items: pueblos
     };
 
     // Retornar como descarga
-    const content = JSON.stringify(exportData, null, 2);
+    const fileName = `pueblos-export-${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
 
-    return new NextResponse(content, {
+    return new NextResponse(JSON.stringify(exportData, null, 2), {
       status: 200,
       headers: {
         'Content-Type': 'application/json',
-        'Content-Disposition': `attachment; filename="pueblos-${new Date().toISOString().replace(/[:.]/g, '-')}.json"`
+        'Content-Disposition': `attachment; filename="${fileName}"`
       }
     });
   } catch (error) {

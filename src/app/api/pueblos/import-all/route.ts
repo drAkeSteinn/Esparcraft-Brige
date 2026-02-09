@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { puebloDbManager } from '@/lib/puebloDbManager';
 import { Pueblo } from '@/lib/types';
+import { createGenericBackup } from '@/lib/genericBackupManager';
 
 // POST - Importar todos los pueblos desde un archivo
 export async function POST(request: NextRequest) {
@@ -36,7 +37,7 @@ export async function POST(request: NextRequest) {
             description: pueblo.description,
             worldId: pueblo.worldId,
             lore: pueblo.lore,
-            area: pueblo.area ? JSON.parse(pueblo.area) : undefined
+            area: pueblo.area || undefined
           },
           pueblo.id
         );

@@ -31,26 +31,7 @@ yarn-error.log*
 .pnpm-debug.log*
 
 # env files (can opt-in for committing if needed)
-.env
-.env.local
-.env.production
-.env.development
-
-# Local data
-/db/
-/data/
-/data/embeddings/
-*.db
-*.db-shm
-*.db-wal
-
-# Logs
-/logs/
-*.log
-
-# Temp
-/temp/
-/node_modules/
+.env*
 
 # vercel
 .vercel

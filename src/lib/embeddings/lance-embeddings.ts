@@ -6,7 +6,23 @@
  * No requiere servicios externos ni configuración adicional
  */
 
-import * as lancedb from "@lancedb/lancedb";
+// Importación dinámica de LanceDB para evitar problemas con Next.js Turbopack
+let lancedbModule: any = null;
+
+async function getLancedb() {
+  if (!lancedbModule) {
+    try {
+      // Importación dinámica para evitar análisis estático de Next.js
+      const module = await import("@lancedb/lancedb");
+      lancedbModule = module;
+    } catch (error) {
+      console.error('Error loading LanceDB:', error);
+      throw new Error('No se pudo cargar el módulo de LanceDB. Asegúrate de que los paquetes nativos estén instalados correctamente.');
+    }
+  }
+  return lancedbModule;
+}
+
 import { getEmbeddingClient } from './client';
 import type { EmbeddingConfig } from './types';
 
@@ -64,6 +80,7 @@ async function connectToLanceDB(): Promise<{ db: any; table: any }> {
     console.log('📦 Conectando a LanceDB:', DB_PATH);
 
     // Conectar a LanceDB (crea la base de datos si no existe)
+    const lancedb = await getLancedb();
     dbInstance = await lancedb.connect(DB_PATH);
 
     // Definir esquema de la tabla de embeddings

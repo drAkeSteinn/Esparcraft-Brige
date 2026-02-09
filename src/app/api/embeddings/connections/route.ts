@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getEmbeddingClient } from '@/lib/embeddings/client';
 import { getEmbeddingsProviderConfig } from '@/app/api/settings/embeddings-provider/route';
+import { LanceEmbeddingsDB } from '@/lib/embeddings/lance-embeddings';
 
 /**
  * GET /api/embeddings/connections
@@ -52,6 +53,42 @@ export async function GET() {
       {
         success: false,
         error: error.message || 'Error al verificar conexiones',
+        code: error.code || 'INTERNAL_ERROR'
+      },
+      { status: 500 }
+    );
+  }
+}
+
+/**
+ * POST /api/embeddings/connections
+ * Prueba la conexión a LanceDB
+ */
+export async function POST() {
+  try {
+    console.log('=== POST /api/embeddings/connections ===');
+    console.log('Probando conexión a LanceDB...');
+
+    const connected = await LanceEmbeddingsDB.checkConnection();
+
+    console.log('Resultado de prueba de conexión:', connected);
+
+    return NextResponse.json({
+      success: true,
+      data: {
+        connected,
+        message: connected
+          ? 'LanceDB está funcionando correctamente'
+          : 'No se pudo conectar a LanceDB'
+      }
+    });
+  } catch (error: any) {
+    console.error('Error al probar conexión:', error);
+
+    return NextResponse.json(
+      {
+        success: false,
+        error: error.message || 'Error al probar conexión',
         code: error.code || 'INTERNAL_ERROR'
       },
       { status: 500 }

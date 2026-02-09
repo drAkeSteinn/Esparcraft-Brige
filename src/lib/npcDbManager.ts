@@ -33,7 +33,7 @@ export const npcDbManager = {
    * Obtiene todos los NPCs
    */
   async getAll(): Promise<NPC[]> {
-    const npcs = await db.nPC.findMany({
+    const npcs = await db.npc.findMany({
       orderBy: { createdAt: 'desc' }
     });
     return npcs.map(toDomainNPC);
@@ -43,7 +43,7 @@ export const npcDbManager = {
    * Obtiene un NPC por su ID
    */
   async getById(id: string): Promise<NPC | null> {
-    const npc = await db.nPC.findUnique({
+    const npc = await db.npc.findUnique({
       where: { id }
     });
     return npc ? toDomainNPC(npc) : null;
@@ -65,7 +65,7 @@ export const npcDbManager = {
       where.edificioId = edificioId;
     }
 
-    const npcs = await db.nPC.findMany({
+    const npcs = await db.npc.findMany({
       where,
       orderBy: { createdAt: 'desc' }
     });
@@ -76,7 +76,7 @@ export const npcDbManager = {
    * Obtiene NPCs por edificioId
    */
   async getByEdificioId(edificioId: string): Promise<NPC[]> {
-    const npcs = await db.nPC.findMany({
+    const npcs = await db.npc.findMany({
       where: { edificioId },
       orderBy: { createdAt: 'desc' }
     });
@@ -87,7 +87,7 @@ export const npcDbManager = {
    * Obtiene NPCs por puebloId
    */
   async getByPuebloId(puebloId: string): Promise<NPC[]> {
-    const npcs = await db.nPC.findMany({
+    const npcs = await db.npc.findMany({
       where: { puebloId },
       orderBy: { createdAt: 'desc' }
     });
@@ -98,7 +98,7 @@ export const npcDbManager = {
    * Obtiene NPCs por worldId
    */
   async getByWorldId(worldId: string): Promise<NPC[]> {
-    const npcs = await db.nPC.findMany({
+    const npcs = await db.npc.findMany({
       where: { worldId },
       orderBy: { createdAt: 'desc' }
     });
@@ -112,7 +112,7 @@ export const npcDbManager = {
     const npcId = id || `NPC_${Date.now()}`;
     const newNPC: NPC = { ...npc, id: npcId };
 
-    const created = await db.nPC.create({
+    const created = await db.npc.create({
       data: toDBNPC(newNPC)
     });
 
@@ -133,7 +133,7 @@ export const npcDbManager = {
       ...(npc.id ? { id: npc.id } : {})
     };
 
-    const result = await db.nPC.update({
+    const result = await db.npc.update({
       where: { id: existing.id }, // Siempre buscar por el ID original
       data: toDBNPC(updated)
     });
@@ -148,7 +148,7 @@ export const npcDbManager = {
     const existing = await this.getById(id);
     if (!existing) return null;
 
-    const result = await db.nPC.update({
+    const result = await db.npc.update({
       where: { id },
       data: {
         card: JSON.stringify(card)
@@ -163,7 +163,7 @@ export const npcDbManager = {
    */
   async delete(id: string): Promise<boolean> {
     try {
-      await db.nPC.delete({
+      await db.npc.delete({
         where: { id }
       });
       return true;
@@ -183,7 +183,7 @@ export const npcDbManager = {
     if (puebloId) where.puebloId = puebloId;
     if (edificioId) where.edificioId = edificioId;
 
-    return await db.nPC.count({ where });
+    return await db.npc.count({ where });
   },
 
   /**
@@ -200,7 +200,7 @@ export const npcDbManager = {
       where.worldId = worldId;
     }
 
-    const npcs = await db.nPC.findMany({
+    const npcs = await db.npc.findMany({
       where,
       orderBy: { createdAt: 'desc' }
     });
@@ -216,7 +216,7 @@ export const npcDbManager = {
       await db.session.deleteMany({});
 
       // Luego borrar todos los NPCs
-      const result = await db.nPC.deleteMany({});
+      const result = await db.npc.deleteMany({});
       return result.count;
     } catch (error) {
       console.error('Error deleting all NPCs:', error);

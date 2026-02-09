@@ -352,7 +352,7 @@ export class EmbeddingClient {
     ollama: boolean;
   }> {
     const [db, textGen, ollama] = await Promise.all([
-      EmbeddingsDB.checkConnection(),
+      LanceEmbeddingsDB.checkConnection(),
       this.textGenClient.checkConnection(),
       this.ollamaClient.checkConnection()
     ]);

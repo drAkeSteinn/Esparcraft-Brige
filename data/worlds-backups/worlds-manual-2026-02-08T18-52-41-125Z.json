@@ -1,14 +1,14 @@
 {
   "version": "1.0",
-  "backupId": "backup-2026-02-03T03-37-47-276Z",
-  "backupDate": "2026-02-03T03:37:47.277Z",
+  "backupId": "backup-2026-02-08T18-52-41-125Z",
+  "backupDate": "2026-02-08T18:52:41.126Z",
   "entityType": "worlds",
   "source": "manual",
   "itemCount": 1,
-  "checksum": "fa678919e9d16f58cafe25dda02025acbdcc828ccd3dab516e5959092edd5ff3",
+  "checksum": "356932f3b41cdb66357023a01db4b8aa2dc32c1920356da3e40d45e55f77e47f",
   "items": [
     {
-      "id": "WORLD_ESPARCRAFT",
+      "id": "WORLD_1770576110096",
       "name": "Esparcraft",
       "lore": {
         "estado_mundo": "El mundo se encuentra bajo el Decreto del Dolor. Oscuridad ha caído sobre las tierras, y los habitantes viven en constante temor.",
@@ -20,20 +20,8 @@
           "El rey ha cerrado las puertas del castillo hace tres lunas."
         ],
         "eventos": [
-          "Evento1"
+          "ninguno"
         ]
-      },
-      "area": {
-        "start": {
-          "x": -28,
-          "y": 68,
-          "z": -74
-        },
-        "end": {
-          "x": 95,
-          "y": 112,
-          "z": 385
-        }
       }
     }
   ]

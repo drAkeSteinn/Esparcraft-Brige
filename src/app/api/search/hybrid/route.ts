@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getEmbeddingClient } from '@/lib/embeddings/text-gen-client';
-import { EmbeddingsDB } from '@/lib/embeddings-db';
+import { getEmbeddingClient } from '@/lib/embeddings/client';
+import { LanceEmbeddingsDB } from '@/lib/embeddings/lance-embeddings';
 
 /**
  * POST /api/search/hybrid
@@ -79,10 +79,10 @@ export async function POST(request: NextRequest) {
     }
 
     // 1. Búsqueda vectorial
-    const textGenClient = getEmbeddingClient();
-    const queryVector = await textGenClient.embedText(body.query);
+    const embeddingClient = getEmbeddingClient();
+    const queryVector = await embeddingClient.getActiveClient().embedText(body.query);
 
-    const vectorResults = await EmbeddingsDB.searchSimilar({
+    const vectorResults = await LanceEmbeddingsDB.searchSimilar({
       queryVector,
       namespace: body.namespace,
       limit: vectorLimit,
@@ -91,8 +91,8 @@ export async function POST(request: NextRequest) {
 
     // 2. Búsqueda de texto simple (coincidencia exacta)
     // Obtenemos todos los embeddings y filtramos por texto
-    // En una implementación real, usaríamos full-text search de PostgreSQL
-    // Aquí hacemos una búsqueda simple usando LIKE
+    // En una implementación real, usaríamos full-text search
+    // Aquí hacemos una búsqueda simple usando includes
     const textResults: any[] = [];
 
     // Filtrar los resultados vectoriales que coinciden con el query

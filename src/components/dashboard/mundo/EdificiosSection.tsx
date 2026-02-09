@@ -444,7 +444,10 @@ export default function EdificiosSection() {
                         Último Resumen General
                       </p>
                       <p className="text-sm text-indigo-800 dark:text-indigo-200 line-clamp-3">
-                        {edificioMemories[edificio.id].consolidatedSummary}
+                        {typeof edificioMemories[edificio.id].consolidatedSummary === 'string' 
+                          ? edificioMemories[edificio.id].consolidatedSummary
+                          : JSON.stringify(edificioMemories[edificio.id].consolidatedSummary, null, 2)
+                        }
                       </p>
                     </div>
                   )}

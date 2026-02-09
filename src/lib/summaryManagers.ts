@@ -43,7 +43,7 @@ export class SessionSummaryManager {
  */
 export class NPCSummaryManager {
   async getLatest(npcId: string) {
-    return await db.nPCSummary.findFirst({
+    return await db.npcSummary.findFirst({
       where: { npcId },
       orderBy: { createdAt: 'desc' }
     });
@@ -55,19 +55,19 @@ export class NPCSummaryManager {
     sessionHash: string;
     version: number;
   }) {
-    return await db.nPCSummary.create({
+    return await db.npcSummary.create({
       data
     });
   }
 
   async getAll() {
-    return await db.nPCSummary.findMany({
+    return await db.npcSummary.findMany({
       orderBy: { createdAt: 'desc' }
     });
   }
 
   async getAllByNPCId(npcId: string) {
-    return await db.nPCSummary.findMany({
+    return await db.npcSummary.findMany({
       where: { npcId },
       orderBy: { createdAt: 'desc' }
     });
