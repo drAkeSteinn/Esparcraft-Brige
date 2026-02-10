@@ -9,9 +9,9 @@ import { createGenericBackup } from '@/lib/genericBackupManager';
 import { Edificio } from '@/lib/types';
 
 interface RouteContext {
-  params: {
+  params: Promise<{
     filename: string;
-  };
+  }>;
 }
 
 export async function GET(
@@ -19,7 +19,7 @@ export async function GET(
   context: RouteContext
 ) {
   try {
-    const { filename } = context.params;
+    const { filename } = await context.params;
     const decodedFilename = decodeURIComponent(filename);
 
     const content = await downloadGenericBackup('edificios', decodedFilename);
@@ -52,7 +52,7 @@ export async function POST(
   context: RouteContext
 ) {
   try {
-    const { filename } = context.params;
+    const { filename } = await context.params;
     const decodedFilename = decodeURIComponent(filename);
 
     const edificios = await getGenericBackup<Edificio>('edificios', decodedFilename);
@@ -109,7 +109,7 @@ export async function DELETE(
   context: RouteContext
 ) {
   try {
-    const { filename } = context.params;
+    const { filename } = await context.params;
     const decodedFilename = decodeURIComponent(filename);
 
     const success = await deleteGenericBackup('edificios', decodedFilename);

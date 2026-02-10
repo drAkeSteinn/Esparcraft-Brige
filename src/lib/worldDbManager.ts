@@ -163,6 +163,7 @@ export const worldDbManager = {
    */
   async delete(id: string): Promise<boolean> {
     try {
+      console.log('worldDbManager.delete - ID recibido:', id);
       await db.world.delete({
         where: { id }
       });

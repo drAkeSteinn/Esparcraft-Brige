@@ -12,7 +12,6 @@ import RouterTab from '@/components/dashboard/RouterTab';
 import EmbeddingsTab from '@/components/dashboard/EmbeddingsTab';
 import SettingsTab from '@/components/dashboard/SettingsTab';
 import GrimorioTab from '@/components/dashboard/GrimorioTab';
-import DatabaseTab from '@/components/dashboard/DatabaseTab';
 
 export default function Dashboard() {
   const [activeTab, setActiveTab] = useState('mundo');
@@ -72,10 +71,6 @@ export default function Dashboard() {
               <Database className="h-4 w-4" />
               <span className="hidden sm:inline">Embeddings</span>
             </TabsTrigger>
-            <TabsTrigger value="database" className="flex items-center gap-2">
-              <Database className="h-4 w-4" />
-              <span className="hidden sm:inline">Base de Datos</span>
-            </TabsTrigger>
             <TabsTrigger value="settings" className="flex items-center gap-2">
               <Settings className="h-4 w-4" />
               <span className="hidden sm:inline">Config</span>
@@ -108,10 +103,6 @@ export default function Dashboard() {
 
           <TabsContent value="embeddings">
             <EmbeddingsTab />
-          </TabsContent>
-
-          <TabsContent value="database">
-            <DatabaseTab />
           </TabsContent>
 
           <TabsContent value="settings">

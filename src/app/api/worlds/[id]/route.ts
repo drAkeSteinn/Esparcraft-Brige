@@ -67,6 +67,7 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params;
+    console.log('DELETE /api/worlds/[id] - ID recibido:', id);
     const success = await worldDbManager.delete(id);
 
     if (!success) {

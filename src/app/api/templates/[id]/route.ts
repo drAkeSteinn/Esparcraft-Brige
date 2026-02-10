@@ -12,10 +12,11 @@ import { VariableContext } from '@/lib/utils';
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const template = customTemplateManager.getTemplate(params.id);
+    const { id } = await params;
+    const template = customTemplateManager.getTemplate(id);
 
     if (!template) {
       return NextResponse.json(
@@ -56,13 +57,14 @@ export async function GET(
  */
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     const body = await request.json();
     const updates = body;
 
-    const updated = customTemplateManager.updateTemplate(params.id, updates);
+    const updated = customTemplateManager.updateTemplate(id, updates);
 
     if (!updated) {
       return NextResponse.json(
@@ -72,7 +74,7 @@ export async function PUT(
     }
 
     // Invalidar cache de esta plantilla
-    templateCache.invalidateTemplate(params.id);
+    templateCache.invalidateTemplate(id);
 
     return NextResponse.json({
       success: true,
@@ -97,10 +99,11 @@ export async function PUT(
  */
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const deleted = customTemplateManager.deleteTemplate(params.id);
+    const { id } = await params;
+    const deleted = customTemplateManager.deleteTemplate(id);
 
     if (!deleted) {
       return NextResponse.json(
@@ -110,7 +113,7 @@ export async function DELETE(
     }
 
     // Invalidar cache de esta plantilla
-    templateCache.invalidateTemplate(params.id);
+    templateCache.invalidateTemplate(id);
 
     return NextResponse.json({
       success: true,

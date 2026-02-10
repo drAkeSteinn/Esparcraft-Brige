@@ -6,9 +6,9 @@ import {
 } from '@/lib/npcBackupManager';
 
 interface RouteContext {
-  params: {
+  params: Promise<{
     filename: string;
-  };
+  }>;
 }
 
 // GET - Descargar un backup específico
@@ -17,7 +17,7 @@ export async function GET(
   context: RouteContext
 ) {
   try {
-    const { filename } = context.params;
+    const { filename } = await context.params;
     const decodedFilename = decodeURIComponent(filename);
 
     const content = await downloadBackup(decodedFilename);
@@ -52,7 +52,7 @@ export async function POST(
   context: RouteContext
 ) {
   try {
-    const { filename } = context.params;
+    const { filename } = await context.params;
     const decodedFilename = decodeURIComponent(filename);
 
     const result = await restoreBackup(decodedFilename);
@@ -87,7 +87,7 @@ export async function DELETE(
   context: RouteContext
 ) {
   try {
-    const { filename } = context.params;
+    const { filename } = await context.params;
     const decodedFilename = decodeURIComponent(filename);
 
     const success = await deleteBackup(decodedFilename);

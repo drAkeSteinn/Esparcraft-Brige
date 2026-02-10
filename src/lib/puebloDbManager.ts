@@ -206,6 +206,7 @@ export const puebloDbManager = {
    */
   async delete(id: string): Promise<boolean> {
     try {
+      console.log('puebloDbManager.delete - ID recibido:', id);
       await db.pueblo.delete({
         where: { id }
       });

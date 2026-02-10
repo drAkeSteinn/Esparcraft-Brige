@@ -7,10 +7,10 @@ import { getEmbeddingClient } from '@/lib/embeddings/client';
  */
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { namespace: string } }
+  { params }: { params: Promise<{ namespace: string }> }
 ) {
   try {
-    const { namespace } = params;
+    const { namespace } = await params;
 
     if (!namespace) {
       return NextResponse.json(

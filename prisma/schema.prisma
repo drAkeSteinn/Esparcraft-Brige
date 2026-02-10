@@ -42,9 +42,9 @@ model NPC {
   updatedAt      DateTime @updatedAt
 
   // Relaciones FK hacia entidades padre
-  mundo          World?     @relation("NPC_Mundo", fields: [worldId], references: [id])
-  pueblo         Pueblo?    @relation("NPC_Pueblo", fields: [puebloId], references: [id])
-  edificio       Edificio?   @relation("NPC_Edificio", fields: [edificioId], references: [id])
+  mundo          World?     @relation("NPC_Mundo", fields: [worldId], references: [id], onDelete: Cascade)
+  pueblo         Pueblo?    @relation("NPC_Pueblo", fields: [puebloId], references: [id], onDelete: Cascade)
+  edificio       Edificio?   @relation("NPC_Edificio", fields: [edificioId], references: [id], onDelete: Cascade)
 
   // Relaciones hacia entidades hijas
   sessions       Session[]  @relation("Session_NPC")
@@ -83,7 +83,7 @@ model Pueblo {
   updatedAt      DateTime @updatedAt
 
   // Relaciones FK
-  mundo          World?     @relation("Pueblo_Mundo", fields: [worldId], references: [id])
+  mundo          World?     @relation("Pueblo_Mundo", fields: [worldId], references: [id], onDelete: Cascade)
   edificios      Edificio[] @relation("Edificio_Pueblo")
   npcs           NPC[]      @relation("NPC_Pueblo")
 
@@ -105,8 +105,8 @@ model Edificio {
   updatedAt           DateTime @updatedAt
 
   // Relaciones FK
-  mundo              World?     @relation("Edificio_Mundo", fields: [worldId], references: [id])
-  pueblo             Pueblo?    @relation("Edificio_Pueblo", fields: [puebloId], references: [id])
+  mundo              World?     @relation("Edificio_Mundo", fields: [worldId], references: [id], onDelete: Cascade)
+  pueblo             Pueblo?    @relation("Edificio_Pueblo", fields: [puebloId], references: [id], onDelete: Cascade)
   npcs               NPC[]      @relation("NPC_Edificio")
 
   @@index([worldId])
@@ -137,7 +137,7 @@ model Session {
   summaryId      String?  // FK al último resumen (opcional)
 
   // Relaciones FK
-  npc            NPC?       @relation("Session_NPC", fields: [npcId], references: [id])
+  npc            NPC?       @relation("Session_NPC", fields: [npcId], references: [id], onDelete: Cascade)
 
   @@index([npcId])
   @@index([playerId])
