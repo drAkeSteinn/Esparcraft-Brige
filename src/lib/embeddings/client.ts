@@ -1,13 +1,12 @@
 /**
  * Cliente Unificado de Embeddings
  *
- * Combina Text Generation WebUI u Ollama (para generar embeddings)
- * con la base de datos PostgreSQL (para almacenar y buscar)
+ * Usa Ollama (para generar embeddings)
+ * con la base de datos de embeddings (PostgreSQL o LanceDB)
  */
 
-import { TextGenWebUIEmbeddingClient } from './text-gen-client';
 import { OllamaEmbeddingClient } from './ollama-client';
-import { EmbeddingsDB } from '../embeddings-db';
+import { LanceDBWrapper } from '../lancedb-db';
 import type {
   CreateEmbeddingParams,
   SearchParams,
@@ -17,50 +16,22 @@ import type {
   SourceType
 } from './types';
 
-type EmbeddingProvider = 'textgen' | 'ollama';
-
 /**
  * Cliente principal de embeddings que une generación y almacenamiento
  */
 export class EmbeddingClient {
-  private textGenClient: TextGenWebUIEmbeddingClient;
   private ollamaClient: OllamaEmbeddingClient;
-  private db = EmbeddingsDB;
-  private provider: EmbeddingProvider;
+  private db = LanceDBWrapper;
 
-  constructor(provider: EmbeddingProvider = 'textgen', config?: any) {
-    this.provider = provider;
-    this.textGenClient = new TextGenWebUIEmbeddingClient(config);
+  constructor(config?: any) {
     this.ollamaClient = new OllamaEmbeddingClient(config);
   }
 
   /**
-   * Obtiene el cliente activo según el proveedor
+   * Obtiene el cliente activo (siempre Ollama)
    */
   private getActiveClient() {
-    return this.provider === 'ollama' ? this.ollamaClient : this.textGenClient;
-  }
-
-  /**
-   * Cambia el proveedor de embeddings
-   */
-  setProvider(provider: EmbeddingProvider, config?: any): void {
-    this.provider = provider;
-
-    if (config) {
-      if (provider === 'textgen') {
-        this.textGenClient.updateConfig(config);
-      } else {
-        this.ollamaClient.updateConfig(config);
-      }
-    }
-  }
-
-  /**
-   * Obtiene el proveedor actual
-   */
-  getProvider(): EmbeddingProvider {
-    return this.provider;
+    return this.ollamaClient;
   }
 
   /**
@@ -259,7 +230,7 @@ export class EmbeddingClient {
   }
 
   /**
-   * Actualiza un embedding existente
+   * Actualiza un embedding existente (LanceDB: elimina y recrea)
    */
   async updateEmbedding(
     id: string,
@@ -267,26 +238,29 @@ export class EmbeddingClient {
     metadata?: Record<string, any>
   ): Promise<void> {
     try {
-      // 1. Generar nuevo vector
+      // 1. Eliminar embedding existente
+      await this.db.deleteEmbedding(id);
+
+      // 2. Obtener embedding eliminado para preservar metadata
+      const oldEmbedding = await this.db.getEmbeddingById(id);
+      if (!oldEmbedding) {
+        throw new Error(`Embedding ${id} no encontrado`);
+      }
+
+      // 3. Generar nuevo vector
       const vector = await this.getActiveClient().embedText(content);
 
-      // 2. Actualizar en la base de datos
-      const client = this.db.getPool().connect();
-
-      try {
-        await client.query(
-          `UPDATE embeddings
-           SET content = $1,
-               vector = $2,
-               metadata = $3,
-               updated_at = NOW()
-           WHERE id = $4`,
-          [content, `[${vector.join(',')}]`, JSON.stringify(metadata || {}), id]
-        );
-        console.log(`✅ Embedding actualizado: ${id}`);
-      } finally {
-        client.release();
-      }
+      // 4. Insertar nuevo embedding
+      await this.db.insertEmbedding({
+        content,
+        vector,
+        metadata: metadata || oldEmbedding.metadata,
+        namespace: oldEmbedding.namespace,
+        source_type: oldEmbedding.source_type,
+        source_id: oldEmbedding.source_id,
+        model_name: oldEmbedding.model_name
+      });
+      console.log(`✅ Embedding actualizado: ${id}`);
     } catch (error) {
       console.error('Error al actualizar embedding:', error);
       throw error;
@@ -361,20 +335,18 @@ export class EmbeddingClient {
   // ========== Métodos de Utilidad ==========
 
   /**
-   * Verifica conexiones
+   * Verifica conexiones (DB y Ollama)
    */
   async checkConnections(): Promise<{
     db: boolean;
-    textGen: boolean;
     ollama: boolean;
   }> {
-    const [db, textGen, ollama] = await Promise.all([
-      EmbeddingsDB.checkConnection(),
-      this.textGenClient.checkConnection(),
+    const [db, ollama] = await Promise.all([
+      LanceDBWrapper.checkConnection(),
       this.ollamaClient.checkConnection()
     ]);
 
-    return { db, textGen, ollama };
+    return { db, ollama };
   }
 
   /**
@@ -388,18 +360,20 @@ export class EmbeddingClient {
    * Cierra todas las conexiones
    */
   async close(): Promise<void> {
-    await EmbeddingsDB.close();
+    await LanceDBWrapper.close();
   }
 }
 
 // Exportar instancia singleton
 let embeddingClientInstance: EmbeddingClient | null = null;
 
-export function getEmbeddingClient(provider?: EmbeddingProvider, config?: any): EmbeddingClient {
+export function getEmbeddingClient(config?: any): EmbeddingClient {
   if (!embeddingClientInstance) {
-    embeddingClientInstance = new EmbeddingClient(provider || 'textgen', config);
-  } else if (provider) {
-    embeddingClientInstance.setProvider(provider, config);
+    embeddingClientInstance = new EmbeddingClient(config);
+  } else if (config) {
+    // La configuración de Ollama se puede actualizar recreando el cliente
+    // Por ahora, mantenemos la instancia existente
+    console.log('⚠️  Actualizando configuración de Ollama...');
   }
 
   return embeddingClientInstance;

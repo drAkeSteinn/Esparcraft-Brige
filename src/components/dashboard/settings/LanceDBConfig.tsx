@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Database, Save, TestTube, RefreshCw, Eye, EyeOff } from 'lucide-react';
+import { Database, Save, TestTube, RefreshCw, FolderOpen, HardDrive } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -9,38 +9,32 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { toast } from '@/hooks/use-toast';
 
-interface PostgresConfig {
-  host: string;
-  port: string;
-  database: string;
-  user: string;
-  password: string;
+interface LanceDBConfig {
+  storagePath: string;
+  autoCreate: boolean;
 }
 
-interface PostgresConfigProps {
+interface LanceDBConfigProps {
   onConfigSaved?: () => void;
 }
 
-const STORAGE_KEY = 'bridge_postgres_config';
+const STORAGE_KEY = 'bridge_lancedb_config';
 
-export default function PostgresConfig({ onConfigSaved }: PostgresConfigProps) {
-  const [config, setConfig] = useState<PostgresConfig>({
-    host: 'localhost',
-    port: '5432',
-    database: 'bridge_embeddings',
-    user: 'postgres',
-    password: ''
+export default function LanceDBConfig({ onConfigSaved }: LanceDBConfigProps) {
+  const [config, setConfig] = useState<LanceDBConfig>({
+    storagePath: './data/lancedb',
+    autoCreate: true
   });
   const [testing, setTesting] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<{
     status: 'unknown' | 'connected' | 'disconnected';
     message?: string;
+    dbStats?: any;
   }>({ status: 'unknown' });
 
+  // Cargar configuración guardada
   useEffect(() => {
-    // Cargar configuración guardada
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) {
       try {
@@ -51,7 +45,6 @@ export default function PostgresConfig({ onConfigSaved }: PostgresConfigProps) {
       }
     }
 
-    // Verificar conexión inicial
     testConnection(false);
   }, []);
 
@@ -60,20 +53,24 @@ export default function PostgresConfig({ onConfigSaved }: PostgresConfigProps) {
     setConnectionStatus({ status: 'unknown' });
 
     try {
-      const response = await fetch('/api/settings/test-postgres', {
+      const response = await fetch('/api/settings/test-lancedb', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(config)
+        body: JSON.stringify({ storagePath: config.storagePath })
       });
 
       const data = await response.json();
 
       if (data.success && data.data.connected) {
-        setConnectionStatus({ status: 'connected', message: data.data.message });
+        setConnectionStatus({ 
+          status: 'connected', 
+          message: data.data.message,
+          dbStats: data.data.dbStats
+        });
         if (showToastMsg) {
           toast({
             title: 'Conexión Exitosa',
-            description: 'La conexión a PostgreSQL funciona correctamente'
+            description: 'LanceDB funciona correctamente'
           });
         }
       } else {
@@ -81,7 +78,7 @@ export default function PostgresConfig({ onConfigSaved }: PostgresConfigProps) {
         if (showToastMsg) {
           toast({
             title: 'Error de Conexión',
-            description: data.data?.message || 'No se pudo conectar a PostgreSQL',
+            description: data.data?.message || 'No se pudo conectar',
             variant: 'destructive'
           });
         }
@@ -108,7 +105,7 @@ export default function PostgresConfig({ onConfigSaved }: PostgresConfigProps) {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
 
       // Aplicar configuración en el servidor
-      const response = await fetch('/api/settings/apply-postgres', {
+      const response = await fetch('/api/settings/apply-lancedb', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(config)
@@ -119,14 +116,14 @@ export default function PostgresConfig({ onConfigSaved }: PostgresConfigProps) {
       if (data.success) {
         toast({
           title: 'Configuración Guardada',
-          description: 'La configuración de PostgreSQL se ha guardado y aplicado correctamente'
+          description: 'La configuración de LanceDB se ha guardado correctamente'
         });
 
         if (onConfigSaved) {
           onConfigSaved();
         }
       } else {
-        throw new Error(data.error || 'Error al aplicar configuración en el servidor');
+        throw new Error(data.error || 'Error al aplicar configuración');
       }
     } catch (error: any) {
       console.error('Error guardando configuración:', error);
@@ -141,12 +138,9 @@ export default function PostgresConfig({ onConfigSaved }: PostgresConfigProps) {
   };
 
   const handleReset = () => {
-    const defaultConfig: PostgresConfig = {
-      host: 'localhost',
-      port: '5432',
-      database: 'bridge_embeddings',
-      user: 'postgres',
-      password: ''
+    const defaultConfig: LanceDBConfig = {
+      storagePath: './data/lancedb',
+      autoCreate: true
     };
 
     setConfig(defaultConfig);
@@ -163,80 +157,83 @@ export default function PostgresConfig({ onConfigSaved }: PostgresConfigProps) {
         <CardTitle className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Database className="h-5 w-5" />
-            <span>PostgreSQL</span>
+            <span>LanceDB</span>
           </div>
           <Badge variant={connectionStatus.status === 'connected' ? 'default' : connectionStatus.status === 'disconnected' ? 'destructive' : 'outline'}>
-            {connectionStatus.status === 'connected' ? 'Conectado' : connectionStatus.status === 'disconnected' ? 'Desconectado' : 'Sin verificar'}
+            {connectionStatus.status === 'connected' ? 'Activo' : connectionStatus.status === 'disconnected' ? 'Error' : 'Sin verificar'}
           </Badge>
         </CardTitle>
         <CardDescription>
-          Configura la conexión a la base de datos PostgreSQL para embeddings
+          Base de datos vectorial para embeddings (almacenamiento local en archivos)
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="grid gap-4 md:grid-cols-2">
-          <div className="space-y-2">
-            <Label htmlFor="postgres-host">Host / IP</Label>
-            <Input
-              id="postgres-host"
-              placeholder="localhost"
-              value={config.host}
-              onChange={(e) => setConfig({ ...config, host: e.target.value })}
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="postgres-port">Puerto</Label>
-            <Input
-              id="postgres-port"
-              type="number"
-              placeholder="5432"
-              value={config.port}
-              onChange={(e) => setConfig({ ...config, port: e.target.value })}
-            />
-          </div>
-        </div>
-
         <div className="space-y-2">
-          <Label htmlFor="postgres-database">Nombre de Base de Datos</Label>
-          <Input
-            id="postgres-database"
-            placeholder="bridge_embeddings"
-            value={config.database}
-            onChange={(e) => setConfig({ ...config, database: e.target.value })}
-          />
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="postgres-user">Usuario</Label>
-          <Input
-            id="postgres-user"
-            placeholder="postgres"
-            value={config.user}
-            onChange={(e) => setConfig({ ...config, user: e.target.value })}
-          />
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="postgres-password">Contraseña</Label>
-          <div className="relative">
+          <Label htmlFor="storage-path">Ruta de Almacenamiento</Label>
+          <div className="flex gap-2">
             <Input
-              id="postgres-password"
-              type={showPassword ? 'text' : 'password'}
-              placeholder="•••••••••"
-              value={config.password}
-              onChange={(e) => setConfig({ ...config, password: e.target.value })}
-              className="pr-10"
+              id="storage-path"
+              placeholder="./data/lancedb"
+              value={config.storagePath}
+              onChange={(e) => setConfig({ ...config, storagePath: e.target.value })}
+              className="flex-1"
             />
-            <button
-              type="button"
-              onClick={() => setShowPassword(!showPassword)}
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-            >
-              {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-            </button>
+            <Button variant="outline" size="icon" onClick={() => setConfig({ ...config, storagePath: './data/lancedb' })}>
+              <FolderOpen className="h-4 w-4" />
+            </Button>
           </div>
+          <p className="text-xs text-muted-foreground">
+            Directorio donde se guardarán los datos de LanceDB (.lancedb)
+          </p>
         </div>
+
+        <div className="flex items-center justify-between">
+          <div className="space-y-0.5">
+            <Label>Crear directorio automáticamente</Label>
+            <p className="text-xs text-muted-foreground">
+              Crea el directorio si no existe
+            </p>
+          </div>
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => setConfig({ ...config, autoCreate: !config.autoCreate })}
+          >
+            <HardDrive className={`h-4 w-4 ${config.autoCreate ? 'text-green-600' : 'text-muted-foreground'}`} />
+          </Button>
+        </div>
+
+        {connectionStatus.dbStats && (
+          <div className="bg-muted p-4 rounded-lg space-y-2">
+            <p className="text-sm font-medium flex items-center gap-2">
+              <Database className="h-4 w-4" />
+              Estadísticas de LanceDB:
+            </p>
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              <div>
+                <span className="text-muted-foreground">Total Embeddings:</span>
+                <span className="ml-2 font-semibold">{connectionStatus.dbStats.totalEmbeddings || 0}</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Namespaces:</span>
+                <span className="ml-2 font-semibold">{connectionStatus.dbStats.totalNamespaces || 0}</span>
+              </div>
+            </div>
+            {Object.keys(connectionStatus.dbStats.embeddingsByNamespace || {}).length > 0 && (
+              <div className="mt-2 pt-2 border-t">
+                <p className="font-medium mb-1">Embeddings por Namespace:</p>
+                <div className="space-y-1">
+                  {Object.entries(connectionStatus.dbStats.embeddingsByNamespace || {}).map(([ns, count]) => (
+                    <div key={ns} className="flex justify-between">
+                      <span className="text-muted-foreground">{ns}</span>
+                      <span className="font-semibold">{count}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         {connectionStatus.message && (
           <div className={`p-3 rounded-lg ${
@@ -263,11 +260,10 @@ export default function PostgresConfig({ onConfigSaved }: PostgresConfigProps) {
             ) : (
               <>
                 <TestTube className="h-4 w-4 mr-2" />
-                Probar Conexión
+                Verificar Conexión
               </>
             )}
           </Button>
-
           <Button
             onClick={saveConfig}
             disabled={saving}
@@ -285,7 +281,6 @@ export default function PostgresConfig({ onConfigSaved }: PostgresConfigProps) {
               </>
             )}
           </Button>
-
           <Button
             onClick={handleReset}
             variant="ghost"
@@ -295,12 +290,16 @@ export default function PostgresConfig({ onConfigSaved }: PostgresConfigProps) {
         </div>
 
         <div className="bg-muted p-4 rounded-lg space-y-2">
-          <p className="text-sm font-medium">Instrucciones:</p>
+          <p className="text-sm font-medium flex items-center gap-2">
+            <Database className="h-4 w-4" />
+            Ventajas de LanceDB:
+          </p>
           <ul className="text-xs text-muted-foreground space-y-1 list-disc list-inside">
-            <li>Asegúrate de que PostgreSQL tenga instalada la extensión pgvector</li>
-            <li>El usuario debe tener permisos para crear tablas</li>
-            <li>Ejecuta el script <code className="bg-background px-1 py-0.5 rounded">db/embeddings-schema.sql</code> para crear las tablas</li>
-            <li>Usa "localhost" si la base de datos está en la misma máquina</li>
+            <li><strong>Servidorless</strong> - Se ejecuta localmente sin servidor externo</li>
+            <li><strong>Alto rendimiento</strong> - Optimizado para búsquedas vectoriales</li>
+            <li><strong>Portabilidad</strong> - Datos en archivos locales (fácil backup)</li>
+            <li><strong>Sin dependencias</strong> - No requiere PostgreSQL ni pgvector</li>
+            <li><strong>Fácil configuración</strong> - Solo especifica ruta de almacenamiento</li>
           </ul>
         </div>
       </CardContent>

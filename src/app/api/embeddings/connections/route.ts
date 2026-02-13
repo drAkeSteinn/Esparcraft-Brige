@@ -9,14 +9,12 @@ export async function GET() {
   try {
     const embeddingClient = getEmbeddingClient();
     const connections = await embeddingClient.checkConnections();
-    const provider = embeddingClient.getProvider();
 
     return NextResponse.json({
       success: true,
       data: {
-        provider,
+        provider: 'ollama', // Siempre es Ollama ahora
         db: connections.db,
-        textGen: connections.textGen,
         ollama: connections.ollama,
         timestamp: new Date().toISOString()
       }

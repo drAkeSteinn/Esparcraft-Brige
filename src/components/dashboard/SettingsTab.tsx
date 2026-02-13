@@ -6,7 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 
 // Subcomponentes
-import PostgresConfig from './settings/PostgresConfig';
+import LanceDBConfig from './settings/LanceDBConfig';
 import EmbeddingsConfig from './settings/EmbeddingsConfig';
 import LLMConfig from './settings/LLMConfig';
 import ConnectionStatus from './settings/ConnectionStatus';
@@ -45,11 +45,11 @@ export default function SettingsTab() {
       {/* Connection Status Overview */}
       <ConnectionStatus key={`status-${refreshKey}`} />
       
-      <Tabs defaultValue="postgres" className="w-full">
+      <Tabs defaultValue="lancedb" className="w-full">
         <TabsList className="grid w-full grid-cols-2 md:grid-cols-4">
-          <TabsTrigger value="postgres" className="flex items-center gap-2">
+          <TabsTrigger value="lancedb" className="flex items-center gap-2">
             <Database className="h-4 w-4" />
-            <span>PostgreSQL</span>
+            <span>LanceDB</span>
           </TabsTrigger>
           <TabsTrigger value="embeddings" className="flex items-center gap-2">
             <Brain className="h-4 w-4" />
@@ -65,8 +65,8 @@ export default function SettingsTab() {
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="postgres" className="mt-6">
-          <PostgresConfig key={`postgres-${refreshKey}`} onConfigSaved={handleRefresh} />
+        <TabsContent value="lancedb" className="mt-6">
+          <LanceDBConfig key={`lancedb-${refreshKey}`} onConfigSaved={handleRefresh} />
         </TabsContent>
 
         <TabsContent value="embeddings" className="mt-6">

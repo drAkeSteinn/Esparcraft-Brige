@@ -7,12 +7,11 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 
 interface ConnectionStatus {
-  postgres?: boolean;
   embeddings?: {
-    provider?: 'textgen' | 'ollama';
+    provider?: 'ollama';
     db: boolean;
-    textGen: boolean;
     ollama: boolean;
+    timestamp: string;
   };
   llm?: boolean;
 }
@@ -72,11 +71,9 @@ export default function ConnectionStatus() {
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-semibold">Estado de Conexiones</h3>
           <div className="flex items-center gap-4">
-            {connections?.embeddings?.provider && (
-              <Badge variant="outline">
-                Embeddings: {connections.embeddings.provider === 'ollama' ? 'Ollama' : 'Text Gen WebUI'}
-              </Badge>
-            )}
+            <Badge variant="outline">
+              Proveedor de Embeddings: Ollama
+            </Badge>
             {lastChecked && (
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Clock className="h-3 w-3" />
@@ -101,8 +98,8 @@ export default function ConnectionStatus() {
           </div>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-3">
-          {/* PostgreSQL Embeddings */}
+        <div className="grid gap-4 md:grid-cols-2">
+          {/* LanceDB Embeddings */}
           <div className="flex items-start gap-3 p-4 bg-muted rounded-lg">
             <div className="flex-shrink-0 mt-1">
               {loading ? (
@@ -114,41 +111,33 @@ export default function ConnectionStatus() {
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 mb-1">
                 <Database className="h-4 w-4 text-muted-foreground" />
-                <span className="font-medium text-sm">PostgreSQL</span>
+                <span className="font-medium text-sm">LanceDB</span>
               </div>
               <p className="text-xs text-muted-foreground mb-2">
-                Base de datos de embeddings
+                Base de datos vectorial de embeddings
               </p>
               {getStatusBadge(connections?.embeddings?.db)}
             </div>
           </div>
 
-          {/* Text Generation WebUI / Ollama */}
+          {/* Ollama */}
           <div className="flex items-start gap-3 p-4 bg-muted rounded-lg">
             <div className="flex-shrink-0 mt-1">
               {loading ? (
                 <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
               ) : (
-                getStatusIcon(connections?.embeddings?.provider === 'ollama'
-                  ? connections?.embeddings?.ollama
-                  : connections?.embeddings?.textGen)
+                getStatusIcon(connections?.embeddings?.ollama)
               )}
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 mb-1">
                 <Brain className="h-4 w-4 text-muted-foreground" />
-                <span className="font-medium text-sm">
-                  {connections?.embeddings?.provider === 'ollama' ? 'Ollama' : 'Text Gen WebUI'}
-                </span>
+                <span className="font-medium text-sm">Ollama</span>
               </div>
               <p className="text-xs text-muted-foreground mb-2">
-                {connections?.embeddings?.provider === 'ollama'
-                  ? 'API de embeddings Ollama'
-                  : 'API de embeddings'}
+                API de embeddings Ollama
               </p>
-              {getStatusBadge(connections?.embeddings?.provider === 'ollama'
-                ? connections?.embeddings?.ollama
-                : connections?.embeddings?.textGen)}
+              {getStatusBadge(connections?.embeddings?.ollama)}
             </div>
           </div>
 
@@ -180,12 +169,11 @@ export default function ConnectionStatus() {
             <p className="text-sm text-green-800 dark:text-green-200 flex items-center gap-2">
               <CheckCircle className="h-4 w-4" />
               {(() => {
-                const provider = connections.embeddings?.provider || 'textgen';
-                const embeddingProvider = provider === 'ollama' ? connections.embeddings?.ollama : connections.embeddings?.textGen;
                 const db = connections.embeddings?.db;
+                const ollama = connections.embeddings?.ollama;
                 const llm = connections.llm;
 
-                if (db && embeddingProvider && llm) {
+                if (db && ollama && llm) {
                   return 'Todos los servicios están conectados y funcionando correctamente';
                 } else {
                   return 'Algunos servicios no están disponibles. Revisa la configuración.';

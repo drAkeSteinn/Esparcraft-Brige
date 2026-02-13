@@ -1,0 +1,17 @@
+{
+  "version": "1.0",
+  "backupId": "backup-2026-02-10T00-50-38-028Z",
+  "backupDate": "2026-02-10T00:50:38.028Z",
+  "entityType": "place-types",
+  "source": "manual",
+  "itemCount": 1,
+  "checksum": "81325cb769b4cb3ed7e8eb2276dfb37b161264333405ed29884496a878a89837",
+  "items": [
+    {
+      "id": "PLACE_TYPE_1770684176911",
+      "name": "Mesa",
+      "icon": "Table",
+      "color": "#777911"
+    }
+  ]
+}

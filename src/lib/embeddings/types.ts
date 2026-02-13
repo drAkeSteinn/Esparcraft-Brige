@@ -131,13 +131,12 @@ export class EmbeddingError extends Error {
 }
 
 /**
- * Configuración de embeddings
+ * Configuración de embeddings (Ollama único)
  */
 export interface EmbeddingConfig {
-  textGenWebUIUrl: string;
+  ollamaUrl: string;
   model: string;
   dimension: number;
-  batchSize: number;
   timeout: number;
   retryCount: number;
   retryDelay: number;

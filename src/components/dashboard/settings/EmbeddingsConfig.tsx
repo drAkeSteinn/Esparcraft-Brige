@@ -1,24 +1,20 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Brain, Save, TestTube, RefreshCw, Cpu, Server } from 'lucide-react';
+import { Brain, Save, TestTube, RefreshCw, Database, Cpu, ChevronDown } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Badge } from '@/components/ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectSeparator } from '@/components/ui/select';
 import { Slider } from '@/components/ui/slider';
+import { Badge } from '@/components/ui/badge';
 import { toast } from '@/hooks/use-toast';
 
-type EmbeddingProvider = 'textgen' | 'ollama';
-
-interface TextGenConfig {
-  textGenWebUIUrl: string;
-  embeddingModel: string;
-  embeddingDimension: string;
-  batchSize: string;
-  timeout: string;
+interface OllamaModel {
+  name: string;
+  size: number;
+  modified_at: string;
 }
 
 interface OllamaConfig {
@@ -28,54 +24,26 @@ interface OllamaConfig {
   timeout: string;
 }
 
-interface EmbeddingsConfig {
-  provider: EmbeddingProvider;
-  textGen?: TextGenConfig;
-  ollama?: OllamaConfig;
-}
-
 interface EmbeddingsConfigProps {
   onConfigSaved?: () => void;
 }
 
 const STORAGE_KEY = 'bridge_embeddings_config';
 
-const TEXTGEN_MODELS = [
-  { name: 'all-MiniLM-L6-v2', dimension: '384' },
-  { name: 'all-mpnet-base-v2', dimension: '768' },
-  { name: 'text-embedding-ada-002', dimension: '1536' },
-  { name: 'text-embedding-3-small', dimension: '1536' },
-  { name: 'text-embedding-3-large', dimension: '3072' },
-];
-
-const OLLAMA_MODELS = [
-  { name: 'nomic-embed-text', dimension: '768' },
-  { name: 'mxbai-embed-large', dimension: '1024' },
-  { name: 'llama2', dimension: '768' },
-  { name: 'llama3', dimension: '768' },
-];
+const DEFAULT_OLLAMA_MODEL = 'nomic-embed-text';
+const OLLAMA_DEFAULT_CONFIG: OllamaConfig = {
+  ollamaUrl: 'http://localhost:11434',
+  ollamaModel: DEFAULT_OLLAMA_MODEL,
+  embeddingDimension: '768',
+  timeout: '30'
+};
 
 export default function EmbeddingsConfig({ onConfigSaved }: EmbeddingsConfigProps) {
-  const [config, setConfig] = useState<EmbeddingsConfig>({
-    provider: 'textgen',
-    textGen: {
-      textGenWebUIUrl: 'http://localhost:5000',
-      embeddingModel: 'all-MiniLM-L6-v2',
-      embeddingDimension: '384',
-      batchSize: '10',
-      timeout: '30'
-    },
-    ollama: {
-      ollamaUrl: 'http://localhost:11434',
-      ollamaModel: 'nomic-embed-text',
-      embeddingDimension: '768',
-      timeout: '30'
-    }
-  });
-
-  const [availableOllamaModels, setAvailableOllamaModels] = useState<any[]>([]);
-  const [loadingModels, setLoadingModels] = useState(false);
+  const [config, setConfig] = useState<OllamaConfig>({ ...OLLAMA_DEFAULT_CONFIG });
+  
+  const [availableOllamaModels, setAvailableOllamaModels] = useState<OllamaModel[]>([]);
   const [isLoadingModels, setIsLoadingModels] = useState(false);
+  const [loadingModels, setLoadingModels] = useState(false);
   const [testing, setTesting] = useState(false);
   const [saving, setSaving] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<{
@@ -83,100 +51,42 @@ export default function EmbeddingsConfig({ onConfigSaved }: EmbeddingsConfigProp
     message?: string;
   }>({ status: 'unknown' });
 
-  const isOllama = config.provider === 'ollama';
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
-  // Cargar configuración guardada
+  // Cargar modelos automáticamente cuando se configura Ollama
   useEffect(() => {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    console.log('Cargando configuración desde localStorage:', saved ? 'Encontrada' : 'No encontrada');
-
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        console.log('Configuración parseada:', parsed);
-
-        setConfig(prev => ({
-          ...prev,
-          ...parsed,
-          textGen: parsed.textGen || prev.textGen,
-          ollama: parsed.ollama || prev.ollama
-        }));
-
-        // Si el proveedor guardado es Ollama, cargar los modelos automáticamente
-        if (parsed.provider === 'ollama') {
-          console.log('Proveedor guardado es Ollama, se cargarán modelos después de actualizar estado');
-        }
-      } catch (error) {
-        console.error('Error loading config:', error);
-      }
-    }
-
-    testConnection(false);
-  }, []);
-
-  // Cargar modelos automáticamente cuando se cambia a Ollama
-  useEffect(() => {
-    console.log('useEffect: isOllama=', isOllama, 'isLoadingModels=', isLoadingModels);
-
-    // Solo cargar cuando:
-    // 1. El proveedor es Ollama
-    // 2. Ya no está cargando actualmente
-    // 3. Hay una URL configurada
-    // 4. Aún no hemos cargado modelos (availableOllamaModels está vacío)
-    if (isOllama && !isLoadingModels && config.ollama?.ollamaUrl && availableOllamaModels.length === 0) {
-      console.log('useEffect: Iniciando carga automática de modelos');
+    if (config.ollamaUrl && availableOllamaModels.length === 0) {
+      console.log('🔄 Cargando modelos de Ollama automáticamente...');
       loadOllamaModels();
     }
-  }, [isOllama, config.ollama?.ollamaUrl]);
+  }, [config.ollamaUrl]);
 
   const loadOllamaModels = async () => {
     console.log('=== Iniciando carga de modelos de Ollama ===');
-    console.log('isOllama:', isOllama);
-    console.log('isLoadingModels:', isLoadingModels);
-    console.log('Ollama URL:', config.ollama?.ollamaUrl);
-
-    if (!isOllama) {
-      console.log('loadOllamaModels: No es Ollama, ignorando');
-      return;
-    }
-
-    if (isLoadingModels) {
-      console.log('loadOllamaModels: Ya está cargando, ignorando');
-      return;
-    }
-
     setIsLoadingModels(true);
-    setLoadingModels(true);
 
     try {
-      console.log('Haciendo petición a /api/settings/ollama-models con:', {
-        ollamaUrl: config.ollama!.ollamaUrl
-      });
-
       const response = await fetch('/api/settings/ollama-models', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ollamaUrl: config.ollama!.ollamaUrl })
+        body: JSON.stringify({ ollamaUrl: config.ollamaUrl })
       });
 
-      console.log('Respuesta recibida, status:', response.status);
       const data = await response.json();
-      console.log('Datos:', JSON.stringify(data, null, 2));
 
-      if (data.success && data.data.embeddingModels) {
+      if (data.success && data.data.embeddingModels && data.data.embeddingModels.length > 0) {
         const models = data.data.embeddingModels;
-        console.log(`✅ Modelos cargados exitosamente: ${models.length} modelos`);
+        console.log(`✅ Modelos cargados exitosamente: ${models.length}`);
         console.log('Lista de modelos:', models.map((m: any) => m.name));
         setAvailableOllamaModels(models);
 
         toast({
           title: 'Modelos de Ollama',
           description: `Se detectaron ${models.length} modelo(s) disponible(s)`,
-          variant: 'default'
+          variant: models.length > 0 ? 'default' : 'destructive'
         });
       } else {
         console.log('❌ No se encontraron modelos de embeddings');
-        console.log('Todos los modelos disponibles:', data.data?.allModels || []);
         setAvailableOllamaModels([]);
 
         toast({
@@ -195,9 +105,8 @@ export default function EmbeddingsConfig({ onConfigSaved }: EmbeddingsConfigProp
         variant: 'destructive'
       });
     } finally {
-      console.log('=== Finalizando carga de modelos de Ollama ===');
       setIsLoadingModels(false);
-      setLoadingModels(false);
+      console.log('=== Finalizando carga de modelos de Ollama ===');
     }
   };
 
@@ -206,21 +115,13 @@ export default function EmbeddingsConfig({ onConfigSaved }: EmbeddingsConfigProp
     setConnectionStatus({ status: 'unknown' });
 
     try {
-      const endpoint = isOllama ? '/api/settings/test-ollama' : '/api/settings/test-embeddings';
-      const payload = isOllama
-        ? {
-            ollamaUrl: config.ollama!.ollamaUrl,
-            ollamaModel: config.ollama!.ollamaModel
-          }
-        : {
-            textGenWebUIUrl: config.textGen!.textGenWebUIUrl,
-            embeddingModel: config.textGen!.embeddingModel
-          };
-
-      const response = await fetch(endpoint, {
+      const response = await fetch('/api/settings/test-ollama', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+        body: JSON.stringify({
+          ollamaUrl: config.ollamaUrl,
+          ollamaModel: config.ollamaModel
+        })
       });
 
       const data = await response.json();
@@ -228,14 +129,13 @@ export default function EmbeddingsConfig({ onConfigSaved }: EmbeddingsConfigProp
       if (data.success && data.data.connected) {
         setConnectionStatus({ status: 'connected', message: data.data.message });
         if (showToastMsg) {
-          const providerName = isOllama ? 'Ollama' : 'Text Generation WebUI';
           toast({
             title: 'Conexión Exitosa',
-            description: `La conexión a ${providerName} funciona correctamente`
+            description: 'La conexión a Ollama funciona correctamente'
           });
         }
 
-        if (isOllama && data.data.availableModels) {
+        if (data.data.availableModels) {
           setAvailableOllamaModels(data.data.availableModels);
         }
       } else {
@@ -286,78 +186,60 @@ export default function EmbeddingsConfig({ onConfigSaved }: EmbeddingsConfigProp
     }
   };
 
-  const handleTextGenModelChange = (modelName: string) => {
-    const selected = TEXTGEN_MODELS.find(m => m.name === modelName);
-    if (selected && config.textGen) {
-      setConfig({
-        ...config,
-        textGen: {
-          ...config.textGen,
-          embeddingModel: selected.name,
-          embeddingDimension: selected.dimension.toString()
-        }
-      });
-    }
-  };
-
   const handleOllamaModelChange = (modelName: string) => {
-    if (config.ollama) {
-      let dimension = '768';
-      if (modelName.includes('mxbai-embed-large')) {
-        dimension = '1024';
-      } else if (modelName.includes('nomic')) {
-        dimension = '768';
-      }
+    let dimension = '768';
+    const selectedModel = availableOllamaModels.find(m => m.name === modelName);
 
-      setConfig({
-        ...config,
-        ollama: {
-          ...config.ollama,
-          ollamaModel: modelName,
-          embeddingDimension: dimension
-        }
-      });
+    if (selectedModel && selectedModel.size && selectedModel.size !== 0) {
+      dimension = Math.round(selectedModel.size / 1024 / 1024 * 1024).toString();
     }
+
+    setConfig(prev => ({ ...prev, ollamaModel: modelName, embeddingDimension: dimension }));
   };
 
   const handleReset = () => {
-    const defaultConfig: EmbeddingsConfig = {
-      provider: 'textgen',
-      textGen: {
-        textGenWebUIUrl: 'http://localhost:5000',
-        embeddingModel: 'all-MiniLM-L6-v2',
-        embeddingDimension: '384',
-        batchSize: '10',
-        timeout: '30'
-      },
-      ollama: {
-        ollamaUrl: 'http://localhost:11434',
-        ollamaModel: 'nomic-embed-text',
-        embeddingDimension: '768',
-        timeout: '30'
-      }
+    const defaultConfig: OllamaConfig = {
+      ollamaUrl: 'http://localhost:11434',
+      ollamaModel: DEFAULT_OLLAMA_MODEL,
+      embeddingDimension: '768',
+      timeout: '30'
     };
 
     setConfig(defaultConfig);
     setConnectionStatus({ status: 'unknown' });
+    setAvailableOllamaModels([]);
+
     toast({
       title: 'Configuración Restablecida',
       description: 'Se han restablecido los valores por defecto'
     });
   };
 
-  const updateTextGenConfig = (updates: Partial<TextGenConfig>) => {
-    setConfig({
-      ...config,
-      textGen: { ...config.textGen!, ...updates }
-    });
+  const updateOllamaUrl = (url: string) => {
+    setConfig(prev => ({ ...prev, ollamaUrl: url }));
   };
 
-  const updateOllamaConfig = (updates: Partial<OllamaConfig>) => {
-    setConfig({
-      ...config,
-      ollama: { ...config.ollama!, ...updates }
-    });
+
+
+  // Helper function to format time ago
+  const getTimeAgo = (dateString: string): string => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+
+    if (diffDays > 0) {
+      return `${diffDays} día(s) atrás`;
+    } else if (diffHours > 0) {
+      return `${diffHours} hora(s) atrás`;
+    } else if (diffMins > 0) {
+      return `${diffMins} minuto(s) atrás`;
+    } else {
+      return 'ahora mismo';
+    }
   };
 
   return (
@@ -365,244 +247,180 @@ export default function EmbeddingsConfig({ onConfigSaved }: EmbeddingsConfigProp
       <CardHeader>
         <CardTitle className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Brain className="h-5 w-5" />
-            <span>{isOllama ? 'Ollama' : 'Text Generation WebUI'}</span>
+            <Cpu className="h-5 w-5" />
+            <span>Ollama</span>
           </div>
           <Badge variant={connectionStatus.status === 'connected' ? 'default' : connectionStatus.status === 'disconnected' ? 'destructive' : 'outline'}>
             {connectionStatus.status === 'connected' ? 'Conectado' : connectionStatus.status === 'disconnected' ? 'Desconectado' : 'Sin verificar'}
           </Badge>
         </CardTitle>
         <CardDescription>
-          {isOllama
-            ? 'Configura la API de embeddings de Ollama'
-            : 'Configura la API de embeddings de Text Generation WebUI'}
+          Configura la API de embeddings de Ollama
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
-        <div className="space-y-2">
-          <Label>Proveedor de Embeddings</Label>
-          <Select
-            value={config.provider}
-            onValueChange={(value) => setConfig({ ...config, provider: value as EmbeddingProvider })}
-          >
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="textgen">
-                <div className="flex items-center gap-2">
-                  <Server className="h-4 w-4" />
-                  <span>Text Generation WebUI</span>
-                </div>
-              </SelectItem>
-              <SelectItem value="ollama">
-                <div className="flex items-center gap-2">
-                  <Cpu className="h-4 w-4" />
-                  <span>Ollama</span>
-                </div>
-              </SelectItem>
-            </SelectContent>
-          </Select>
+        <div className="space-y-4">
+          <Label htmlFor="ollama-url">URL de Ollama</Label>
+          <Input
+            id="ollama-url"
+            placeholder="http://localhost:11434"
+            value={config.ollamaUrl}
+            onChange={(e) => updateOllamaUrl(e.target.value)}
+          />
+          <p className="text-xs text-muted-foreground">
+            URL del servidor de Ollama (generalmente http://localhost:11434)
+          </p>
         </div>
 
-        {!isOllama && (
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="embeddings-url">URL de Text Generation WebUI</Label>
-              <Input
-                id="embeddings-url"
-                placeholder="http://localhost:5000"
-                value={config.textGen!.textGenWebUIUrl}
-                onChange={(e) => updateTextGenConfig({ textGenWebUIUrl: e.target.value })}
-              />
-              <p className="text-xs text-muted-foreground">
-                Asegúrate de que la API esté activada en Text Generation WebUI
-              </p>
-            </div>
-
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="embedding-model">Modelo de Embeddings</Label>
-                <Select
-                  value={config.textGen!.embeddingModel}
-                  onValueChange={handleTextGenModelChange}
-                >
-                  <SelectTrigger id="embedding-model">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {TEXTGEN_MODELS.map((model) => (
-                      <SelectItem key={model.name} value={model.name}>
-                        {model.name}
-                        <span className="text-muted-foreground ml-2">
-                          ({model.dimension} dims)
+        <div className="space-y-4">
+          <Label htmlFor="ollama-model">Modelo de Embeddings</Label>
+          <div className="relative">
+            <Select
+              value={config.ollamaModel}
+              onValueChange={handleOllamaModelChange}
+              onOpenChange={(open) => {
+                if (open && availableOllamaModels.length === 0) {
+                  console.log('Dropdown abierto, pero no modelos cargados aún');
+                }
+                setIsDropdownOpen(open);
+              }}
+            >
+              <SelectTrigger id="ollama-model-trigger">
+                <SelectValue placeholder="Selecciona un modelo" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="nomic-embed-text">
+                  <div className="flex items-center gap-2">
+                    <span>nomic-embed-text</span>
+                    <span className="text-xs text-muted-foreground">({DEFAULT_OLLAMA_MODEL} por defecto)</span>
+                  </div>
+                </SelectItem>
+                {availableOllamaModels.length > 0 && (
+                  <SelectItem value={availableOllamaModels[0].name}>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium">{availableOllamaModels[0].name}</span>
+                        <span className="text-xs text-muted-foreground">
+                          {(availableOllamaModels[0].size && availableOllamaModels[0].size !== 0) &&
+                            `${(availableOllamaModels[0].size / 1024 / 1024).toFixed(2)} GB`
+                          }
                         </span>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="embedding-dimension">Dimensiones</Label>
-                <Input
-                  id="embedding-dimension"
-                  type="number"
-                  value={config.textGen!.embeddingDimension}
-                  onChange={(e) => updateTextGenConfig({ embeddingDimension: e.target.value })}
-                />
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="batch-size">Tamaño de Batch: {config.textGen!.batchSize} documentos</Label>
-              <Slider
-                id="batch-size"
-                min={1}
-                max={50}
-                step={1}
-                value={[parseInt(config.textGen!.batchSize)]}
-                onValueChange={([value]) => updateTextGenConfig({ batchSize: value.toString() })}
-                className="mt-2"
-              />
-              <p className="text-xs text-muted-foreground">
-                Cantidad de embeddings a procesar en cada lote
-              </p>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="timeout">Timeout: {config.textGen!.timeout} segundos</Label>
-              <Slider
-                id="timeout"
-                min={5}
-                max={120}
-                step={5}
-                value={[parseInt(config.textGen!.timeout)]}
-                onValueChange={([value]) => updateTextGenConfig({ timeout: value.toString() })}
-                className="mt-2"
-              />
-            </div>
-          </div>
-        )}
-
-        {isOllama && (
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="ollama-url">URL de Ollama</Label>
-              <Input
-                id="ollama-url"
-                placeholder="http://localhost:11434"
-                value={config.ollama!.ollamaUrl}
-                onChange={(e) => updateOllamaConfig({ ollamaUrl: e.target.value })}
-              />
-              <p className="text-xs text-muted-foreground">
-                Puerto predeterminado de Ollama: 11434
-              </p>
-            </div>
-
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="ollama-model">Modelo de Embeddings</Label>
-                  {!loadingModels && (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="h-6 px-2 text-xs"
-                      onClick={loadOllamaModels}
-                    >
-                      <RefreshCw className="h-3 w-3 mr-1" />
-                      Recargar
-                    </Button>
-                  )}
-                </div>
-                <Select
-                  value={config.ollama!.ollamaModel}
-                  onValueChange={handleOllamaModelChange}
-                >
-                  <SelectTrigger id="ollama-model">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {loadingModels ? (
-                      <div className="px-3 py-2 text-sm text-muted-foreground text-center">
-                        Cargando modelos de Ollama...
                       </div>
-                    ) : availableOllamaModels.length > 0 ? (
-                      <>
-                        <div className="px-2 py-1.5 text-xs text-muted-foreground font-semibold">
-                          Modelos Disponibles ({availableOllamaModels.length})
-                        </div>
-                        {availableOllamaModels.map((model) => (
-                          <SelectItem key={model.name} value={model.name}>
-                            {model.name}
-                          </SelectItem>
-                        ))}
-                      </>
-                    ) : (
-                      <>
-                        <div className="px-2 py-1.5 text-xs text-muted-foreground font-semibold border-b">
-                          Modelos Sugeridos
-                        </div>
-                        {OLLAMA_MODELS.map((model) => (
-                          <SelectItem key={model.name} value={model.name}>
-                            {model.name}
-                            <span className="text-muted-foreground ml-2">
-                              ({model.dimension} dims)
-                            </span>
-                          </SelectItem>
-                        ))}
-                        <div className="px-3 py-2 text-sm text-destructive text-center border-t mt-1">
-                          No se detectaron modelos en Ollama
-                        </div>
-                        <div className="px-3 py-2 text-xs text-muted-foreground text-center">
-                          Verifica que Ollama esté corriendo en <code className="bg-background px-1 rounded">{config.ollama!.ollamaUrl}</code>
-                          <br />
-                          Descarga modelos con: <code className="bg-background px-1 rounded">ollama pull nomic-embed-text</code>
-                        </div>
-                      </>
+                      <div className="flex items-center gap-1">
+                        {availableOllamaModels[0].modified_at && (
+                          <span className="text-xs text-muted-foreground">
+                            {getTimeAgo(availableOllamaModels[0].modified_at)}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </SelectItem>
+                )}
+                {availableOllamaModels.slice(1).map((model) => (
+                  <SelectItem key={model.name} value={model.name}>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium">{model.name}</span>
+                        <span className="text-xs text-muted-foreground">
+                          {(model.size && model.size !== 0) &&
+                            `${(model.size / 1024 / 1024).toFixed(2)} GB`
+                          }
+                        </span>
+                      </div>
+                      {model.modified_at && (
+                        <span className="text-xs text-muted-foreground">
+                          {getTimeAgo(model.modified_at)}
+                        </span>
+                      )}
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        {/* Botón para cargar modelos manualmente */}
+        <Button
+          variant="outline"
+          size="sm"
+          className="w-full"
+          onClick={loadOllamaModels}
+          disabled={isLoadingModels}
+        >
+          {isLoadingModels ? (
+            <>
+              <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+              Cargando modelos...
+            </>
+          ) : (
+            <>
+              <Database className="h-4 w-4 mr-2" />
+              Cargar Modelos
+            </>
+          )}
+        </Button>
+
+        {/* Lista de modelos disponibles */}
+        {availableOllamaModels.length > 0 && (
+          <div className="bg-muted p-4 rounded-lg space-y-2">
+            <div className="flex items-center gap-2 mb-2">
+              <Database className="h-4 w-4 text-muted-foreground" />
+              <span>Modelos disponibles en Ollama ({availableOllamaModels.length})</span>
+            </div>
+
+            <div className="max-h-64 overflow-y-auto space-y-2">
+              {availableOllamaModels.map((model, index) => (
+                <div key={model.name} className="text-sm space-y-1 flex items-start justify-between">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <Database className="h-4 w-4 text-muted-foreground" />
+                      <span className="font-medium">{model.name}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {model.size && model.size !== 0 && `${(model.size / 1024 / 1024).toFixed(2)} GB`}
+                      </span>
+                    </div>
+                    {model.modified_at && (
+                      <span className="text-xs text-muted-foreground">
+                        {getTimeAgo(model.modified_at)}
+                      </span>
                     )}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="ollama-dimension">Dimensiones</Label>
-                <Input
-                  id="ollama-dimension"
-                  type="number"
-                  value={config.ollama!.embeddingDimension}
-                  onChange={(e) => updateOllamaConfig({ embeddingDimension: e.target.value })}
-                />
-              </div>
+                  </div>
+                </div>
+              ))}
             </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="ollama-timeout">Timeout: {config.ollama!.timeout} segundos</Label>
-              <Slider
-                id="ollama-timeout"
-                min={5}
-                max={120}
-                step={5}
-                value={[parseInt(config.ollama!.timeout)]}
-                onValueChange={([value]) => updateOllamaConfig({ timeout: value.toString() })}
-                className="mt-2"
-              />
-            </div>
-
-            {isOllama && (
-              <div className="p-4 bg-muted rounded-lg">
-                <p className="text-sm font-medium mb-2">Modelos Recomendados para Embeddings:</p>
-                <ul className="text-xs text-muted-foreground space-y-1 list-disc list-inside">
-                  <li><strong>nomic-embed-text</strong> - 768 dimensiones (Recomendado)</li>
-                  <li><strong>mxbai-embed-large</strong> - 1024 dimensiones (Mayor precisión)</li>
-                  <li>Asegúrate de que el modelo esté descargado en Ollama antes de usarlo</li>
-                </ul>
-              </div>
-            )}
           </div>
         )}
+
+        <div className="space-y-4">
+          <Label htmlFor="embedding-dimension">Dimensiones del Embedding</Label>
+          <Input
+            id="embedding-dimension"
+            type="number"
+            placeholder="768"
+            value={config.embeddingDimension}
+            onChange={(e) => setConfig({ ...config, embeddingDimension: e.target.value })}
+          />
+          <p className="text-xs text-muted-foreground">
+            Dimensión del vector de embeddings (ej. 768 para nomic-embed-text)
+          </p>
+        </div>
+
+        <div className="space-y-4">
+          <Label htmlFor="timeout">Timeout: {config.timeout} segundos</Label>
+          <Slider
+            id="timeout"
+            min={5}
+            max={120}
+            step={5}
+            value={[parseInt(config.timeout)]}
+            onValueChange={([value]) => setConfig({ ...config, timeout: value.toString() })}
+            className="mt-2"
+          />
+          <p className="text-xs text-muted-foreground">
+            Tiempo máximo de espera para generar embeddings (ej. 30 segundos)
+          </p>
+        </div>
 
         {connectionStatus.message && (
           <div className={`p-3 rounded-lg ${
@@ -655,6 +473,7 @@ export default function EmbeddingsConfig({ onConfigSaved }: EmbeddingsConfigProp
           <Button
             onClick={handleReset}
             variant="ghost"
+            size="icon"
           >
             <RefreshCw className="h-4 w-4" />
           </Button>
@@ -662,23 +481,12 @@ export default function EmbeddingsConfig({ onConfigSaved }: EmbeddingsConfigProp
 
         <div className="bg-muted p-4 rounded-lg space-y-2">
           <p className="text-sm font-medium">Instrucciones:</p>
-          {isOllama ? (
-            <ul className="text-xs text-muted-foreground space-y-1 list-disc list-inside">
-              <li>Asegúrate de que Ollama esté ejecutándose (puerto 11434)</li>
-              <li>Descarga el modelo de embeddings: <code className="bg-background px-1 rounded">ollama pull nomic-embed-text</code></li>
-              <li>Usa "localhost" si Ollama está en la misma máquina</li>
-              <li>Las dimensiones deben coincidir con las del modelo seleccionado</li>
-              <li>Ollama procesa embeddings uno por uno (no tiene soporte de batch nativo)</li>
-            </ul>
-          ) : (
-            <ul className="text-xs text-muted-foreground space-y-1 list-disc list-inside">
-              <li>Asegúrate de que Text Generation WebUI esté ejecutándose</li>
-              <li>Activa la API de embeddings en la configuración</li>
-              <li>El modelo debe estar cargado en Text Generation WebUI</li>
-              <li>Usa "localhost" si Text Gen WebUI está en la misma máquina</li>
-              <li>Las dimensiones deben coincidir con las del modelo seleccionado</li>
-            </ul>
-          )}
+          <ul className="text-xs text-muted-foreground space-y-1 list-disc list-inside">
+            <li>Asegúrate de que Ollama esté corriendo: <code className="bg-background px-1 py-0.5 rounded text-xs">ollama serve</code></li>
+            <li>Descarga un modelo de embeddings si es necesario: <code className="bg-background px-1 py-0.5 rounded text-xs">ollama pull nomic-embed-text</code></li>
+            <li>Ollama corre por defecto en el puerto 11434</li>
+            <li>Usa el modelo <strong>nomic-embed-text</strong> para embeddings (768 dimensiones)</li>
+          </ul>
         </div>
       </CardContent>
     </Card>

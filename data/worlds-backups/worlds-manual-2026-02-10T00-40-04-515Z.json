@@ -1,0 +1,36 @@
+{
+  "version": "1.0",
+  "backupId": "backup-2026-02-10T00-40-04-515Z",
+  "backupDate": "2026-02-10T00:40:04.516Z",
+  "entityType": "worlds",
+  "source": "manual",
+  "itemCount": 1,
+  "checksum": "9076937e84b9ca34490c3cebbd8dfc89882b96c2f04e7bf5fe277580d0d63ccd",
+  "items": [
+    {
+      "id": "WORLD_ESPARCRAFT",
+      "name": "Esparcraft",
+      "lore": {
+        "estado_mundo": "El mundo se encuentra bajo el Decreto del Dolor. Oscuridad ha caído sobre las tierras, y los habitantes viven en constante temor.",
+        "rumores": [
+          "# MEMORIA DEL MUNDO\n\n**Estado general:**\nEl mundo mantiene su estado habitual de actividad sin alteraciones masivas detectadas. Las anomalías registradas son locales y no muestran patrones de propagación a múltiples territorios.\n\n**Eventos globales más relevantes:**\n- No se han detectado eventos con impacto global o que afecten a múltiples territorios simultáneamente.\n\n---\n\n**Nota:** Las memorias territoriales de Hexen no contienen información estructurada o eventos identificables para registrar en la memoria global."
+        ],
+        "eventos": [
+          "Evento1"
+        ]
+      },
+      "area": {
+        "start": {
+          "x": -28,
+          "y": 68,
+          "z": -74
+        },
+        "end": {
+          "x": 95,
+          "y": 112,
+          "z": 385
+        }
+      }
+    }
+  ]
+}

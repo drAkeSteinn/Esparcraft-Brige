@@ -5,30 +5,33 @@ cd /d "%~dp0"
 echo ==============================
 echo Instalando dependencias...
 echo ==============================
-call npm install
+call npm install --include=optional
 if errorlevel 1 goto :err
 
 echo.
 echo ==============================
-echo Corrigiendo script dev en package.json (Windows)
+echo Configurando Prisma DATABASE_URL en .env
 echo ==============================
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$p='package.json'; if(!(Test-Path $p)){ Write-Host 'No existe package.json'; exit 1 }; $c=Get-Content $p -Raw; $old='""dev"": ""next dev -p 3000 2>&1 | tee dev.log""'; $new='""dev"": ""next dev -p 3000""'; if($c.Contains($old)){ $c=$c.Replace($old,$new); Set-Content $p $c -NoNewline; Write-Host 'dev corregido.' } else { Write-Host 'dev no requiere cambio (o ya esta corregido).' }"
+powershell -NoProfile -ExecutionPolicy Bypass -Command ^
+  "$envFile='.env'; if(!(Test-Path $envFile)){ New-Item $envFile -ItemType File | Out-Null }; " ^
+  "$c=Get-Content $envFile -Raw; " ^
+  "if($c -notmatch '(^|\r?\n)DATABASE_URL='){ Add-Content $envFile \"`nDATABASE_URL=`\"file:./prisma/dev.db`\"\"; Write-Host 'DATABASE_URL agregado.' } else { Write-Host 'DATABASE_URL ya existe.' }"
 if errorlevel 1 goto :err
 
 echo.
 echo ==============================
-echo Configurando Prisma DATABASE_URL_ en .env
+echo Prisma generate + db push
 echo ==============================
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$envFile='.env'; if(!(Test-Path $envFile)){ New-Item $envFile -ItemType File | Out-Null }; $c=Get-Content $envFile -Raw; if($c -notmatch 'DATABASE_URL_'){ Add-Content $envFile \"`nDATABASE_URL_=`\"file:./prisma/dev.db`\"\"; Write-Host 'DATABASE_URL_ agregado.' } else { Write-Host 'DATABASE_URL_ ya existe.' }"
+call .\node_modules\.bin\prisma generate
+if errorlevel 1 goto :err
+call .\node_modules\.bin\prisma db push
 if errorlevel 1 goto :err
 
 echo.
 echo ==============================
-echo Prisma generate + db push (crea DB/tablas si faltan)
+echo Smoke test LanceDB import
 echo ==============================
-call npx prisma generate
-if errorlevel 1 goto :err
-call npx prisma db push
+node -e "require('@lancedb/lancedb'); console.log('LanceDB OK')"
 if errorlevel 1 goto :err
 
 echo.

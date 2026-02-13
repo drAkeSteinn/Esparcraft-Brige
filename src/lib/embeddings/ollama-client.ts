@@ -20,10 +20,9 @@ export class OllamaEmbeddingClient {
 
   constructor(config?: Partial<EmbeddingConfig>) {
     this.config = {
-      textGenWebUIUrl: process.env.OLLAMA_URL || 'http://localhost:11434',
+      ollamaUrl: process.env.OLLAMA_URL || 'http://localhost:11434',
       model: process.env.EMBEDDING_MODEL || 'nomic-embed-text',
       dimension: parseInt(process.env.EMBEDDING_DIMENSION || '768'),
-      batchSize: parseInt(process.env.EMBEDDING_BATCH_SIZE || '10'),
       timeout: 30000, // 30 segundos
       retryCount: 3,
       retryDelay: 1000, // 1 segundo
@@ -40,7 +39,7 @@ export class OllamaEmbeddingClient {
     }
 
     return this.retryOperation(async () => {
-      const response = await fetch(`${this.config.textGenWebUIUrl}/api/embeddings`, {
+      const response = await fetch(`${this.config.ollamaUrl}/api/embeddings`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -156,7 +155,7 @@ export class OllamaEmbeddingClient {
    */
   async checkConnection(): Promise<boolean> {
     try {
-      const response = await fetch(`${this.config.textGenWebUIUrl}/api/tags`, {
+      const response = await fetch(`${this.config.ollamaUrl}/api/tags`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -176,7 +175,7 @@ export class OllamaEmbeddingClient {
    */
   async getAvailableModels(): Promise<{ name: string; size?: number; modified_at?: string }[]> {
     try {
-      const response = await fetch(`${this.config.textGenWebUIUrl}/api/tags`, {
+      const response = await fetch(`${this.config.ollamaUrl}/api/tags`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',

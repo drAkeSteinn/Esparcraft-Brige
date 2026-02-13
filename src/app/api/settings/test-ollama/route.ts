@@ -2,131 +2,98 @@ import { NextRequest, NextResponse } from 'next/server';
 
 /**
  * POST /api/settings/test-ollama
- * Prueba la conexión a Ollama (API de embeddings)
+ * Prueba la conexión a Ollama
  *
  * Body:
  * {
- *   ollamaUrl: string,
+ *   ollamaUrl: string
  *   ollamaModel: string
  * }
  */
 export async function POST(request: NextRequest) {
   try {
-    const config = await request.json();
+    const { ollamaUrl, ollamaModel } = await request.json();
 
-    if (!config.ollamaUrl) {
+    if (!ollamaUrl || typeof ollamaUrl !== 'string') {
       return NextResponse.json(
-        { error: 'ollamaUrl es requerido' },
+        { error: 'ollamaUrl es requerido y debe ser un string' },
         { status: 400 }
       );
     }
 
-    const url = config.ollamaUrl.replace(/\/$/, '');
+    if (!ollamaModel || typeof ollamaModel !== 'string') {
+      return NextResponse.json(
+        { error: 'ollamaModel es requerido y debe ser un string' },
+        { status: 400 }
+      );
+    }
+
+    console.log('Probando conexión a Ollama:', { ollamaUrl, ollamaModel });
+
+    // Ollama no tiene un endpoint directo de "test", usamos /api/tags
+    const testUrl = `${ollamaUrl}/api/tags`;
+
+    // 1. Probar conectividad básica
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 segundos
 
     try {
-      // Primero verificar que Ollama está corriendo
-      const tagsResponse = await fetch(`${url}/api/tags`, {
+      const response = await fetch(testUrl, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json'
         },
-        signal: AbortSignal.timeout(10000) // 10 segundos timeout
+        signal: controller.signal,
+        cache: 'no-store'  // Importante para asegurar respuesta actual
       });
 
-      if (!tagsResponse.ok) {
-        throw new Error('Ollama no responde');
-      }
+      clearTimeout(timeoutId);
 
-      const tagsData = await tagsResponse.json();
+      if (response.ok) {
+        // Obtener modelos disponibles
+        const data = await response.json();
+        const allModels = data.models || [];
+        
+        // Filtrar modelos de embeddings (modelos que incluyen 'embed' en el nombre)
+        const embeddingModels = allModels.filter((m: any) => m.name.toLowerCase().includes('embed'));
+        
+        // Obtener el modelo actual si está disponible
+        const currentModel = embeddingModels.find((m: any) => m.name.toLowerCase() === ollamaModel.toLowerCase());
 
-      // Verificar si el modelo existe
-      const models = tagsData.models || [];
-      const modelExists = models.some((m: any) => m.name === config.ollamaModel);
+        console.log(`✅ Ollama conectado exitosamente`);
+        console.log(`📋 ${allModels.length} modelos totales, ${embeddingModels.length} modelos de embeddings`);
 
-      if (!modelExists && config.ollamaModel) {
         return NextResponse.json({
           success: true,
           data: {
-            connected: false,
-            message: `El modelo "${config.ollamaModel}" no está disponible. Modelos disponibles: ${models.map((m: any) => m.name).join(', ')}`,
-            availableModels: models.map((m: any) => ({
-              name: m.name,
-              size: m.size,
-              modified_at: m.modified_at
-            }))
+            connected: true,
+            message: 'Conexión exitosa a Ollama',
+            availableModels: embeddingModels,
+            allModels,
+            currentModel: currentModel?.name || null,
+            modelInfo: currentModel ? {
+              name: currentModel.name,
+              size: currentModel.size,
+              modified_at: currentModel.modified_at,
+              id: currentModel.id
+            } : null
           }
         });
+      } else {
+        throw new Error('Ollama no respondió correctamente');
       }
-
-      // Intentar hacer una petición de embedding de prueba
-      const response = await fetch(`${url}/api/embeddings`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          model: config.ollamaModel || 'nomic-embed-text',
-          prompt: 'test'
-        }),
-        signal: AbortSignal.timeout(30000) // 30 segundos timeout
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Error del servidor: ${response.status}`);
-      }
-
-      const data = await response.json();
-
-      if (!data.embedding || !Array.isArray(data.embedding)) {
-        throw new Error('La respuesta no tiene el formato esperado');
-      }
-
-      return NextResponse.json({
-        success: true,
-        data: {
-          connected: true,
-          message: `Conexión exitosa. Modelo: ${config.ollamaModel}, Dimensiones: ${data.embedding?.length || 'N/A'}`,
-          model_info: {
-            model: config.ollamaModel,
-            dimensions: data.embedding?.length
-          },
-          availableModels: models.map((m: any) => ({
-            name: m.name,
-            size: m.size,
-            modified_at: m.modified_at
-          }))
-        }
-      });
     } catch (error: any) {
-      let message = 'No se pudo conectar a Ollama';
-
-      if (error.name === 'AbortError') {
-        message = 'Tiempo de espera agotado. Verifica que Ollama esté ejecutándose.';
-      } else if (error.cause?.code === 'ECONNREFUSED') {
-        message = 'Conexión rechazada. Verifica la URL y puerto (default: 11434).';
-      } else if (error.message?.includes('fetch failed')) {
-        message = 'No se puede conectar. Verifica la URL y que el servicio esté activo.';
-      }
-
-      return NextResponse.json({
+      console.error('❌ Error al conectar con Ollama:', error);
+    return NextResponse.json(
+      {
         success: true,
         data: {
           connected: false,
-          message,
-          error: error.message
+          message: `No se pudo conectar a Ollama: ${error.message}`,
+          availableModels: [],
+          allModels: []
         }
-      });
-    }
-  } catch (error: any) {
-    console.error('Error al probar Ollama:', error);
-
-    return NextResponse.json(
-      {
-        success: false,
-        error: error.message || 'Error al probar conexión'
-      },
-      { status: 500 }
+      }
     );
   }
 }
