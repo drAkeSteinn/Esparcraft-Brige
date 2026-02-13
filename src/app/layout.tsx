@@ -1,38 +1,34 @@
-// Esparcraft Bridge - Panel Arcano with Pixel Art Dark Fantasy theme
 import type { Metadata } from "next";
-import { Press_Start_2P, VT323 } from "next/font/google";
+import { VT323, Press_Start_2P } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
 
-const pressStart = Press_Start_2P({
-  variable: "--font-press-start",
-  weight: "400",
-  subsets: ["latin"],
-});
-
+// Fuente para texto funcional
 const vt323 = VT323({
   variable: "--font-vt323",
-  weight: "400",
   subsets: ["latin"],
+  weight: "400",
+});
+
+// Fuente para títulos (pixel art style)
+const pressStart = Press_Start_2P({
+  variable: "--font-press-start",
+  subsets: ["latin"],
+  weight: "400",
 });
 
 export const metadata: Metadata = {
-  title: "Esparcraft Bridge - Panel Arcano",
-  description: "Panel arcano de gestión del mundo de Esparcraft. Interfaz pixel art dark fantasy para escribas y guardianes del conocimiento.",
-  keywords: ["Esparcraft", "Bridge", "Pixel Art", "Dark Fantasy", "NPCs", "World", "Map"],
-  authors: [{ name: "Esparcraft Team" }],
+  title: "Bridge IA — Gestor Narrativo Esparcraft",
+  description: "Panel arcano para gestión narrativa del servidor Esparcraft. Interfaz pixel art dark fantasy para escribas, cronistas y guardianes del conocimiento.",
+  keywords: ["Esparcraft", "Bridge IA", "Gestor Narrativo", "Tirano Estudios", "Pixel Art", "Dark Fantasy", "RPG"],
+  authors: [{ name: "Tirano Estudios" }],
   icons: {
-    icon: "https://z-cdn.chatglm.cn/z-ai/static/logo.svg",
+    icon: "/logo.svg",
   },
   openGraph: {
-    title: "Esparcraft Bridge",
-    description: "Panel arcano de gestión del mundo de Esparcraft",
+    title: "Bridge IA — Gestor Narrativo",
+    description: "Panel arcano para gestión narrativa del servidor Esparcraft",
     type: "website",
-  },
-  twitter: {
-    card: "summary_large_image",
-    title: "Esparcraft Bridge",
-    description: "Panel arcano de gestión del mundo de Esparcraft",
   },
 };
 
@@ -44,7 +40,7 @@ export default function RootLayout({
   return (
     <html lang="es" suppressHydrationWarning>
       <body
-        className={`${pressStart.variable} ${vt323.variable} antialiased bg-background text-foreground`}
+        className={`${vt323.variable} ${pressStart.variable} antialiased bg-background text-foreground font-vt323`}
       >
         {children}
         <Toaster />

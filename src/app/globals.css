@@ -453,6 +453,52 @@ tr:hover td {
     0 0 20px rgba(200, 158, 91, 0.3);
 }
 
+/* Pixel Button Base */
+.pixel-button {
+  background: linear-gradient(180deg, #60553A 0%, #423C2E 100%);
+  border: 2px solid #83673D;
+  color: #B8B8B8;
+  padding: 8px 16px;
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  cursor: pointer;
+  box-shadow:
+    2px 2px 0px rgba(0, 0, 0, 1),
+    -1px -1px 0px rgba(255, 255, 255, 0.05);
+  transition: all 0.1s ease;
+}
+
+.pixel-button:hover:not(:disabled) {
+  background: linear-gradient(180deg, #83673D 0%, #60553A 100%);
+  box-shadow:
+    2px 2px 0px rgba(0, 0, 0, 1),
+    0 0 10px rgba(200, 158, 91, 0.2),
+    -1px -1px 0px rgba(255, 255, 255, 0.08);
+  color: #F8E097;
+}
+
+.pixel-button:active:not(:disabled) {
+  transform: translate(1px, 1px);
+  box-shadow: 1px 1px 0px rgba(0, 0, 0, 1);
+}
+
+/* Pixel Button Primary variant */
+.pixel-button-primary {
+  background: linear-gradient(180deg, #C89E5B 0%, #83673D 100%);
+  border: 2px solid #F8E097;
+  color: #0A090A;
+  font-weight: bold;
+}
+
+.pixel-button-primary:hover:not(:disabled) {
+  background: linear-gradient(180deg, #F8E097 0%, #C89E5B 100%);
+  box-shadow:
+    2px 2px 0px rgba(0, 0, 0, 1),
+    0 0 15px rgba(248, 224, 151, 0.3),
+    -1px -1px 0px rgba(255, 255, 255, 0.1);
+}
+
 /* Pixel Button Destructive variant */
 .pixel-button-destructive {
   background: linear-gradient(180deg, #8B3A3A 0%, #602020 100%);
@@ -460,7 +506,35 @@ tr:hover td {
   color: #B8B8B8;
 }
 
-.pixel-button-destructive:hover {
+.pixel-button-destructive:hover:not(:disabled) {
   background: linear-gradient(180deg, #B84A4A 0%, #8B3A3A 100%);
+  box-shadow:
+    2px 2px 0px rgba(0, 0, 0, 1),
+    0 0 10px rgba(139, 58, 58, 0.3);
+  color: #FFB8B8;
+}
+
+/* Pixel Input */
+.pixel-input {
+  background: #0A090A;
+  border: 2px solid #2C2923;
+  color: #B8B8B8;
+  padding: 8px 12px;
+  font-size: 18px;
+  transition: all 0.1s ease;
+}
+
+.pixel-input:focus {
+  border-color: #C89E5B;
+  box-shadow: 0 0 0 1px #C89E5B, 2px 2px 0px rgba(0, 0, 0, 1);
+  outline: none;
+}
+
+.pixel-input::placeholder {
+  color: #423C2E;
+}
+
+.pixel-input:focus::placeholder {
+  color: #60553A;
 }
 

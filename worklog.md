@@ -818,3 +818,38 @@ Stage Summary:
 - ⚠️ Servidor de desarrollo necesita reiniciarse para cargar el nuevo cliente de Prisma
 - La configuración es correcta, solo falta que el servidor se reinicie para aplicar los cambios
 
+
+---
+Task ID: embeddings-work-plan
+Agent: Z.ai Code
+Task: Crear plan de trabajo completo para sistema de embeddings con LanceDB + Ollama
+
+Work Log:
+- Analizado el estado actual del sistema de embeddings
+- Identificados archivos clave: lancedb-db.ts, embeddings-db.ts, ollama-client.ts
+- Revisados componentes de configuración: LanceDBConfig.tsx, EmbeddingsConfig.tsx
+- Analizada la estructura del RouterTab.tsx para integración de embeddings
+- Identificados problemas principales:
+  * Código PostgreSQL residual en embeddings-db.ts
+  * Detección de modelos Ollama que filtra por nombre "embed"
+  * Sin integración en Router para activar/desactivar embeddings
+  * Visualización deficiente en tab de Embeddings
+  * Posibles problemas cross-platform con LanceDB
+- Creado documento completo WORK_PLAN_EMBEDDINGS.md con:
+  * 6 fases de implementación
+  * Tareas detalladas por cada fase
+  * Criterios de aceptación
+  * Arquitectura final propuesta
+  * Cronograma estimado
+  * Análisis de riesgos y mitigaciones
+
+Stage Summary:
+- Documento WORK_PLAN_EMBEDDINGS.md creado con plan completo
+- Fase 1: Limpieza y preparación (eliminar PostgreSQL)
+- Fase 2: Mejora de detección de modelos Ollama
+- Fase 3: Soporte cross-platform para LanceDB
+- Fase 4: Integración en Router Tab con switchers
+- Fase 5: Visualización mejorada de embeddings
+- Fase 6: Testing y documentación
+- Estimación total: 18-24 horas de trabajo
+

@@ -53,12 +53,16 @@ export async function POST(request: NextRequest) {
         // Obtener modelos disponibles
         const data = await response.json();
         const allModels = data.models || [];
-        
+
         // Filtrar modelos de embeddings (modelos que incluyen 'embed' en el nombre)
-        const embeddingModels = allModels.filter((m: any) => m.name.toLowerCase().includes('embed'));
-        
+        const embeddingModels = allModels.filter((m: unknown) =>
+          (m as { name: string }).name.toLowerCase().includes('embed')
+        );
+
         // Obtener el modelo actual si está disponible
-        const currentModel = embeddingModels.find((m: any) => m.name.toLowerCase() === ollamaModel.toLowerCase());
+        const currentModel = embeddingModels.find((m: unknown) =>
+          (m as { name: string }).name.toLowerCase() === ollamaModel.toLowerCase()
+        );
 
         console.log(`✅ Ollama conectado exitosamente`);
         console.log(`📋 ${allModels.length} modelos totales, ${embeddingModels.length} modelos de embeddings`);
@@ -70,30 +74,37 @@ export async function POST(request: NextRequest) {
             message: 'Conexión exitosa a Ollama',
             availableModels: embeddingModels,
             allModels,
-            currentModel: currentModel?.name || null,
+            currentModel: currentModel ? (currentModel as { name: string }).name : null,
             modelInfo: currentModel ? {
-              name: currentModel.name,
-              size: currentModel.size,
-              modified_at: currentModel.modified_at,
-              id: currentModel.id
+              name: (currentModel as { name: string; size: number; modified_at: string; id: string }).name,
+              size: (currentModel as { size: number }).size,
+              modified_at: (currentModel as { modified_at: string }).modified_at,
+              id: (currentModel as { id: string }).id
             } : null
           }
         });
       } else {
         throw new Error('Ollama no respondió correctamente');
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('❌ Error al conectar con Ollama:', error);
-    return NextResponse.json(
-      {
+      const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
+      return NextResponse.json({
         success: true,
         data: {
           connected: false,
-          message: `No se pudo conectar a Ollama: ${error.message}`,
+          message: `No se pudo conectar a Ollama: ${errorMessage}`,
           availableModels: [],
           allModels: []
         }
-      }
+      });
+    }
+  } catch (error: unknown) {
+    console.error('❌ Error general:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
+    return NextResponse.json(
+      { error: errorMessage },
+      { status: 500 }
     );
   }
 }
