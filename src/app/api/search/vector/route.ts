@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getEmbeddingClient } from '@/lib/embeddings/text-gen-client';
-import { EmbeddingsDB } from '@/lib/embeddings-db';
+import { LanceDBWrapper } from '@/lib/lancedb-db';
 
 /**
  * POST /api/search/vector
@@ -78,7 +78,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Hacer la búsqueda vectorial usando la base de datos
-    const results = await EmbeddingsDB.searchSimilar(searchParams);
+    const results = await LanceDBWrapper.searchSimilar(searchParams);
 
     // Filtrar si se especificó source_type
     let filteredResults = results;

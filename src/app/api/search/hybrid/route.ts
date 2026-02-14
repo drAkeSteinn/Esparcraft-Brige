@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getEmbeddingClient } from '@/lib/embeddings/text-gen-client';
-import { EmbeddingsDB } from '@/lib/embeddings-db';
+import { LanceDBWrapper } from '@/lib/lancedb-db';
 
 /**
  * POST /api/search/hybrid
@@ -82,7 +82,7 @@ export async function POST(request: NextRequest) {
     const textGenClient = getEmbeddingClient();
     const queryVector = await textGenClient.embedText(body.query);
 
-    const vectorResults = await EmbeddingsDB.searchSimilar({
+    const vectorResults = await LanceDBWrapper.searchSimilar({
       queryVector,
       namespace: body.namespace,
       limit: vectorLimit,

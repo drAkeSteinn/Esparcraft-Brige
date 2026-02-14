@@ -1,81 +1,101 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { OllamaEmbeddingClient } from '@/lib/embeddings/ollama-client';
 
 /**
  * POST /api/settings/test-embeddings
- * Prueba la conexión a Text Generation WebUI (API de embeddings)
+ * Prueba la conexión a Ollama y genera un embedding de prueba
  *
  * Body:
  * {
- *   textGenWebUIUrl: string,
- *   embeddingModel: string
+ *   ollamaUrl: string,
+ *   model: string,
+ *   testText?: string
  * }
  */
 export async function POST(request: NextRequest) {
   try {
-    const config = await request.json();
+    const body = await request.json();
+    const { ollamaUrl, model, testText = 'This is a test embedding.' } = body;
 
-    if (!config.textGenWebUIUrl) {
+    if (!ollamaUrl) {
       return NextResponse.json(
-        { error: 'textGenWebUIUrl es requerido' },
+        { success: false, error: 'ollamaUrl es requerido' },
         { status: 400 }
       );
     }
 
-    const url = config.textGenWebUIUrl.replace(/\/$/, '');
+    if (!model) {
+      return NextResponse.json(
+        { success: false, error: 'model es requerido' },
+        { status: 400 }
+      );
+    }
 
-    try {
-      // Intentar hacer una petición de embedding de prueba
-      const response = await fetch(`${url}/api/embeddings`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          input: 'test',
-          model: config.embeddingModel || 'all-MiniLM-L6-v2'
-        }),
-        signal: AbortSignal.timeout(10000) // 10 segundos timeout
-      });
+    console.log(`🧪 Probando embedding con Ollama: ${model} en ${ollamaUrl}`);
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Error del servidor: ${response.status}`);
-      }
+    // Crear cliente de Ollama
+    const client = new OllamaEmbeddingClient({
+      ollamaUrl,
+      model,
+      timeout: 30000
+    });
 
-      const data = await response.json();
-
-      if (!data.embedding || !Array.isArray(data.embedding)) {
-        throw new Error('La respuesta no tiene el formato esperado');
-      }
-
+    // Verificar conexión primero
+    const connected = await client.checkConnection();
+    if (!connected) {
       return NextResponse.json({
         success: true,
         data: {
-          connected: true,
-          message: `Conexión exitosa. Modelo: ${config.embeddingModel}, Dimensiones: ${data.embedding?.length || 'N/A'}`,
-          model_info: {
-            model: config.embeddingModel,
-            dimensions: data.embedding?.length
-          }
+          success: false,
+          connected: false,
+          message: 'No se pudo conectar a Ollama. Verifica que esté ejecutándose.'
         }
       });
-    } catch (error: any) {
-      let message = 'No se pudo conectar a Text Generation WebUI';
+    }
+
+    // Intentar generar un embedding de prueba
+    try {
+      const embedding = await client.embedText(testText);
+
+      if (!embedding || !Array.isArray(embedding) || embedding.length === 0) {
+        throw new Error('El embedding generado está vacío o tiene un formato incorrecto');
+      }
+
+      console.log(`✅ Embedding de prueba generado: ${embedding.length} dimensiones`);
+
+      return NextResponse.json({
+        success: true,
+        data: {
+          success: true,
+          connected: true,
+          message: `Embedding generado exitosamente`,
+          model: model,
+          dimension: embedding.length,
+          testText: testText,
+          sampleValues: embedding.slice(0, 5).map(v => v.toFixed(4))
+        }
+      });
+    } catch (embedError: any) {
+      console.error('❌ Error generando embedding:', embedError);
       
-      if (error.name === 'AbortError') {
-        message = 'Tiempo de espera agotado. Verifica que Text Gen WebUI esté ejecutándose.';
-      } else if (error.cause?.code === 'ECONNREFUSED') {
-        message = 'Conexión rechazada. Verifica la URL y puerto.';
-      } else if (error.message?.includes('fetch failed')) {
-        message = 'No se puede conectar. Verifica la URL y que el servicio esté activo.';
+      let errorMessage = embedError.message || 'Error desconocido';
+      
+      if (errorMessage.includes('not found') || errorMessage.includes('model not found')) {
+        errorMessage = `El modelo "${model}" no está instalado en Ollama. Ejecuta: ollama pull ${model}`;
+      } else if (errorMessage.includes('timeout')) {
+        errorMessage = 'Tiempo de espera agotado. El modelo puede estar cargando.';
+      } else if (errorMessage.includes('connection')) {
+        errorMessage = 'Error de conexión con Ollama.';
       }
 
       return NextResponse.json({
         success: true,
         data: {
-          connected: false,
-          message,
-          error: error.message
+          success: false,
+          connected: true,
+          message: errorMessage,
+          error: embedError.message,
+          suggestion: `Intenta descargar el modelo con: ollama pull ${model}`
         }
       });
     }

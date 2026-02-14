@@ -3,6 +3,22 @@
  */
 
 /**
+ * Embedding almacenado
+ */
+export interface Embedding {
+  id: string;
+  content: string;
+  vector?: number[];
+  metadata: Record<string, any>;
+  namespace: string;
+  source_type?: string;
+  source_id?: string;
+  model_name: string;
+  created_at: Date;
+  updated_at: Date;
+}
+
+/**
  * Resultado de embedding de Text Generation WebUI
  */
 export interface EmbeddingResponse {

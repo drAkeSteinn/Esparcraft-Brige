@@ -407,3 +407,105 @@ export interface ApplyGrimorioCardRequest {
     mensaje?: string;
   };
 }
+
+// ============================================
+// EMBEDDINGS TYPES
+// ============================================
+
+/**
+ * Configuración de embeddings para un trigger
+ */
+export interface EmbeddingTriggerConfig {
+  enabled: boolean;
+  namespace: string;
+  maxResults: number;
+  threshold: number;
+  includeRelated: boolean;
+  relatedNamespaces: string[];
+}
+
+/**
+ * Resultado de búsqueda de embeddings
+ */
+export interface EmbeddingSearchResult {
+  id: string;
+  content: string;
+  similarity: number;
+  namespace: string;
+  source_type?: string;
+  source_id?: string;
+  metadata?: Record<string, any>;
+}
+
+/**
+ * Contexto de embeddings para incluir en payloads
+ */
+export interface EmbeddingContext {
+  enabled: boolean;
+  results: EmbeddingSearchResult[];
+  formattedContext?: string;
+}
+
+/**
+ * Extensión de payloads para incluir embeddings
+ */
+export interface ChatTriggerPayloadWithEmbeddings extends ChatTriggerPayload {
+  embeddings?: EmbeddingContext;
+}
+
+export interface ResumenSesionTriggerPayloadWithEmbeddings extends ResumenSesionTriggerPayload {
+  embeddings?: EmbeddingContext;
+}
+
+export interface ResumenNPCTriggerPayloadWithEmbeddings extends ResumenNPCTriggerPayload {
+  embeddings?: EmbeddingContext;
+}
+
+export interface ResumenEdificioTriggerPayloadWithEmbeddings extends ResumenEdificioTriggerPayload {
+  embeddings?: EmbeddingContext;
+}
+
+export interface ResumenPuebloTriggerPayloadWithEmbeddings extends ResumenPuebloTriggerPayload {
+  embeddings?: EmbeddingContext;
+}
+
+export interface ResumenMundoTriggerPayloadWithEmbeddings extends ResumenMundoTriggerPayload {
+  embeddings?: EmbeddingContext;
+}
+
+/**
+ * Configuración de namespaces por defecto para cada tipo de trigger
+ */
+export const EMBEDDING_NAMESPACES: Record<TriggerMode, {
+  default: string;
+  related: string[];
+}> = {
+  chat: {
+    default: 'chat-context',
+    related: ['npc-summaries', 'session-summaries']
+  },
+  resumen_sesion: {
+    default: 'session-summaries',
+    related: ['npc-summaries']
+  },
+  resumen_npc: {
+    default: 'npc-summaries',
+    related: ['session-summaries']
+  },
+  resumen_edificio: {
+    default: 'edificio-context',
+    related: ['npc-summaries']
+  },
+  resumen_pueblo: {
+    default: 'pueblo-context',
+    related: ['edificio-context', 'npc-summaries']
+  },
+  resumen_mundo: {
+    default: 'mundo-context',
+    related: ['pueblo-context', 'edificio-context', 'npc-summaries']
+  },
+  nuevo_lore: {
+    default: 'lore-context',
+    related: ['mundo-context', 'pueblo-context']
+  }
+};

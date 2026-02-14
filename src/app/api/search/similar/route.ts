@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { EmbeddingsDB } from '@/lib/embeddings-db';
+import { LanceDBWrapper } from '@/lib/lancedb-db';
 
 /**
  * POST /api/search/similar
@@ -39,7 +39,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Obtener el embedding de referencia
-    const referenceEmbedding = await EmbeddingsDB.getEmbeddingById(body.embeddingId);
+    const referenceEmbedding = await LanceDBWrapper.getEmbeddingById(body.embeddingId);
 
     if (!referenceEmbedding) {
       return NextResponse.json(
@@ -49,7 +49,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Buscar embeddings similares usando el vector del embedding de referencia
-    const similarEmbeddings = await EmbeddingsDB.searchSimilar({
+    const similarEmbeddings = await LanceDBWrapper.searchSimilar({
       queryVector: referenceEmbedding.vector || [],
       limit,
       threshold
