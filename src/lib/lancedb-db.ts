@@ -8,6 +8,7 @@
 import * as path from 'path';
 import * as fs from 'fs';
 import type { Embedding, SearchResult, RecordNamespace } from './embeddings/types';
+import { getConfig, type EmbeddingsConfig } from './config-persistence';
 
 // Re-exportar tipos para compatibilidad
 export type { Embedding, SearchResult, RecordNamespace } from './embeddings/types';
@@ -304,14 +305,76 @@ export async function initLanceDB(uri?: string): Promise<void> {
 
 async function initializeTables(): Promise<void> {
   if (!db) throw new Error('Database not initialized');
+
+  // Obtener configuración persistente primero
+  let persistentConfig: EmbeddingsConfig;
+  try {
+    persistentConfig = getConfig();
+  } catch (e) {
+    console.warn('⚠️  No se pudo cargar configuración persistente, usando valores por defecto');
+    persistentConfig = {
+      ollamaUrl: 'http://localhost:11434',
+      model: 'bge-m3:567m',
+      dimension: 1024
+    };
+  }
+
+  // Usar configuración persistente o fallback a variables de entorno
+  const vectorDimension = persistentConfig.dimension || parseInt(process.env.EMBEDDING_DIMENSION || '1024');
+  const embeddingModel = persistentConfig.model || process.env.EMBEDDING_MODEL || 'bge-m3:567m';
+
+  console.log(`📐 Inicializando tablas con dimensión de vector: ${vectorDimension} (modelo: ${embeddingModel})`);
+
+  // Schema por defecto para embeddings - usar la dimensión configurada
+  const defaultEmbedding = {
+    id: 'placeholder',
+    content: 'placeholder',
+    vector: new Array(vectorDimension).fill(0), // Vector con dimensión configurada
+    metadata: '{}',
+    namespace: 'default',
+    source_type: 'system',
+    source_id: 'init',
+    model_name: embeddingModel,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  };
+
+  // Schema por defecto para namespaces
+  const defaultNamespace = {
+    id: 'placeholder',
+    namespace: 'default',
+    description: 'Default namespace',
+    metadata: '{}',
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  };
   
   try {
     embeddingsTable = await db.openTable(EMBEDDINGS_TABLE);
     console.log('✅ Tabla embeddings abierta');
+    
+    // Verificar dimensión de la tabla existente
+    try {
+      const sampleData = await embeddingsTable.query().limit(1).toArray();
+      if (sampleData.length > 0 && sampleData[0].vector) {
+        const existingDimension = sampleData[0].vector.length;
+        if (existingDimension !== vectorDimension) {
+          console.warn(`⚠️  ADVERTENCIA: La tabla existe con ${existingDimension} dimensiones, pero la configuración es ${vectorDimension} dimensiones.`);
+          console.warn(`⚠️  Los embeddings existentes no serán compatibles. Considera recrear la tabla.`);
+          console.warn(`⚠️  Para recrear: elimina la carpeta 'data/lancedb' y reinicia el servidor.`);
+        }
+      }
+    } catch (e) {
+      // Ignorar errores al verificar dimensión
+    }
   } catch {
     console.log('ℹ️  Creando tabla embeddings...');
-    embeddingsTable = await db.createTable(EMBEDDINGS_TABLE, []);
-    console.log('✅ Tabla embeddings creada');
+    // Crear tabla con un registro placeholder que luego se eliminará
+    await db.createTable(EMBEDDINGS_TABLE, [defaultEmbedding]);
+    embeddingsTable = await db.openTable(EMBEDDINGS_TABLE);
+    // Eliminar el registro placeholder
+    await embeddingsTable.delete('id = \'placeholder\'');
+    console.log(`✅ Tabla embeddings creada con dimensión ${vectorDimension}`);
   }
   
   try {
@@ -319,7 +382,11 @@ async function initializeTables(): Promise<void> {
     console.log('✅ Tabla namespaces abierta');
   } catch {
     console.log('ℹ️  Creando tabla namespaces...');
-    namespacesTable = await db.createTable(NAMESPACES_TABLE, []);
+    // Crear tabla con un registro placeholder que luego se eliminará
+    await db.createTable(NAMESPACES_TABLE, [defaultNamespace]);
+    namespacesTable = await db.openTable(NAMESPACES_TABLE);
+    // Eliminar el registro placeholder
+    await namespacesTable.delete('id = \'placeholder\'');
     console.log('✅ Tabla namespaces creada');
   }
 }
@@ -345,6 +412,58 @@ function classifyError(error: any, uri: string): LanceDBError {
   }
   
   return new LanceDBError(message, 'UNKNOWN_ERROR', getPlatform(), { uri, originalError: error });
+}
+
+// ============================================
+// HELPER FUNCTIONS FOR LANCEDB API
+// ============================================
+
+/**
+ * Obtiene todos los registros de una tabla
+ * LanceDB API: table.query().toArray()
+ */
+async function tableToArray(table: any): Promise<any[]> {
+  return await table.query().toArray();
+}
+
+/**
+ * Filtra registros de una tabla
+ * LanceDB API: table.query().where(filter).toArray()
+ */
+async function tableFilter(table: any, filter: string): Promise<any[]> {
+  return await table.query().where(filter).toArray();
+}
+
+/**
+ * Parsea el campo metadata que puede ser string JSON u objeto
+ */
+function parseMetadata(metadata: any): Record<string, any> {
+  if (!metadata) return {};
+  if (typeof metadata === 'string') {
+    try {
+      return JSON.parse(metadata);
+    } catch {
+      return {};
+    }
+  }
+  return metadata;
+}
+
+/**
+ * Normaliza un vector a magnitud 1 (para similitud coseno)
+ */
+function normalizeVector(vector: number[]): number[] {
+  const magnitude = Math.sqrt(vector.reduce((sum, val) => sum + val * val, 0));
+  if (magnitude === 0) return vector;
+  return vector.map(val => val / magnitude);
+}
+
+/**
+ * Convierte distancia L2 a similitud coseno para vectores normalizados
+ * Para vectores normalizados: similarity = 1 - (distance^2 / 2)
+ */
+function l2ToCosineSimilarity(l2Distance: number): number {
+  return 1 - (l2Distance * l2Distance) / 2;
 }
 
 // ============================================
@@ -425,8 +544,8 @@ export async function exportToJSON(): Promise<BackupData> {
   const embTable = await getEmbeddingsTable();
   const nsTable = await getNamespacesTable();
   
-  const embeddings = await embTable.execute();
-  const namespaces = await nsTable.execute();
+  const embeddings = await tableToArray(embTable);
+  const namespaces = await tableToArray(nsTable);
   
   const backup: BackupData = {
     version: '1.0.0',
@@ -482,12 +601,12 @@ export async function importFromJSON(backup: BackupData, options?: {
       const embTable = await getEmbeddingsTable();
       const nsTable = await getNamespacesTable();
       
-      const existingEmbeddings = await embTable.execute();
+      const existingEmbeddings = await tableToArray(embTable);
       for (const emb of existingEmbeddings) {
         await embTable.delete(`id = '${emb.id}'`);
       }
       
-      const existingNamespaces = await nsTable.execute();
+      const existingNamespaces = await tableToArray(nsTable);
       for (const ns of existingNamespaces) {
         await nsTable.delete(`namespace = '${ns.namespace}'`);
       }
@@ -498,7 +617,7 @@ export async function importFromJSON(backup: BackupData, options?: {
       for (const ns of backup.namespaces) {
         try {
           if (merge) {
-            const existing = await nsTable.filter(`namespace = '${ns.namespace}'`).execute();
+            const existing = await tableFilter(nsTable, `namespace = '${ns.namespace}'`);
             if (existing.length > 0) {
               skipped++;
               continue;
@@ -526,7 +645,7 @@ export async function importFromJSON(backup: BackupData, options?: {
         try {
           if (merge) {
             const existingIds = new Set(
-              (await embTable.execute()).map((e: any) => e.id)
+              (await tableToArray(embTable)).map((e: any) => e.id)
             );
             const newBatch = batch.filter(emb => !existingIds.has(emb.id));
             skipped += batch.length - newBatch.length;
@@ -616,28 +735,44 @@ export class LanceDBWrapper {
       namespace = 'default',
       source_type,
       source_id,
-      model_name = process.env.EMBEDDING_MODEL || 'nomic-embed-text'
     } = params;
+
+    // Obtener model_name de params o de la configuración persistente
+    let model_name = params.model_name;
+    if (!model_name) {
+      try {
+        const config = getConfig();
+        model_name = config.model;
+      } catch {
+        model_name = process.env.EMBEDDING_MODEL || 'bge-m3:567m';
+      }
+    }
 
     try {
       const table = await getEmbeddingsTable();
 
+      // Normalizar el vector para similitud coseno
+      const normalizedVector = normalizeVector(vector);
+
+      // Metadata como string JSON para coincidir con el esquema de LanceDB
+      const metadataObj = {
+        ...metadata,
+        created_at: new Date().toISOString(),
+        source_type,
+        source_id
+      };
+
       const embedding = {
         id: uuidv4(),
         content,
-        vector,
-        metadata: {
-          ...metadata,
-          created_at: new Date().toISOString(),
-          source_type,
-          source_id
-        },
+        vector: normalizedVector, // Usar vector normalizado
+        metadata: JSON.stringify(metadataObj), // Convertir a string JSON
         namespace,
         source_type,
         source_id,
         model_name,
-        created_at: new Date(),
-        updated_at: new Date()
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
       };
 
       await table.add([embedding]);
@@ -660,52 +795,78 @@ export class LanceDBWrapper {
       queryVector,
       namespace,
       limit = 10,
-      threshold = parseFloat(process.env.DEFAULT_SIMILARITY_THRESHOLD || '0.7')
+      threshold = parseFloat(process.env.DEFAULT_SIMILARITY_THRESHOLD || '0.5')
     } = params;
 
     try {
       const table = await getEmbeddingsTable();
 
+      // Normalizar el vector de búsqueda para similitud coseno
+      const normalizedQueryVector = normalizeVector(queryVector);
+
+      // Verificar cuántos embeddings hay en total
+      const allEmbeddings = await tableToArray(table);
+      console.log(`🔍 Buscando en ${allEmbeddings.length} embeddings total, namespace: ${namespace || 'all'}, threshold: ${threshold}`);
+      console.log(`   Vector de búsqueda: ${queryVector.length} dimensiones (normalizado)`);
+
       let results: any[];
 
-      if (namespace && namespace !== 'default') {
+      if (namespace && namespace !== 'default' && namespace !== 'all') {
         try {
           const namespaceTable = await db!.openTable(namespace);
           const searchResults = await namespaceTable
-            .search(queryVector)
+            .search(normalizedQueryVector)
             .limit(limit)
-            .execute();
+            .toArray();
 
-          results = searchResults.map(row => ({
+          results = searchResults.map((row: any) => ({
             ...row,
-            similarity: 1 - (row._distance || 0)
+            similarity: l2ToCosineSimilarity(row._distance || 0)
           })).filter((r: any) => r.similarity >= threshold);
         } catch {
           console.log(`ℹ️  Tabla de namespace "${namespace}" no existe`);
           results = [];
         }
       } else {
+        // Buscar en la tabla principal de embeddings
         const allResults = await table
-          .search(queryVector)
+          .search(normalizedQueryVector)
           .limit(limit * 10)
-          .execute();
+          .toArray();
+
+        console.log(`   Resultados sin filtrar: ${allResults.length}`);
+
+        // Mostrar distancias para debug
+        if (allResults.length > 0) {
+          const topResults = allResults.slice(0, 3);
+          topResults.forEach((r: any, i: number) => {
+            const sim = l2ToCosineSimilarity(r._distance || 0);
+            console.log(`   #${i + 1}: distancia_L2=${r._distance?.toFixed(4)}, similitud_coseno=${sim.toFixed(4)}, namespace=${r.namespace}`);
+          });
+        }
 
         results = allResults
           .map((row: any) => ({
             ...row,
-            similarity: 1 - (row._distance || 0)
+            similarity: l2ToCosineSimilarity(row._distance || 0)
           }))
-          .filter((r: any) =>
-            (r.namespace || 'default') === namespace &&
-            r.similarity >= threshold
-          )
+          .filter((r: any) => {
+            const ns = r.namespace || 'default';
+            // Si no se especifica namespace, aceptar todos
+            if (!namespace || namespace === 'all') {
+              return r.similarity >= threshold;
+            }
+            return ns === namespace && r.similarity >= threshold;
+          })
           .slice(0, limit);
       }
+
+      console.log(`   Resultados finales: ${results.length}`);
 
       return results.map((row: any) => ({
         id: row.id,
         content: row.content,
-        metadata: row.metadata || {},
+        metadata: parseMetadata(row.metadata),
         namespace: row.namespace || 'default',
         source_type: row.source_type,
         source_id: row.source_id,
@@ -721,7 +882,7 @@ export class LanceDBWrapper {
   static async getEmbeddingById(id: string): Promise<Embedding | null> {
     try {
       const table = await getEmbeddingsTable();
-      const results = await table.filter(`id = '${id}'`).execute();
+      const results = await tableFilter(table, `id = '${id}'`);
 
       if (results.length === 0) {
         return null;
@@ -731,7 +892,7 @@ export class LanceDBWrapper {
       return {
         id: row.id,
         content: row.content,
-        metadata: row.metadata || {},
+        metadata: parseMetadata(row.metadata),
         namespace: row.namespace || 'default',
         source_type: row.source_type,
         source_id: row.source_id,
@@ -779,15 +940,15 @@ export class LanceDBWrapper {
 
     try {
       const table = await getNamespacesTable();
-      const existing = await table.filter(`namespace = '${namespace}'`).execute();
+      const existing = await tableFilter(table, `namespace = '${namespace}'`);
 
       const nsRecord = {
         id: uuidv4(),
         namespace,
         description,
         metadata: JSON.stringify(metadata),
-        created_at: existing.length > 0 ? existing[0].created_at : new Date(),
-        updated_at: new Date()
+        created_at: existing.length > 0 ? existing[0].created_at : new Date().toISOString(),
+        updated_at: new Date().toISOString()
       };
 
       if (existing.length > 0) {
@@ -797,13 +958,8 @@ export class LanceDBWrapper {
       } else {
         await table.add([nsRecord]);
         console.log(`✅ Namespace creado: ${namespace}`);
-
-        try {
-          await db!.createTable(namespace, []);
-          console.log(`✅ Tabla creada para namespace: ${namespace}`);
-        } catch (tableError) {
-          console.log(`ℹ️  Tabla "${namespace}" ya existe o error al crear`);
-        }
+        // Nota: La tabla para embeddings del namespace se crea automáticamente
+        // cuando se inserta el primer embedding con ese namespace
       }
 
       return {
@@ -823,7 +979,7 @@ export class LanceDBWrapper {
   static async getAllNamespaces(): Promise<RecordNamespace[]> {
     try {
       const table = await getNamespacesTable();
-      const results = await table.execute();
+      const results = await tableToArray(table);
 
       return results.map((row: any) => ({
         id: row.id,
@@ -843,15 +999,143 @@ export class LanceDBWrapper {
     try {
       const table = await getNamespacesTable();
       await table.delete(`namespace = '${namespace}'`);
+      console.log(`✅ Namespace eliminado: ${namespace}`);
 
+      // Intentar eliminar la tabla del namespace si existe
       try {
         await db!.dropTable(namespace);
-        console.log(`✅ Namespace eliminado: ${namespace}`);
-        return true;
+        console.log(`✅ Tabla "${namespace}" eliminada`);
       } catch {
-        console.log(`ℹ️  Tabla "${namespace}" no existe`);
-        return false;
+        // La tabla puede no existir, lo cual es normal
+        console.log(`ℹ️  Tabla "${namespace}" no existe (normal si no tenía embeddings)`);
       }
+
+      return true;
+    } catch (error: any) {
+      const lancedbError = classifyError(error, currentUri || 'unknown');
+      throw lancedbError;
+    }
+  }
+
+  /**
+   * Agrega un embedding existente a un namespace
+   * Nota: En LanceDB, los embeddings ya tienen un namespace asignado
+   * Este método actualiza el namespace del embedding
+   */
+  static async addEmbeddingToNamespace(namespace: string, embeddingId: string): Promise<void> {
+    try {
+      const table = await getEmbeddingsTable();
+      
+      // Buscar el embedding
+      const results = await tableFilter(table, `id = '${embeddingId}'`);
+      if (results.length === 0) {
+        throw new Error(`Embedding ${embeddingId} no encontrado`);
+      }
+      
+      const embedding = results[0];
+      
+      // Eliminar el embedding anterior
+      await table.delete(`id = '${embeddingId}'`);
+      
+      // Reinsertar con el nuevo namespace
+      await table.add([{
+        ...embedding,
+        namespace,
+        updated_at: new Date().toISOString()
+      }]);
+      
+      console.log(`✅ Embedding ${embeddingId} agregado al namespace ${namespace}`);
+    } catch (error: any) {
+      const lancedbError = classifyError(error, currentUri || 'unknown');
+      throw lancedbError;
+    }
+  }
+
+  /**
+   * Obtiene todos los embeddings de un namespace específico
+   */
+  static async getNamespaceEmbeddings(namespace: string, limit: number = 100): Promise<Embedding[]> {
+    try {
+      const table = await getEmbeddingsTable();
+      const results = await tableFilter(table, `namespace = '${namespace}'`);
+      
+      return results.slice(0, limit).map((row: any) => ({
+        id: row.id,
+        content: row.content,
+        metadata: parseMetadata(row.metadata),
+        namespace: row.namespace || 'default',
+        source_type: row.source_type,
+        source_id: row.source_id,
+        model_name: row.model_name,
+        created_at: new Date(row.created_at),
+        updated_at: new Date(row.updated_at)
+      }));
+    } catch (error: any) {
+      const lancedbError = classifyError(error, currentUri || 'unknown');
+      throw lancedbError;
+    }
+  }
+
+  /**
+   * Busca embeddings dentro de un namespace específico
+   */
+  static async searchInNamespace(params: {
+    namespace: string;
+    queryVector: number[];
+    limit?: number;
+    threshold?: number;
+  }): Promise<SearchResult[]> {
+    const { namespace, queryVector, limit = 10, threshold = 0.7 } = params;
+
+    try {
+      const table = await getEmbeddingsTable();
+
+      // Normalizar el vector de búsqueda
+      const normalizedQueryVector = normalizeVector(queryVector);
+
+      // Buscar en el namespace específico
+      const results = await table
+        .search(normalizedQueryVector)
+        .where(`namespace = '${namespace}'`)
+        .limit(limit)
+        .toArray();
+
+      return results
+        .map((row: any) => ({
+          id: row.id,
+          content: row.content,
+          metadata: parseMetadata(row.metadata),
+          namespace: row.namespace || 'default',
+          source_type: row.source_type,
+          source_id: row.source_id,
+          similarity: l2ToCosineSimilarity(row._distance || 0)
+        }))
+        .filter((r: any) => r.similarity >= threshold);
+    } catch (error: any) {
+      const lancedbError = classifyError(error, currentUri || 'unknown');
+      throw lancedbError;
+    }
+  }
+
+  /**
+   * Obtiene todos los embeddings almacenados
+   */
+  static async getAllEmbeddings(limit: number = 100): Promise<Embedding[]> {
+    try {
+      const table = await getEmbeddingsTable();
+      const results = await tableToArray(table);
+      
+      return results.slice(0, limit).map((row: any) => ({
+        id: row.id,
+        content: row.content,
+        metadata: parseMetadata(row.metadata),
+        namespace: row.namespace || 'default',
+        source_type: row.source_type,
+        source_id: row.source_id,
+        model_name: row.model_name,
+        created_at: new Date(row.created_at),
+        updated_at: new Date(row.updated_at)
+      }));
     } catch (error: any) {
       const lancedbError = classifyError(error, currentUri || 'unknown');
       throw lancedbError;
@@ -866,7 +1150,7 @@ export class LanceDBWrapper {
   }> {
     try {
       const table = await getEmbeddingsTable();
-      const allEmbeddings = await table.execute();
+      const allEmbeddings = await tableToArray(table);
       const totalEmbeddings = allEmbeddings.length;
       const namespaces = await this.getAllNamespaces();
       const totalNamespaces = namespaces.length;

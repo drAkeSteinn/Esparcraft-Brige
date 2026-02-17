@@ -7,6 +7,7 @@
 
 import { getEmbeddingClient } from './embeddings/client';
 import { worldManager, puebloManager, edificioManager, npcManager, sessionManager } from './fileManager';
+import { getSimilarityThreshold, getMaxResults } from './config-persistence';
 
 export class EmbeddingTriggers {
   /**
@@ -283,6 +284,7 @@ Mensajes intercambiados: ${session.messages.length}
 
   /**
    * Busca contexto relevante de embeddings para una consulta
+   * Usa la configuración persistente para threshold y maxResults
    */
   static async searchContext(query: string, options?: {
     namespace?: string;
@@ -293,12 +295,16 @@ Mensajes intercambiados: ${session.messages.length}
     try {
       const client = getEmbeddingClient();
 
+      // Usar valores de la configuración persistente si no se especifican
+      const threshold = options?.threshold ?? getSimilarityThreshold();
+      const limit = options?.limit ?? getMaxResults();
+
       const results = await client.searchSimilar({
         query,
         namespace: options?.namespace,
         source_type: options?.source_type,
-        limit: options?.limit || 5,
-        threshold: options?.threshold || 0.7
+        limit,
+        threshold
       });
 
       if (results.length === 0) {
@@ -317,6 +323,7 @@ ${result.content}
         `.trim();
       }).join('\n\n---\n\n');
 
+      console.log(`[EmbeddingTriggers] Encontrados ${results.length} contextos relevantes (threshold=${threshold}, limit=${limit})`);
       return context;
     } catch (error) {
       console.error('Error buscando contexto de embeddings:', error);

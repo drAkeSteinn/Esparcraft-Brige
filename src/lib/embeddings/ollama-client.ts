@@ -11,6 +11,7 @@ import type {
   EmbeddingConfig,
   EmbeddingError
 } from './types';
+import { getConfig } from '../config-persistence';
 
 /**
  * Cliente para API de Embeddings de Ollama
@@ -19,15 +20,26 @@ export class OllamaEmbeddingClient {
   private config: EmbeddingConfig;
 
   constructor(config?: Partial<EmbeddingConfig>) {
+    // Intentar cargar configuración persistente primero
+    let persistentConfig = { ollamaUrl: '', model: '', dimension: 0 };
+    try {
+      const saved = getConfig();
+      persistentConfig = saved;
+    } catch (e) {
+      console.warn('No se pudo cargar configuración persistente, usando valores por defecto');
+    }
+
     this.config = {
-      ollamaUrl: process.env.OLLAMA_URL || 'http://localhost:11434',
-      model: process.env.EMBEDDING_MODEL || 'nomic-embed-text',
-      dimension: parseInt(process.env.EMBEDDING_DIMENSION || '768'),
+      ollamaUrl: persistentConfig.ollamaUrl || process.env.OLLAMA_URL || 'http://localhost:11434',
+      model: persistentConfig.model || process.env.EMBEDDING_MODEL || 'bge-m3:567m',
+      dimension: persistentConfig.dimension || parseInt(process.env.EMBEDDING_DIMENSION || '1024'),
       timeout: 30000, // 30 segundos
       retryCount: 3,
       retryDelay: 1000, // 1 segundo
       ...config
     };
+
+    console.log(`🔧 OllamaClient inicializado: ${this.config.model} (${this.config.dimension}D) @ ${this.config.ollamaUrl}`);
   }
 
   /**
@@ -39,6 +51,8 @@ export class OllamaEmbeddingClient {
     }
 
     return this.retryOperation(async () => {
+      console.log(`🔄 Generando embedding con modelo: ${this.config.model} (${this.config.dimension}D)`);
+      
       const response = await fetch(`${this.config.ollamaUrl}/api/embeddings`, {
         method: 'POST',
         headers: {

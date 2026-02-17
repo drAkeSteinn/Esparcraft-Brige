@@ -2,10 +2,10 @@
  * Cliente Unificado de Embeddings
  *
  * Usa Ollama (para generar embeddings)
- * con la base de datos de embeddings (PostgreSQL o LanceDB)
+ * con LanceDB como base de datos vectorial
  */
 
-import { OllamaEmbeddingClient } from './ollama-client';
+import { OllamaEmbeddingClient, getOllamaClient } from './ollama-client';
 import { LanceDBWrapper } from '../lancedb-db';
 import type {
   CreateEmbeddingParams,
@@ -24,13 +24,14 @@ export class EmbeddingClient {
   private db = LanceDBWrapper;
 
   constructor(config?: any) {
-    this.ollamaClient = new OllamaEmbeddingClient(config);
+    // Usar getOllamaClient para mantener singleton con configuración actualizable
+    this.ollamaClient = getOllamaClient(config);
   }
 
   /**
    * Obtiene el cliente activo (siempre Ollama)
    */
-  private getActiveClient() {
+  getActiveClient() {
     return this.ollamaClient;
   }
 
@@ -371,11 +372,20 @@ export function getEmbeddingClient(config?: any): EmbeddingClient {
   if (!embeddingClientInstance) {
     embeddingClientInstance = new EmbeddingClient(config);
   } else if (config) {
-    // La configuración de Ollama se puede actualizar recreando el cliente
-    // Por ahora, mantenemos la instancia existente
-    console.log('⚠️  Actualizando configuración de Ollama...');
+    // Actualizar la configuración de Ollama
+    const ollamaClient = getOllamaClient(config);
+    embeddingClientInstance['ollamaClient'] = ollamaClient;
+    console.log('✅ Configuración de Ollama actualizada:', config);
   }
 
+  return embeddingClientInstance;
+}
+
+/**
+ * Fuerza la recreación del cliente con nueva configuración
+ */
+export function resetEmbeddingClient(config?: any): EmbeddingClient {
+  embeddingClientInstance = new EmbeddingClient(config);
   return embeddingClientInstance;
 }
 

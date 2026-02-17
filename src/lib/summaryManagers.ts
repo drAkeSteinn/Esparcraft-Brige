@@ -72,6 +72,13 @@ export class NPCSummaryManager {
       orderBy: { createdAt: 'desc' }
     });
   }
+
+  async getByNPCId(npcId: string) {
+    return await db.nPCSummary.findMany({
+      where: { npcId },
+      orderBy: { createdAt: 'desc' }
+    });
+  }
 }
 
 /**
@@ -101,6 +108,13 @@ export class EdificioSummaryManager {
       orderBy: { createdAt: 'desc' }
     });
   }
+
+  async getByEdificioId(edificioId: string) {
+    return await db.edificioSummary.findMany({
+      where: { edificioId },
+      orderBy: { createdAt: 'desc' }
+    });
+  }
 }
 
 /**
@@ -127,6 +141,13 @@ export class PuebloSummaryManager {
 
   async getAll() {
     return await db.puebloSummary.findMany({
+      orderBy: { createdAt: 'desc' }
+    });
+  }
+
+  async getByPuebloId(puebloId: string) {
+    return await db.puebloSummary.findMany({
+      where: { puebloId },
       orderBy: { createdAt: 'desc' }
     });
   }

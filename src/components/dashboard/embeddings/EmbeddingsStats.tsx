@@ -88,7 +88,7 @@ export default function EmbeddingsStats() {
                 ) : (
                   <AlertCircle className="h-5 w-5 text-red-500" />
                 )}
-                <span className="text-sm font-medium">PostgreSQL</span>
+                <span className="text-sm font-medium">LanceDB</span>
               </div>
               <div className="flex items-center gap-2">
                 {(() => {

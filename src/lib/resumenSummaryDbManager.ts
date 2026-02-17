@@ -36,6 +36,13 @@ export class SessionSummaryManager {
       orderBy: { timestamp: 'desc' }
     });
   }
+
+  async getLatestBySessionId(sessionId: string) {
+    return await db.sessionSummary.findFirst({
+      where: { sessionId },
+      orderBy: { timestamp: 'desc' }
+    });
+  }
 }
 
 /**

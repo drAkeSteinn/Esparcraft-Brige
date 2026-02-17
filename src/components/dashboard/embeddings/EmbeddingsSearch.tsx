@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Search, Sparkles, AlertCircle, ExternalLink, Copy } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -22,14 +22,62 @@ interface SearchResult {
   similarity: number;
 }
 
+interface NamespaceInfo {
+  namespace: string;
+  description?: string;
+}
+
 export default function EmbeddingsSearch() {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<SearchResult[]>([]);
   const [loading, setLoading] = useState(false);
-  const [threshold, setThreshold] = useState([0.7]);
-  const [limit, setLimit] = useState('10');
+  const [threshold, setThreshold] = useState([0.5]); // Se actualiza desde la configuración
+  const [limit, setLimit] = useState('5'); // Se actualiza desde la configuración
   const [namespace, setNamespace] = useState<string>('all');
   const [sourceType, setSourceType] = useState<string>('all');
+  const [namespaces, setNamespaces] = useState<NamespaceInfo[]>([]);
+  const [loadingNamespaces, setLoadingNamespaces] = useState(true);
+
+  // Cargar configuración de embeddings al iniciar
+  useEffect(() => {
+    const loadConfig = async () => {
+      try {
+        const response = await fetch('/api/settings/embeddings-global');
+        const data = await response.json();
+        if (data.success && data.data) {
+          if (data.data.similarityThreshold !== undefined) {
+            setThreshold([data.data.similarityThreshold]);
+          }
+          if (data.data.maxResults !== undefined) {
+            setLimit(data.data.maxResults.toString());
+          }
+        }
+      } catch (error) {
+        console.error('Error loading embeddings config:', error);
+      }
+    };
+    loadConfig();
+  }, []);
+
+  // Cargar namespaces dinámicamente
+  useEffect(() => {
+    const fetchNamespaces = async () => {
+      try {
+        const response = await fetch('/api/embeddings/namespaces');
+        const data = await response.json();
+        if (data.success && data.data) {
+          // La API devuelve { namespaces: [...], total: number }
+          const namespaceList = data.data.namespaces || data.data || [];
+          setNamespaces(Array.isArray(namespaceList) ? namespaceList : []);
+        }
+      } catch (error) {
+        console.error('Error fetching namespaces:', error);
+      } finally {
+        setLoadingNamespaces(false);
+      }
+    };
+    fetchNamespaces();
+  }, []);
 
   const handleSearch = async () => {
     if (!query.trim()) {
@@ -82,9 +130,10 @@ export default function EmbeddingsSearch() {
   };
 
   const getSimilarityColor = (similarity: number) => {
-    if (similarity >= 0.9) return 'text-green-600 bg-green-50 dark:bg-green-950';
-    if (similarity >= 0.8) return 'text-blue-600 bg-blue-50 dark:bg-blue-950';
-    if (similarity >= 0.7) return 'text-yellow-600 bg-yellow-50 dark:bg-yellow-950';
+    // Rangos más realistas para búsqueda semántica con embeddings
+    if (similarity >= 0.8) return 'text-green-600 bg-green-50 dark:bg-green-950';
+    if (similarity >= 0.6) return 'text-blue-600 bg-blue-50 dark:bg-blue-950';
+    if (similarity >= 0.4) return 'text-yellow-600 bg-yellow-50 dark:bg-yellow-950';
     return 'text-red-600 bg-red-50 dark:bg-red-950';
   };
 
@@ -168,17 +217,18 @@ export default function EmbeddingsSearch() {
 
             <div>
               <Label htmlFor="namespace">Namespace</Label>
-              <Select value={namespace} onValueChange={setNamespace}>
+              <Select value={namespace} onValueChange={setNamespace} disabled={loadingNamespaces}>
                 <SelectTrigger id="namespace" className="mt-2">
-                  <SelectValue />
+                  <SelectValue placeholder={loadingNamespaces ? "Cargando..." : "Seleccionar namespace"} />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Todos</SelectItem>
-                  <SelectItem value="default">Default</SelectItem>
-                  <SelectItem value="worlds">Mundos</SelectItem>
-                  <SelectItem value="npcs">NPCs</SelectItem>
-                  <SelectItem value="sessions">Sesiones</SelectItem>
-                  <SelectItem value="custom">Personalizado</SelectItem>
+                  {namespaces.map((ns) => (
+                    <SelectItem key={ns.namespace} value={ns.namespace}>
+                      {ns.namespace}
+                      {ns.description && ` - ${ns.description}`}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>

@@ -1,0 +1,6 @@
+{
+  "ollamaUrl": "http://localhost:11434",
+  "model": "bge-m3:567m",
+  "dimension": 1024,
+  "updatedAt": "2026-02-15T00:28:13.593Z"
+}

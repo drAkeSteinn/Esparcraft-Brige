@@ -1,19 +1,15 @@
 'use client';
 
 import { useState } from 'react';
-import { Settings, Database, Brain, Globe, Server, RefreshCw, CheckCircle, AlertCircle, Save, Palette, Monitor, Users, Bug, FolderOpen } from 'lucide-react';
+import { Settings, Server, RefreshCw, Palette, Monitor, Users, Bug, FolderOpen } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 
 // Subcomponentes
-import LanceDBConfig from './settings/LanceDBConfig';
-import EmbeddingsConfig from './settings/EmbeddingsConfig';
 import LLMConfig from './settings/LLMConfig';
 import ConnectionStatus from './settings/ConnectionStatus';
 import ServerConfig from './settings/ServerConfig';
 import InterfaceConfig from './settings/InterfaceConfig';
 import NPCConfig from './settings/NPCConfig';
-import EmbeddingsGlobalConfig from './settings/EmbeddingsGlobalConfig';
 import DebugConfig from './settings/DebugConfig';
 import SessionConfig from './settings/SessionConfig';
 import FilesConfig from './settings/FilesConfig';
@@ -29,9 +25,9 @@ export default function SettingsTab() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold">Configuracion</h2>
+          <h2 className="text-2xl font-bold">Configuración</h2>
           <p className="text-muted-foreground">
-            Gestiona las conexiones y parametros del sistema
+            Gestiona las conexiones y parámetros del sistema
           </p>
         </div>
         <button
@@ -45,16 +41,8 @@ export default function SettingsTab() {
       {/* Connection Status Overview */}
       <ConnectionStatus key={`status-${refreshKey}`} />
       
-      <Tabs defaultValue="lancedb" className="w-full">
-        <TabsList className="grid w-full grid-cols-2 md:grid-cols-4">
-          <TabsTrigger value="lancedb" className="flex items-center gap-2">
-            <Database className="h-4 w-4" />
-            <span>LanceDB</span>
-          </TabsTrigger>
-          <TabsTrigger value="embeddings" className="flex items-center gap-2">
-            <Brain className="h-4 w-4" />
-            <span>Embeddings</span>
-          </TabsTrigger>
+      <Tabs defaultValue="llm" className="w-full">
+        <TabsList className="grid w-full grid-cols-2">
           <TabsTrigger value="llm" className="flex items-center gap-2">
             <Server className="h-4 w-4" />
             <span>LLM</span>
@@ -65,21 +53,13 @@ export default function SettingsTab() {
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="lancedb" className="mt-6">
-          <LanceDBConfig key={`lancedb-${refreshKey}`} onConfigSaved={handleRefresh} />
-        </TabsContent>
-
-        <TabsContent value="embeddings" className="mt-6">
-          <EmbeddingsConfig key={`embeddings-${refreshKey}`} onConfigSaved={handleRefresh} />
-        </TabsContent>
-
         <TabsContent value="llm" className="mt-6">
           <LLMConfig key={`llm-${refreshKey}`} onConfigSaved={handleRefresh} />
         </TabsContent>
 
         <TabsContent value="general" className="mt-6">
           <Tabs defaultValue="server" className="w-full">
-            <TabsList className="grid w-full grid-cols-2 md:grid-cols-7">
+            <TabsList className="grid w-full grid-cols-2 md:grid-cols-6">
               <TabsTrigger value="server" className="flex items-center gap-2">
                 <Server className="h-4 w-4" />
                 <span>Servidor</span>
@@ -95,10 +75,6 @@ export default function SettingsTab() {
               <TabsTrigger value="npcs" className="flex items-center gap-2">
                 <Users className="h-4 w-4" />
                 <span>NPCs</span>
-              </TabsTrigger>
-              <TabsTrigger value="embeddings-global" className="flex items-center gap-2">
-                <Brain className="h-4 w-4" />
-                <span>Embeddings</span>
               </TabsTrigger>
               <TabsTrigger value="debug" className="flex items-center gap-2">
                 <Bug className="h-4 w-4" />
@@ -124,10 +100,6 @@ export default function SettingsTab() {
 
             <TabsContent value="npcs" className="mt-6">
               <NPCConfig key={`npcs-${refreshKey}`} onConfigSaved={handleRefresh} />
-            </TabsContent>
-
-            <TabsContent value="embeddings-global" className="mt-6">
-              <EmbeddingsGlobalConfig key={`embeddings-global-${refreshKey}`} onConfigSaved={handleRefresh} />
             </TabsContent>
 
             <TabsContent value="debug" className="mt-6">

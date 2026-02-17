@@ -48,6 +48,7 @@ import { replaceVariables, replaceVariablesWithCache, VariableContext } from './
 import { extractPromptSections } from './promptUtils';
 import { resolveAllVariables } from './grimorioUtils';
 import { generateSessionSummariesHash, generateNPCSummariesHash, generateEdificioSummariesHash, generatePuebloSummariesHash } from './hashUtils';
+import { getSimilarityThreshold, getMaxResults } from './config-persistence';
 
 // LLM Configuration
 const LLM_API_URL = process.env.LLM_API_URL || 'http://127.0.0.1:5000/v1/chat/completions';
@@ -241,11 +242,16 @@ export async function handleChatTrigger(payload: ChatTriggerPayload): Promise<{ 
   // Buscar contexto relevante de embeddings (síncrono, no bloquear)
   let embeddingContext = '';
   try {
+    // Usar configuración persistente para threshold y maxResults
+    const threshold = getSimilarityThreshold();
+    const maxResults = getMaxResults();
+    
     embeddingContext = await EmbeddingTriggers.searchContext(message, {
       namespace: undefined, // Buscar en todos los namespaces
-      limit: 3, // Máximo 3 contextos relevantes
-      threshold: 0.7 // 70% de similitud mínima
+      limit: Math.min(maxResults, 5), // Máximo 5 contextos relevantes (limitar para chat)
+      threshold
     });
+    console.log(`[handleChatTrigger] Búsqueda de embeddings: threshold=${threshold}, limit=${maxResults}`);
   } catch (error) {
     console.error('Error buscando embeddings:', error);
     // Continuar sin contexto de embeddings

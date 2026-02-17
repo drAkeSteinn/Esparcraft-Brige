@@ -24,7 +24,7 @@ export default function ConnectionStatus() {
   const checkConnections = async () => {
     setLoading(true);
     try {
-      // Verificar PostgreSQL embeddings
+      // Verificar LanceDB embeddings
       const embeddingsRes = await fetch('/api/embeddings/connections');
       const embeddingsData = await embeddingsRes.json();
 
