@@ -61,6 +61,7 @@ export interface VariableContext {
     reputacion?: string;
     hora?: string;
     clima?: string;
+    humor_delta?: string; // Delta de humor del NPC para esta interacción
   };
   session?: {
     playerId?: string;
@@ -181,6 +182,9 @@ export function replaceVariables(text: string, context: VariableContext): string
       if (key === 'piedras_del_alma' || key === 'piedras') {
         return context.jugador?.piedras_del_alma || '';
       }
+      if (key === 'humor_delta' || key === 'npc_humor_delta') {
+        return context.jugador?.humor_delta || '';
+      }
 
       // Jugador object keys (jugador.nombre, jugador.raza, etc.)
       if (key.startsWith('jugador.')) {
@@ -195,6 +199,7 @@ export function replaceVariables(text: string, context: VariableContext): string
         if (jugadorKey === 'almakos') return context.jugador?.almakos || '';
         if (jugadorKey === 'deuda') return context.jugador?.deuda || '';
         if (jugadorKey === 'piedras_del_alma' || jugadorKey === 'piedras') return context.jugador?.piedras_del_alma || '';
+        if (jugadorKey === 'humor_delta') return context.jugador?.humor_delta || '';
         if (jugadorKey === 'mensaje') return context.mensaje || ''; // Mensaje del jugador actual
       }
 

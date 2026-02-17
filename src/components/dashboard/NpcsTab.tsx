@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, FileUp, FileDown } from 'lucide-react';
+import { Plus, Edit2, Trash2, FileUp, FileDown, Code, AlertCircle, CheckCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -11,7 +11,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { NPC, World, Pueblo, Edificio, SillyTavernCard, getCardField } from '@/lib/types';
+import { Badge } from '@/components/ui/badge';
+import { NPC, World, Pueblo, Edificio, SillyTavernCard, getCardField, JsonResponseConfig } from '@/lib/types';
 import { toast } from '@/hooks/use-toast';
 import NPCBackupSection from './NPCBackupSection';
 
@@ -42,6 +43,17 @@ export default function NpcsTab() {
     cardCreatorNotes: '',
     cardAlternateGreetings: ''
   });
+
+  // Estado para configuración JSON
+  const [jsonConfig, setJsonConfig] = useState<JsonResponseConfig>({
+    enabled: false,
+    schema: null,
+    exampleResponse: null,
+    fallbackResponse: null,
+    correctionPrompt: null,
+    maxRetries: 2
+  });
+  const [jsonConfigLoading, setJsonConfigLoading] = useState(false);
 
   useEffect(() => {
     fetchData();
@@ -116,7 +128,7 @@ export default function NpcsTab() {
     setImportedCard(null);
   };
 
-  const handleEdit = (npc: NPC) => {
+  const handleEdit = async (npc: NPC) => {
     setEditingNpc(npc);
     setImportedCard(npc.card);
     setImportOpen(false);
@@ -138,7 +150,55 @@ export default function NpcsTab() {
       cardCreatorNotes: getCardField(npc.card, 'creator_notes', ''),
       cardAlternateGreetings: (getCardField(npc.card, 'alternate_greetings', []) || []).join('\n')
     });
+    
+    // Cargar configuración JSON del NPC
+    await loadJsonConfig(npc.id);
+    
     setDialogOpen(true);
+  };
+
+  const loadJsonConfig = async (npcId: string) => {
+    try {
+      setJsonConfigLoading(true);
+      const response = await fetch(`/api/npcs/${npcId}/json-config`);
+      const result = await response.json();
+      if (result.success) {
+        setJsonConfig(result.data);
+      }
+    } catch (error) {
+      console.error('Error loading JSON config:', error);
+    } finally {
+      setJsonConfigLoading(false);
+    }
+  };
+
+  const handleSaveJsonConfig = async () => {
+    if (!editingNpc) return;
+    
+    try {
+      const response = await fetch(`/api/npcs/${editingNpc.id}/json-config`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(jsonConfig)
+      });
+      const result = await response.json();
+      
+      if (result.success) {
+        toast({
+          title: 'Éxito',
+          description: 'Configuración JSON guardada correctamente'
+        });
+      } else {
+        throw new Error(result.error);
+      }
+    } catch (error) {
+      console.error('Error saving JSON config:', error);
+      toast({
+        title: 'Error',
+        description: 'No se pudo guardar la configuración JSON',
+        variant: 'destructive'
+      });
+    }
   };
 
   const handleDelete = async (id: string) => {
@@ -473,10 +533,14 @@ export default function NpcsTab() {
           </DialogHeader>
           <ScrollArea className="max-h-[calc(95vh-140px)]">
             <Tabs defaultValue="basic" className="w-full">
-              <TabsList className="grid w-full grid-cols-3">
+              <TabsList className="grid w-full grid-cols-4">
                 <TabsTrigger value="basic">Básico</TabsTrigger>
                 <TabsTrigger value="advanced">Avanzado</TabsTrigger>
                 <TabsTrigger value="location">Ubicación</TabsTrigger>
+                <TabsTrigger value="json" className="flex items-center gap-1">
+                  <Code className="h-3 w-3" />
+                  JSON
+                </TabsTrigger>
               </TabsList>
 
               <TabsContent value="basic" className="space-y-4">
@@ -665,6 +729,175 @@ export default function NpcsTab() {
                   </Select>
                 </div>
               </div>
+            </TabsContent>
+
+            {/* JSON Config Tab */}
+            <TabsContent value="json" className="space-y-4">
+              <ScrollArea className="max-h-[70vh] pr-4">
+                <div className="space-y-4">
+                  {/* JSON Mode Toggle */}
+                  <div className="flex items-center justify-between p-4 rounded-lg border bg-muted/50">
+                    <div className="flex items-center gap-2">
+                      <Code className="h-5 w-5" />
+                      <div>
+                        <p className="font-medium">Modo JSON</p>
+                        <p className="text-xs text-muted-foreground">
+                          El LLM responderá en formato JSON estructurado
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {jsonConfig.enabled && (
+                        <Badge variant="default" className="bg-green-600">
+                          Activado
+                        </Badge>
+                      )}
+                      <Button
+                        variant={jsonConfig.enabled ? "destructive" : "default"}
+                        size="sm"
+                        onClick={() => setJsonConfig({ ...jsonConfig, enabled: !jsonConfig.enabled })}
+                      >
+                        {jsonConfig.enabled ? 'Desactivar' : 'Activar'}
+                      </Button>
+                    </div>
+                  </div>
+
+                  {jsonConfig.enabled && (
+                    <>
+                      {/* JSON Schema */}
+                      <div>
+                        <Label>Esquema JSON Esperado</Label>
+                        <p className="text-xs text-muted-foreground mb-2">
+                          Define la estructura del JSON que el LLM debe retornar
+                        </p>
+                        <Textarea
+                          value={jsonConfig.schema ? JSON.stringify(jsonConfig.schema, null, 2) : ''}
+                          onChange={(e) => {
+                            try {
+                              const parsed = e.target.value ? JSON.parse(e.target.value) : null;
+                              setJsonConfig({ ...jsonConfig, schema: parsed });
+                            } catch {
+                              // Invalid JSON, keep as string for now
+                            }
+                          }}
+                          placeholder={`{
+  "dialogo": {
+    "texto": "..."
+  },
+  "estado": {
+    "tono": "...",
+    "emocion": "...",
+    "humor_delta": 0
+  },
+  "intencion": "..."
+}`}
+                          rows={12}
+                          className="font-mono text-sm"
+                        />
+                      </div>
+
+                      {/* Example Response */}
+                      <div>
+                        <Label>Ejemplo de Respuesta Válida</Label>
+                        <p className="text-xs text-muted-foreground mb-2">
+                          Un ejemplo que el LLM puede usar como referencia
+                        </p>
+                        <Textarea
+                          value={jsonConfig.exampleResponse ? JSON.stringify(jsonConfig.exampleResponse, null, 2) : ''}
+                          onChange={(e) => {
+                            try {
+                              const parsed = e.target.value ? JSON.parse(e.target.value) : null;
+                              setJsonConfig({ ...jsonConfig, exampleResponse: parsed });
+                            } catch {
+                              // Invalid JSON
+                            }
+                          }}
+                          placeholder={`{
+  "dialogo": {
+    "texto": "Cien Almakos la jarra..."
+  },
+  "estado": {
+    "tono": "CORTANTE",
+    "emocion": "DESPRECIO",
+    "humor_delta": -1
+  },
+  "intencion": "COBRAR_DEUDA"
+}`}
+                          rows={10}
+                          className="font-mono text-sm"
+                        />
+                      </div>
+
+                      {/* Fallback Response */}
+                      <div>
+                        <Label>Respuesta de Seguridad (Fallback)</Label>
+                        <p className="text-xs text-muted-foreground mb-2">
+                          Se usa si el LLM no puede generar un JSON válido después de los reintentos
+                        </p>
+                        <Textarea
+                          value={jsonConfig.fallbackResponse ? JSON.stringify(jsonConfig.fallbackResponse, null, 2) : ''}
+                          onChange={(e) => {
+                            try {
+                              const parsed = e.target.value ? JSON.parse(e.target.value) : null;
+                              setJsonConfig({ ...jsonConfig, fallbackResponse: parsed });
+                            } catch {
+                              // Invalid JSON
+                            }
+                          }}
+                          placeholder={`{
+  "dialogo": {
+    "texto": "No tengo nada que decir."
+  },
+  "estado": {
+    "tono": "NEUTRAL",
+    "emocion": "INDIFERENTE",
+    "humor_delta": 0
+  },
+  "intencion": "SILENCIO"
+}`}
+                          rows={10}
+                          className="font-mono text-sm"
+                        />
+                      </div>
+
+                      {/* Correction Prompt */}
+                      <div>
+                        <Label>Prompt de Corrección (Opcional)</Label>
+                        <p className="text-xs text-muted-foreground mb-2">
+                          Instrucciones personalizadas para corregir respuestas inválidas. Dejar vacío para usar el default.
+                        </p>
+                        <Textarea
+                          value={jsonConfig.correctionPrompt || ''}
+                          onChange={(e) => setJsonConfig({ ...jsonConfig, correctionPrompt: e.target.value || null })}
+                          placeholder="Si dejas esto vacío, se usará un prompt de corrección automático..."
+                          rows={4}
+                        />
+                      </div>
+
+                      {/* Max Retries */}
+                      <div>
+                        <Label>Reintentos Máximos</Label>
+                        <Input
+                          type="number"
+                          min={1}
+                          max={5}
+                          value={jsonConfig.maxRetries}
+                          onChange={(e) => setJsonConfig({ ...jsonConfig, maxRetries: parseInt(e.target.value) || 2 })}
+                          className="w-24"
+                        />
+                      </div>
+
+                      {/* Save Button */}
+                      <div className="flex justify-end pt-4 border-t">
+                        <Button onClick={handleSaveJsonConfig} className="flex items-center gap-2">
+                          <CheckCircle className="h-4 w-4" />
+                          Guardar Configuración JSON
+                        </Button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </ScrollArea>
             </TabsContent>
           </Tabs>
         </ScrollArea>

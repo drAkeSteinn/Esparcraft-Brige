@@ -84,7 +84,7 @@ export interface SillyTavernCard {
     tags?: string[];
     creator?: string;
     character_version?: string;
-    extensions?: Record<string, any>;
+    extensions?: SillyTavernExtensions;
     avatar?: string;
     group_only_greetings?: string[];
   };
@@ -103,13 +103,43 @@ export interface SillyTavernCard {
   tags?: string[];
   creator?: string;
   character_version?: string;
-  extensions?: Record<string, any>;
+  extensions?: SillyTavernExtensions;
   avatar?: string;
   group_only_greetings?: string[];
   talkativeness?: string;
   fav?: boolean;
   creatorcomment?: string;
   [key: string]: any;
+}
+
+// Extensions para SillyTavernCard
+export interface SillyTavernExtensions {
+  jsonResponse?: JsonResponseConfig;
+  [key: string]: any;
+}
+
+// Configuración de respuesta JSON para NPCs
+export interface JsonResponseConfig {
+  enabled: boolean;
+  schema: Record<string, any> | null;           // Esquema JSON esperado
+  exampleResponse: Record<string, any> | null;  // Ejemplo de respuesta válida
+  fallbackResponse: Record<string, any> | null; // Respuesta de seguridad
+  correctionPrompt: string | null;              // Prompt para corregir respuesta errónea
+  maxRetries: number;                           // Máximo de reintentos (default: 2)
+}
+
+// Resultado del procesamiento JSON
+export interface JsonProcessResult {
+  success: boolean;
+  data: Record<string, any> | string;  // JSON parseado o string original
+  rawResponse: string;                  // Respuesta original del LLM
+  metadata: {
+    jsonMode: boolean;
+    attempts: number;
+    corrected: boolean;
+    usedFallback: boolean;
+    error?: string;
+  };
 }
 
 // Helper to get card field (supports both data.* and top-level structure)
@@ -166,6 +196,7 @@ export interface Jugador {
   reputacion?: string;
   hora?: string;
   clima?: string;
+  humor_delta?: string; // Delta de humor del NPC para esta interacción
 }
 
 // Session Summary: Resumen de sesión con metadata completa
@@ -222,6 +253,7 @@ export interface ChatTriggerPayload extends TriggerPayload {
     reputacion?: string;
     hora?: string;
     clima?: string;
+    humor_delta?: string; // Delta de humor del NPC para esta interacción
   };
   templateUser?: string; // Plantilla del usuario opcional
   lastSummary?: string; // Último resumen de la sesión (opcional)
@@ -301,6 +333,7 @@ export interface PromptBuildContext {
     reputacion?: string;
     hora?: string;
     clima?: string;
+    humor_delta?: string; // Delta de humor del NPC para esta interacción
   };
 }
 
@@ -402,6 +435,7 @@ export interface ApplyGrimorioCardRequest {
       reputacion?: string;
       hora?: string;
       clima?: string;
+      humor_delta?: string; // Delta de humor del NPC para esta interacción
     };
     session?: Session;
     mensaje?: string;

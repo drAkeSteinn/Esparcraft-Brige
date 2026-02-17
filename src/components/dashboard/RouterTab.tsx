@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { Send, RefreshCw, Network, MessageSquare, Globe, MapPin, Building, User, Eye, MessageCircle, FileText, Copy, Trash2, Terminal, Loader2, Layers, CheckCircle, AlertCircle } from 'lucide-react';
+import { Send, RefreshCw, Network, MessageSquare, Globe, MapPin, Building, User, Eye, MessageCircle, FileText, Copy, Trash2, Terminal, Loader2, Layers, CheckCircle, AlertCircle, Code } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -69,6 +69,12 @@ export default function RouterTab() {
   // Estado para cargar configuración de minMessages desde Resumen General
   const [minMessagesConfig, setMinMessagesConfig] = useState<number>(10);
 
+  // Estado para JSON mode del NPC seleccionado
+  const [selectedNpcJsonConfig, setSelectedNpcJsonConfig] = useState<{
+    enabled: boolean;
+    schema: any;
+  } | null>(null);
+
   // Chat trigger form
   const [chatForm, setChatForm] = useState({
     sessionType: 'new' as 'new' | 'exist',
@@ -84,7 +90,8 @@ export default function RouterTab() {
       salud_actual: '10',
       reputacion: '6',
       hora: '10:30pm',
-      clima: 'soleado'
+      clima: 'soleado',
+      humor_delta: '0' // Delta de humor del NPC para esta interacción
     },
     mensaje: '', // Mensaje del jugador (context por mensaje)
     historyLimit: 10, // Número de mensajes del historial a enviar
@@ -142,6 +149,32 @@ export default function RouterTab() {
   useEffect(() => {
     fetchData();
   }, []);
+
+  // Cargar JSON config del NPC seleccionado
+  useEffect(() => {
+    const loadNpcJsonConfig = async () => {
+      if (chatForm.npcid) {
+        try {
+          const response = await fetch(`/api/npcs/${chatForm.npcid}/json-config`);
+          const result = await response.json();
+          if (result.success && result.data?.enabled) {
+            setSelectedNpcJsonConfig({
+              enabled: result.data.enabled,
+              schema: result.data.schema
+            });
+          } else {
+            setSelectedNpcJsonConfig(null);
+          }
+        } catch (error) {
+          console.error('Error loading NPC JSON config:', error);
+          setSelectedNpcJsonConfig(null);
+        }
+      } else {
+        setSelectedNpcJsonConfig(null);
+      }
+    };
+    loadNpcJsonConfig();
+  }, [chatForm.npcid]);
 
   // ✅ Cargar configuración de minMessages desde Resumen General
   useEffect(() => {
@@ -531,7 +564,8 @@ ${memoriesSections.join('\n')}
                 salud_actual: sessionResult.data.jugador.salud_actual || prev.jugador.salud_actual,
                 reputacion: sessionResult.data.jugador.reputacion || prev.jugador.reputacion,
                 hora: sessionResult.data.jugador.hora || prev.jugador.hora,
-                clima: sessionResult.data.jugador.clima || prev.jugador.clima
+                clima: sessionResult.data.jugador.clima || prev.jugador.clima,
+                humor_delta: sessionResult.data.jugador.humor_delta || prev.jugador.humor_delta
               }
             }));
           } else {
@@ -1053,7 +1087,7 @@ ${memoriesSections.join('\n')}
     // Agregar jugador si existe
     if (payload.jugador) {
       script += `    "jugador":\n`;
-      const jugadorKeys = ['nombre', 'raza', 'nivel', 'almakos', 'deuda', 'piedras_del_alma', 'salud_actual', 'reputacion', 'hora', 'clima'];
+      const jugadorKeys = ['nombre', 'raza', 'nivel', 'almakos', 'deuda', 'piedras_del_alma', 'salud_actual', 'reputacion', 'hora', 'clima', 'humor_delta'];
       jugadorKeys.forEach(key => {
         if (payload.jugador[key] !== undefined) {
           const value = typeof payload.jugador[key] === 'string'
@@ -1382,6 +1416,24 @@ ${memoriesSections.join('\n')}
                     </div>
                   </div>
 
+                  {/* JSON Mode Indicator */}
+                  {selectedNpcJsonConfig?.enabled && (
+                    <div className="flex items-center gap-2 p-3 rounded-lg bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800">
+                      <Code className="h-4 w-4 text-green-600" />
+                      <div className="flex-1">
+                        <p className="text-sm font-medium text-green-800 dark:text-green-200">
+                          Modo JSON Activado
+                        </p>
+                        <p className="text-xs text-green-600 dark:text-green-400">
+                          El LLM responderá en formato JSON estructurado
+                        </p>
+                      </div>
+                      <Badge variant="outline" className="border-green-400 text-green-700 dark:text-green-300">
+                        JSON
+                      </Badge>
+                    </div>
+                  )}
+
                   {chatForm.sessionType === 'exist' && (
                     <div>
                       <Label>ID de Sesión</Label>
@@ -1492,7 +1544,15 @@ ${memoriesSections.join('\n')}
                         placeholder="Ej: soleado, lluvioso, etc."
                       />
                     </div>
-                    <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label>Humor Delta</Label>
+                      <Input
+                        value={chatForm.jugador.humor_delta}
+                        onChange={(e) => setChatForm({ ...chatForm, jugador: { ...chatForm.jugador, humor_delta: e.target.value } })}
+                        placeholder="Ej: 0, +1, -2, etc."
+                      />
+                    </div>
+                    <div className="col-span-2">
                       <Label>Mensaje del Jugador</Label>
                       <Textarea
                         value={chatForm.mensaje}

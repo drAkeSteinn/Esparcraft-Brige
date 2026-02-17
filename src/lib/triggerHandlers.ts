@@ -15,7 +15,9 @@ import {
   ChatMessage,
   getCardField,
   Jugador,
-  SessionSummary
+  SessionSummary,
+  JsonResponseConfig,
+  JsonProcessResult
 } from './types';
 import {
   edificioStateManager,
@@ -55,6 +57,203 @@ const LLM_API_URL = process.env.LLM_API_URL || 'http://127.0.0.1:5000/v1/chat/co
 const LLM_MODEL = process.env.LLM_MODEL || 'local-model';
 const LLM_TEMPERATURE = parseFloat(process.env.LLM_TEMPERATURE || '0.7');
 const LLM_MAX_TOKENS = parseInt(process.env.LLM_MAX_TOKENS || '2000');
+
+/**
+ * Extrae JSON de una respuesta del LLM
+ * Maneja diferentes formatos: JSON puro, markdown con ```json, texto con JSON embebido
+ */
+function extractJsonFromResponse(response: string): string | null {
+  // Intentar parsear directamente
+  const trimmed = response.trim();
+  if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+    return trimmed;
+  }
+
+  // Buscar JSON en bloques markdown ```json ... ```
+  const jsonBlockMatch = response.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (jsonBlockMatch) {
+    return jsonBlockMatch[1].trim();
+  }
+
+  // Buscar JSON embebido (primer { hasta último })
+  const firstBrace = response.indexOf('{');
+  const lastBrace = response.lastIndexOf('}');
+  if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+    return response.substring(firstBrace, lastBrace + 1);
+  }
+
+  return null;
+}
+
+/**
+ * Intenta parsear JSON y validar que tenga las keys requeridas
+ */
+function tryParseJson(jsonStr: string, requiredKeys?: string[]): { success: boolean; data?: Record<string, any>; error?: string } {
+  try {
+    const parsed = JSON.parse(jsonStr);
+    
+    // Si hay keys requeridas, validar que existan
+    if (requiredKeys && Array.isArray(requiredKeys)) {
+      const missingKeys = requiredKeys.filter(key => !(key in parsed));
+      if (missingKeys.length > 0) {
+        return { success: false, error: `Missing required keys: ${missingKeys.join(', ')}` };
+      }
+    }
+    
+    return { success: true, data: parsed };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : 'Unknown parse error' };
+  }
+}
+
+/**
+ * Obtiene la configuración JSON del NPC
+ */
+function getJsonConfig(npc: any): JsonResponseConfig | null {
+  const extensions = npc?.card?.data?.extensions || npc?.card?.extensions;
+  if (!extensions?.jsonResponse?.enabled) return null;
+  return extensions.jsonResponse as JsonResponseConfig;
+}
+
+/**
+ * Procesa la respuesta del LLM en modo JSON
+ * Intenta extraer, validar y corregir si es necesario
+ */
+async function processJsonResponse(
+  response: string,
+  jsonConfig: JsonResponseConfig,
+  messages: ChatMessage[]
+): Promise<JsonProcessResult> {
+  const metadata = {
+    jsonMode: true,
+    attempts: 1,
+    corrected: false,
+    usedFallback: false
+  };
+
+  // Intentar extraer JSON
+  let jsonStr = extractJsonFromResponse(response);
+  
+  if (!jsonStr) {
+    console.log('[processJsonResponse] No se pudo extraer JSON de la respuesta');
+    // Intentar corregir con LLM
+    return await attemptCorrection(response, jsonConfig, messages, metadata, 'No se encontró JSON en la respuesta');
+  }
+
+  // Intentar parsear
+  let parseResult = tryParseJson(jsonStr);
+  
+  if (parseResult.success) {
+    console.log('[processJsonResponse] JSON parseado exitosamente en primer intento');
+    return {
+      success: true,
+      data: parseResult.data!,
+      rawResponse: response,
+      metadata
+    };
+  }
+
+  console.log('[processJsonResponse] Error parseando JSON:', parseResult.error);
+  
+  // Intentar corregir
+  return await attemptCorrection(response, jsonConfig, messages, metadata, parseResult.error || 'Parse error');
+}
+
+/**
+ * Intenta corregir la respuesta usando el LLM
+ */
+async function attemptCorrection(
+  originalResponse: string,
+  jsonConfig: JsonResponseConfig,
+  originalMessages: ChatMessage[],
+  metadata: any,
+  errorMessage: string
+): Promise<JsonProcessResult> {
+  const maxRetries = jsonConfig.maxRetries || 2;
+  
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    metadata.attempts = attempt + 1;
+    console.log(`[attemptCorrection] Intento de corrección ${attempt}/${maxRetries}`);
+    
+    // Crear mensaje de corrección
+    const correctionPrompt = jsonConfig.correctionPrompt || 
+      `La respuesta anterior no tiene el formato JSON correcto. Error: ${errorMessage}
+
+Por favor, corrige la respuesta y devuelve ÚNICAMENTE el JSON válido sin texto adicional.
+
+Respuesta incorrecta:
+${originalResponse}
+
+Formato esperado:
+${JSON.stringify(jsonConfig.exampleResponse || jsonConfig.schema, null, 2)}`;
+
+    const correctionMessages: ChatMessage[] = [
+      ...originalMessages,
+      {
+        role: 'assistant',
+        content: originalResponse,
+        timestamp: new Date().toISOString()
+      },
+      {
+        role: 'user',
+        content: correctionPrompt,
+        timestamp: new Date().toISOString()
+      }
+    ];
+
+    try {
+      const correctedResponse = await callLLM(correctionMessages);
+      console.log('[attemptCorrection] Respuesta de corrección recibida');
+      
+      const jsonStr = extractJsonFromResponse(correctedResponse);
+      if (!jsonStr) {
+        console.log('[attemptCorrection] Aún no se puede extraer JSON');
+        originalResponse = correctedResponse;
+        continue;
+      }
+
+      const parseResult = tryParseJson(jsonStr);
+      if (parseResult.success) {
+        console.log('[attemptCorrection] JSON corregido exitosamente');
+        metadata.corrected = true;
+        return {
+          success: true,
+          data: parseResult.data!,
+          rawResponse: correctedResponse,
+          metadata
+        };
+      }
+      
+      originalResponse = correctedResponse;
+      errorMessage = parseResult.error || 'Parse error';
+    } catch (error) {
+      console.error('[attemptCorrection] Error llamando al LLM:', error);
+    }
+  }
+
+  // Agotados los intentos, usar fallback si existe
+  if (jsonConfig.fallbackResponse) {
+    console.log('[attemptCorrection] Usando respuesta de fallback');
+    metadata.usedFallback = true;
+    return {
+      success: true,
+      data: jsonConfig.fallbackResponse,
+      rawResponse: originalResponse,
+      metadata
+    };
+  }
+
+  // Sin fallback, retornar error
+  return {
+    success: false,
+    data: originalResponse,
+    rawResponse: originalResponse,
+    metadata: {
+      ...metadata,
+      error: `Failed after ${maxRetries} correction attempts: ${errorMessage}`
+    }
+  };
+}
 
 async function callLLM(messages: ChatMessage[]): Promise<string> {
   try {
@@ -127,7 +326,11 @@ function mergeJugadorData(
 }
 
 // Chat trigger handler
-export async function handleChatTrigger(payload: ChatTriggerPayload): Promise<{ response: string; sessionId: string }> {
+export async function handleChatTrigger(payload: ChatTriggerPayload): Promise<{ 
+  response: string | Record<string, any>; 
+  sessionId: string;
+  jsonMetadata?: JsonProcessResult['metadata'];
+}> {
   const { message, npcid, playersessionid, jugador, lastSummary: payloadLastSummary } = payload;
 
   // DEBUG: Log para ver qué llega del request
@@ -140,6 +343,10 @@ export async function handleChatTrigger(payload: ChatTriggerPayload): Promise<{ 
   if (!npc) {
     throw new Error(`NPC with id ${npcid} not found`);
   }
+
+  // ✅ Detectar si el NPC tiene JSON mode activado
+  const jsonConfig = getJsonConfig(npc);
+  console.log('[handleChatTrigger] JSON mode:', jsonConfig?.enabled ? 'ACTIVADO' : 'DESACTIVADO');
 
   // Get context (world, pueblo, edificio)
   const world = await worldDbManager.getById(npc.location.worldId);
@@ -285,20 +492,50 @@ export async function handleChatTrigger(payload: ChatTriggerPayload): Promise<{ 
   // Call LLM
   const response = await callLLM(finalMessages);
 
+  // ✅ Procesar respuesta según modo JSON
+  let finalResponse: string | Record<string, any> = response;
+  let jsonMetadata: JsonProcessResult['metadata'] | undefined;
+
+  if (jsonConfig) {
+    console.log('[handleChatTrigger] Procesando respuesta en modo JSON...');
+    const processResult = await processJsonResponse(response, jsonConfig, finalMessages);
+    
+    if (processResult.success) {
+      finalResponse = processResult.data;
+      jsonMetadata = processResult.metadata;
+      console.log('[handleChatTrigger] JSON procesado exitosamente:', {
+        attempts: jsonMetadata.attempts,
+        corrected: jsonMetadata.corrected,
+        usedFallback: jsonMetadata.usedFallback
+      });
+    } else {
+      // Si falló completamente, usar la respuesta original como string
+      finalResponse = processResult.rawResponse;
+      jsonMetadata = processResult.metadata;
+      console.log('[handleChatTrigger] JSON falló, usando respuesta original');
+    }
+  }
+
   // Save messages to session
   await sessionDbManager.addMessage(session.id, {
     role: 'user',
     content: message
   });
 
+  // Guardar la respuesta (si es JSON, guardar como string para el historial)
+  const responseForHistory = typeof finalResponse === 'string' 
+    ? finalResponse 
+    : JSON.stringify(finalResponse);
+  
   await sessionDbManager.addMessage(session.id, {
     role: 'assistant',
-    content: response
+    content: responseForHistory
   });
 
   return {
-    response,
-    sessionId: session.id
+    response: finalResponse,
+    sessionId: session.id,
+    jsonMetadata
   };
 }
 

@@ -156,6 +156,17 @@ export const VARIABLE_GLOSSARY: Record<string, VariableDefinition> = {
     nested: false
   },
 
+  'jugador.humor_delta': {
+    name: 'jugador.humor_delta',
+    aliases: ['humor_delta', 'npc_humor_delta'],
+    description: 'Delta de humor del NPC para esta interacción (puede ser positivo, negativo o cero)',
+    type: 'string',
+    example: '+1',
+    category: 'player',
+    required: false,
+    nested: false
+  },
+
   'jugador.mensaje': {
     name: 'jugador.mensaje',
     aliases: ['mensaje'],

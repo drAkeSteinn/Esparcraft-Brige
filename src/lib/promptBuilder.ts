@@ -190,7 +190,7 @@ export function buildCompleteChatPrompt(
   // 6. Chat Examples (DEL NPC)
   const chatExamples = getCardField(npc?.card, 'mes_example', '');
   if (chatExamples) {
-    prompt += `=== EJEMPLOS DE CHAT ===\n{{npc.mes_example}}\n\n`;
+    prompt += `{{npc.mes_example}}\n\n`;
   }
 
   // 7. Last User Message (se eliminó la sección Template del Usuario, ahora se usan variables de Grimorio directamente)
