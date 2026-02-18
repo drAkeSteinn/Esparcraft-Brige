@@ -1,20 +1,23 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, MapPin, Building2, RefreshCw, ScrollText } from 'lucide-react';
+import { Plus, Edit2, Trash2, MapPin, Building2, RefreshCw, ScrollText, Users, Building, Globe } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { World, Pueblo } from '@/lib/types';
+import { Badge } from '@/components/ui/badge';
+import { World, Pueblo, Edificio, NPC } from '@/lib/types';
 import { toast } from '@/hooks/use-toast';
 import GenericBackupSection from '../GenericBackupSection';
 
 export default function MundosSection() {
   const [worlds, setWorlds] = useState<World[]>([]);
   const [pueblos, setPueblos] = useState<Pueblo[]>([]);
+  const [edificios, setEdificios] = useState<Edificio[]>([]);
+  const [npcs, setNpcs] = useState<NPC[]>([]);
   const [worldMemories, setWorldMemories] = useState<Record<string, any>>({});
   const [loading, setLoading] = useState(true);
   const [updatingAreas, setUpdatingAreas] = useState(false);
@@ -34,14 +37,21 @@ export default function MundosSection() {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [worldsRes, pueblosRes] = await Promise.all([
+      const [worldsRes, pueblosRes, edificiosRes, npcsRes] = await Promise.all([
         fetch('/api/worlds'),
-        fetch('/api/pueblos')
+        fetch('/api/pueblos'),
+        fetch('/api/edificios'),
+        fetch('/api/npcs')
       ]);
       const worldsResult = await worldsRes.json();
       const pueblosResult = await pueblosRes.json();
+      const edificiosResult = await edificiosRes.json();
+      const npcsResult = await npcsRes.json();
+      
       if (worldsResult.success) setWorlds(worldsResult.data);
       if (pueblosResult.success) setPueblos(pueblosResult.data);
+      if (edificiosResult.success) setEdificios(edificiosResult.data);
+      if (npcsResult.success) setNpcs(npcsResult.data);
 
       // Cargar memorias de mundos en paralelo
       const memoriaPromises = worldsResult.data.map(world =>
@@ -243,10 +253,37 @@ export default function MundosSection() {
               <CardDescription>ID: {world.id}</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="space-y-2">
+              <div className="space-y-3">
+                {/* Estadísticas del Mundo */}
+                {(() => {
+                  const regionesEnMundo = pueblos.filter(p => p.worldId === world.id);
+                  const edificiosEnMundo = edificios.filter(e => {
+                    const pueblo = pueblos.find(p => p.id === e.puebloId);
+                    return pueblo?.worldId === world.id;
+                  });
+                  const npcsEnMundo = npcs.filter(n => n.location.worldId === world.id);
+                  
+                  return (
+                    <div className="flex flex-wrap gap-2 mb-3">
+                      <Badge variant="secondary" className="flex items-center gap-1">
+                        <Globe className="h-3 w-3" />
+                        {regionesEnMundo.length} {regionesEnMundo.length === 1 ? 'región' : 'regiones'}
+                      </Badge>
+                      <Badge variant="secondary" className="flex items-center gap-1">
+                        <Building className="h-3 w-3" />
+                        {edificiosEnMundo.length} {edificiosEnMundo.length === 1 ? 'edificio' : 'edificios'}
+                      </Badge>
+                      <Badge variant="default" className="flex items-center gap-1 bg-primary/80">
+                        <Users className="h-3 w-3" />
+                        {npcsEnMundo.length} {npcsEnMundo.length === 1 ? 'NPC' : 'NPCs'}
+                      </Badge>
+                    </div>
+                  );
+                })()}
+                
                 <div>
                   <p className="text-sm font-medium">Estado del mundo:</p>
-                  <p className="text-sm text-muted-foreground">{world.lore.estado_mundo}</p>
+                  <p className="text-sm text-muted-foreground">{world.lore.estado_mundo || 'Sin estado definido'}</p>
                 </div>
                 {world.lore.rumores.length > 0 && (
                   <div>

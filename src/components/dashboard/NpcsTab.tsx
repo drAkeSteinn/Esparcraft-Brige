@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, FileUp, FileDown, Code, AlertCircle, CheckCircle } from 'lucide-react';
+import { Plus, Edit2, Trash2, FileUp, FileDown, Code, AlertCircle, CheckCircle, Globe, MapPin, Building, User, ScrollText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -422,66 +422,127 @@ export default function NpcsTab() {
             const cardName = getCardField(npc.card, 'name', 'Unknown');
             const cardPersonality = getCardField(npc.card, 'personality', '');
             const cardDescription = getCardField(npc.card, 'description', '');
+            const cardAvatar = getCardField(npc.card, 'avatar', null);
+            const jsonEnabled = npc.card?.data?.extensions?.jsonResponse?.enabled || npc.card?.extensions?.jsonResponse?.enabled || false;
 
             return (
-              <Card key={npc.id}>
-                <CardHeader>
-                  <CardTitle className="flex items-center justify-between">
-                    {cardName}
-                    <div className="flex gap-2">
+              <Card key={npc.id} className="overflow-hidden">
+                <CardHeader className="pb-2">
+                  <CardTitle className="flex items-center justify-between text-lg">
+                    <div className="flex items-center gap-2 min-w-0">
+                      {cardAvatar ? (
+                        <img 
+                          src={cardAvatar} 
+                          alt={cardName}
+                          className="w-8 h-8 rounded-full object-cover border-2 border-muted"
+                        />
+                      ) : (
+                        <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center border-2 border-muted">
+                          <User className="h-4 w-4 text-muted-foreground" />
+                        </div>
+                      )}
+                      <span className="truncate">{cardName}</span>
+                    </div>
+                    <div className="flex gap-1 flex-shrink-0">
+                      {jsonEnabled && (
+                        <Badge variant="default" className="bg-green-600 text-xs px-1.5">
+                          JSON
+                        </Badge>
+                      )}
                       <Button
                         variant="ghost"
                         size="sm"
                         onClick={() => handleExport(npc)}
                         title="Exportar tarjeta"
+                        className="h-7 w-7 p-0"
                       >
-                        <FileDown className="h-4 w-4" />
+                        <FileDown className="h-3.5 w-3.5" />
                       </Button>
                       <Button
                         variant="ghost"
                         size="sm"
                         onClick={() => handleEdit(npc)}
+                        className="h-7 w-7 p-0"
                       >
-                        <Edit2 className="h-4 w-4" />
+                        <Edit2 className="h-3.5 w-3.5" />
                       </Button>
                       <Button
                         variant="ghost"
                         size="sm"
                         onClick={() => handleDelete(npc.id)}
+                        className="h-7 w-7 p-0"
                       >
-                        <Trash2 className="h-4 w-4 text-destructive" />
+                        <Trash2 className="h-3.5 w-3.5 text-destructive" />
                       </Button>
                     </div>
                   </CardTitle>
-                  <CardDescription>
-                    {edificio?.name || pueblo?.name || world?.name || 'Ubicación desconocida'}
-                  </CardDescription>
                 </CardHeader>
-                <CardContent>
-                  <div className="space-y-2">
-                    <div className="text-xs text-muted-foreground">
-                      ID: {npc.id}
+                <CardContent className="overflow-hidden">
+                  <div className="max-h-80 overflow-y-auto space-y-3 pr-1 custom-scrollbar">
+                    {/* Ubicación jerárquica */}
+                    <div className="space-y-1.5">
+                      {/* Mundo */}
+                      <div className="flex items-center gap-2 text-sm">
+                        <Globe className="h-3.5 w-3.5 text-indigo-500 flex-shrink-0" />
+                        <span className="text-muted-foreground truncate">{world?.name || 'Mundo desconocido'}</span>
+                      </div>
+                      
+                      {/* Región (si existe) */}
+                      {pueblo && (
+                        <div className="flex items-center gap-2 text-sm ml-4">
+                          <MapPin className="h-3.5 w-3.5 text-green-500 flex-shrink-0" />
+                          <span className="text-muted-foreground truncate">{pueblo.name}</span>
+                          <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4">
+                            {pueblo.type === 'nacion' ? 'Nación' : 'Pueblo'}
+                          </Badge>
+                        </div>
+                      )}
+                      
+                      {/* Edificio (si existe) */}
+                      {edificio && (
+                        <div className="flex items-center gap-2 text-sm ml-8">
+                          <Building className="h-3.5 w-3.5 text-orange-500 flex-shrink-0" />
+                          <span className="text-muted-foreground truncate">{edificio.name}</span>
+                        </div>
+                      )}
                     </div>
+
+                    {/* ID y Scope */}
+                    <div className="flex items-center gap-2 text-xs">
+                      <span className="font-mono bg-muted/50 px-2 py-0.5 rounded border-2 border-[#2C2923] text-[#83673D]">
+                        {npc.id}
+                      </span>
+                      <span className="text-muted-foreground">•</span>
+                      <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">
+                        {npc.location.scope}
+                      </Badge>
+                    </div>
+
+                    {/* Personalidad */}
                     {cardPersonality && (
                       <div>
-                        <p className="text-sm font-medium">Personalidad:</p>
+                        <p className="text-sm font-medium mb-1 flex items-center gap-1.5">
+                          <User className="h-3.5 w-3.5 text-muted-foreground" />
+                          Personalidad
+                        </p>
                         <p className="text-sm text-muted-foreground line-clamp-3">{cardPersonality}</p>
                       </div>
                     )}
+
+                    {/* Descripción */}
                     {cardDescription && (
                       <div>
-                        <p className="text-sm font-medium">Descripción:</p>
+                        <p className="text-sm font-medium mb-1">Descripción</p>
                         <p className="text-sm text-muted-foreground line-clamp-2">{cardDescription}</p>
                       </div>
                     )}
-                    <div className="text-xs text-muted-foreground">
-                      Alcance: {npc.location.scope}
-                    </div>
-                    {/* Mostrar resumen consolidado del NPC */}
+
+                    {/* Resumen consolidado */}
                     {npcMemories[npc.id]?.consolidatedSummary && (
-                      <div className="mt-3 p-3 rounded-lg bg-indigo-50 dark:bg-indigo-950 border border-indigo-200 dark:border-indigo-800">
-                        <p className="text-xs font-semibold text-indigo-900 dark:text-indigo-100 mb-1">
-                          Último Resumen General
+                      <div className="mt-2 p-3 rounded-lg bg-indigo-50 dark:bg-indigo-950 border border-indigo-200 dark:border-indigo-800">
+                        <p className="text-xs font-semibold text-indigo-900 dark:text-indigo-100 mb-1 flex items-center gap-1.5">
+                          <ScrollText className="h-3 w-3" />
+                          Último Resumen
                         </p>
                         <p className="text-sm text-indigo-800 dark:text-indigo-200 line-clamp-3">
                           {npcMemories[npc.id].consolidatedSummary}

@@ -1,13 +1,14 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, Check, X } from 'lucide-react';
+import { Plus, Edit2, Trash2, Check, X, Building, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { PlaceType } from '@/lib/types';
+import { Badge } from '@/components/ui/badge';
+import { PlaceType, Edificio } from '@/lib/types';
 import { toast } from '@/hooks/use-toast';
 import * as Icons from 'lucide-react';
 
@@ -31,6 +32,7 @@ function IconComponent({ name, size = 24, className = '' }: { name: string; size
 
 export default function PlaceTypesSection() {
   const [placeTypes, setPlaceTypes] = useState<PlaceType[]>([]);
+  const [edificios, setEdificios] = useState<Edificio[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingType, setEditingType] = useState<PlaceType | null>(null);
@@ -48,11 +50,18 @@ export default function PlaceTypesSection() {
   const fetchPlaceTypes = async () => {
     try {
       setLoading(true);
-      const response = await fetch('/api/place-types');
-      const result = await response.json();
+      const [placeTypesRes, edificiosRes] = await Promise.all([
+        fetch('/api/place-types'),
+        fetch('/api/edificios')
+      ]);
+      const placeTypesResult = await placeTypesRes.json();
+      const edificiosResult = await edificiosRes.json();
 
-      if (result.success) {
-        setPlaceTypes(result.data);
+      if (placeTypesResult.success) {
+        setPlaceTypes(placeTypesResult.data);
+      }
+      if (edificiosResult.success) {
+        setEdificios(edificiosResult.data);
       }
     } catch (error) {
       console.error('Error fetching place types:', error);
@@ -199,49 +208,72 @@ export default function PlaceTypesSection() {
         </Card>
       ) : (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {placeTypes.map((type) => (
-            <Card key={type.id} className="group">
-              <CardHeader className="pb-3">
-                <div className="flex items-start justify-between">
-                  <div className="flex items-center gap-3">
-                    <div
-                      className="p-3 rounded-lg"
-                      style={{ backgroundColor: type.color ? `${type.color}20` : 'hsl(var(--muted))' }}
-                    >
-                      <IconComponent
-                        name={type.icon}
-                        size={24}
-                        className={type.color ? '' : 'text-muted-foreground'}
-                        style={type.color ? { color: type.color } : undefined}
-                      />
+          {placeTypes.map((type) => {
+            // Contar cuántos edificios usan este tipo
+            const usageCount = edificios.filter(e => 
+              e.puntosDeInteres?.some(poi => poi.tipo === type.id)
+            ).length;
+            // Contar total de POIs de este tipo
+            const poiCount = edificios.reduce((acc, e) => 
+              acc + (e.puntosDeInteres?.filter(poi => poi.tipo === type.id).length || 0), 0
+            );
+            
+            return (
+              <Card key={type.id} className="group">
+                <CardHeader className="pb-3">
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-center gap-3">
+                      <div
+                        className="p-3 rounded-lg"
+                        style={{ backgroundColor: type.color ? `${type.color}20` : 'hsl(var(--muted))' }}
+                      >
+                        <IconComponent
+                          name={type.icon}
+                          size={24}
+                          className={type.color ? '' : 'text-muted-foreground'}
+                          style={type.color ? { color: type.color } : undefined}
+                        />
+                      </div>
+                      <div>
+                        <CardTitle className="text-lg">{type.name}</CardTitle>
+                        <CardDescription className="text-xs mt-1">
+                          {type.icon}
+                        </CardDescription>
+                      </div>
                     </div>
-                    <div>
-                      <CardTitle className="text-lg">{type.name}</CardTitle>
-                      <CardDescription className="text-xs mt-1">
-                        {type.icon}
-                      </CardDescription>
+                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleEdit(type)}
+                      >
+                        <Edit2 className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleDelete(type.id, type.name)}
+                      >
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
                     </div>
                   </div>
-                  <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => handleEdit(type)}
-                    >
-                      <Edit2 className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => handleDelete(type.id, type.name)}
-                    >
-                      <Trash2 className="h-4 w-4 text-destructive" />
-                    </Button>
+                </CardHeader>
+                <CardContent className="pt-0">
+                  <div className="flex flex-wrap gap-2">
+                    <Badge variant="secondary" className="flex items-center gap-1">
+                      <Building className="h-3 w-3" />
+                      {usageCount} {usageCount === 1 ? 'edificio' : 'edificios'}
+                    </Badge>
+                    <Badge variant="outline" className="flex items-center gap-1">
+                      <Users className="h-3 w-3" />
+                      {poiCount} {poiCount === 1 ? 'uso' : 'usos'}
+                    </Badge>
                   </div>
-                </div>
-              </CardHeader>
-            </Card>
-          ))}
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
       )}
 

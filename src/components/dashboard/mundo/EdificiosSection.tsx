@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, MapPin, X, ScrollText } from 'lucide-react';
+import { Plus, Edit2, Trash2, MapPin, X, ScrollText, Users, Building, Globe, Filter, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Edificio, PointOfInterest, PlaceType, NPC } from '@/lib/types';
+import { Edificio, PointOfInterest, PlaceType, NPC, World, Pueblo } from '@/lib/types';
 import { toast } from '@/hooks/use-toast';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
@@ -27,6 +27,8 @@ export default function EdificiosSection() {
   const [poiDialogOpen, setPoiDialogOpen] = useState(false);
   const [editingEdificio, setEditingEdificio] = useState<Edificio | null>(null);
   const [editingPoi, setEditingPoi] = useState<PointOfInterest | null>(null);
+  const [filterWorldId, setFilterWorldId] = useState<string>('all');
+  const [filterPuebloId, setFilterPuebloId] = useState<string>('all');
   const [formData, setFormData] = useState({
     name: '',
     lore: '',
@@ -330,8 +332,140 @@ export default function EdificiosSection() {
         </Button>
       </div>
 
+      {/* Filtros y Estadísticas */}
+      <div className="flex flex-wrap items-center gap-4 p-4 rounded-lg bg-muted/30 border">
+        <div className="flex items-center gap-2">
+          <Filter className="h-4 w-4 text-muted-foreground" />
+          
+          {/* Filtro por Mundo */}
+          <Select 
+            value={filterWorldId} 
+            onValueChange={(value) => {
+              setFilterWorldId(value);
+              setFilterPuebloId('all'); // Reset pueblo filter when world changes
+            }}
+          >
+            <SelectTrigger className="w-40">
+              <SelectValue placeholder="Mundo" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos los mundos</SelectItem>
+              {worlds.map((world) => (
+                <SelectItem key={world.id} value={world.id}>
+                  {world.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <ChevronRight className="h-4 w-4 text-muted-foreground" />
+
+          {/* Filtro por Región */}
+          <Select value={filterPuebloId} onValueChange={setFilterPuebloId}>
+            <SelectTrigger className="w-40">
+              <SelectValue placeholder="Región" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todas las regiones</SelectItem>
+              {pueblos
+                .filter(p => filterWorldId === 'all' || p.worldId === filterWorldId)
+                .map((pueblo) => (
+                  <SelectItem key={pueblo.id} value={pueblo.id}>
+                    {pueblo.name}
+                  </SelectItem>
+                ))}
+            </SelectContent>
+          </Select>
+        </div>
+        
+        <div className="flex-1" />
+        
+        {/* Estadísticas totales */}
+        <div className="flex flex-wrap gap-2">
+          {(() => {
+            const filteredEdificios = edificios.filter(e => {
+              if (filterPuebloId !== 'all') {
+                return e.puebloId === filterPuebloId;
+              }
+              if (filterWorldId !== 'all') {
+                const pueblo = pueblos.find(p => p.id === e.puebloId);
+                return pueblo?.worldId === filterWorldId;
+              }
+              return true;
+            });
+            const filteredNpcs = npcs.filter(n => {
+              if (filterPuebloId !== 'all') {
+                return n.location.puebloId === filterPuebloId;
+              }
+              if (filterWorldId !== 'all') {
+                return n.location.worldId === filterWorldId;
+              }
+              return true;
+            });
+            
+            return (
+              <>
+                <Badge variant="secondary" className="flex items-center gap-1">
+                  <Building className="h-3 w-3" />
+                  {filteredEdificios.length} {filteredEdificios.length === 1 ? 'edificio' : 'edificios'}
+                </Badge>
+                <Badge variant="default" className="flex items-center gap-1 bg-primary/80">
+                  <Users className="h-3 w-3" />
+                  {filteredNpcs.length} {filteredNpcs.length === 1 ? 'NPC' : 'NPCs'}
+                </Badge>
+              </>
+            );
+          })()}
+        </div>
+      </div>
+
+      {/* Breadcrumb */}
+      {(filterWorldId !== 'all' || filterPuebloId !== 'all') && (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Globe className="h-4 w-4" />
+          <span>Mundos</span>
+          {filterWorldId !== 'all' && (
+            <>
+              <ChevronRight className="h-4 w-4" />
+              <span className="font-medium text-foreground">
+                {worlds.find(w => w.id === filterWorldId)?.name}
+              </span>
+            </>
+          )}
+          {filterPuebloId !== 'all' && (
+            <>
+              <ChevronRight className="h-4 w-4" />
+              <span className="font-medium text-foreground">
+                {pueblos.find(p => p.id === filterPuebloId)?.name}
+              </span>
+            </>
+          )}
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            className="ml-2"
+            onClick={() => {
+              setFilterWorldId('all');
+              setFilterPuebloId('all');
+            }}
+          >
+            <X className="h-3 w-3 mr-1" />
+            Limpiar filtro
+          </Button>
+        </div>
+      )}
+
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {edificios.map((edificio) => {
+        {edificios.filter(e => {
+          if (filterPuebloId !== 'all') {
+            return e.puebloId === filterPuebloId;
+          }
+          if (filterWorldId !== 'all') {
+            const pueblo = pueblos.find(p => p.id === e.puebloId);
+            return pueblo?.worldId === filterWorldId;
+          }
+          return true;
+        }).map((edificio) => {
           const world = worlds.find(w => w.id === edificio.worldId);
           const pueblo = pueblos.find(p => p.id === edificio.puebloId);
           // Filtrar NPCs asignados a este edificio
@@ -362,17 +496,16 @@ export default function EdificiosSection() {
                   </div>
                 </CardTitle>
               </CardHeader>
-              <CardDescription className="pt-2">
-                <div className="flex items-center gap-2 text-sm">
-                  <span className="text-muted-foreground leading-tight">{pueblo?.name || 'Pueblo desconocido'}</span>
-                  <span className="text-muted-foreground/60 mt-0.5">•</span>
-                  <span className="font-mono text-xs bg-muted/50 px-2 py-0.5 rounded border-2 border-[#2C2923] text-[#83673D] leading-tight">
-                    {edificio.id}
-                  </span>
-                </div>
-              </CardDescription>
               <CardContent className="overflow-hidden">
                 <div className="max-h-96 overflow-y-auto space-y-3 pr-1 custom-scrollbar">
+                  {/* Ubicación e ID */}
+                  <div className="flex items-center gap-2 text-sm">
+                    <span className="text-muted-foreground leading-tight">{pueblo?.name || 'Pueblo desconocido'}</span>
+                    <span className="text-muted-foreground/60 mt-0.5">•</span>
+                    <span className="font-mono text-xs bg-muted/50 px-2 py-0.5 rounded border-2 border-[#2C2923] text-[#83673D] leading-tight">
+                      {edificio.id}
+                    </span>
+                  </div>
                   <div>
                     <p className="text-sm font-medium">Descripción:</p>
                     <p className="text-sm text-muted-foreground line-clamp-2">

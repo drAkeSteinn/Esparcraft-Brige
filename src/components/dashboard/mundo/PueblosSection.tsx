@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, MapPin, ScrollText } from 'lucide-react';
+import { Plus, Edit2, Trash2, MapPin, ScrollText, Building, Users, ChevronDown, ChevronRight, Globe, Filter } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
@@ -9,7 +9,9 @@ import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
-import { Pueblo, World, Edificio } from '@/lib/types';
+import { Badge } from '@/components/ui/badge';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Pueblo, World, Edificio, NPC, getCardField } from '@/lib/types';
 import { toast } from '@/hooks/use-toast';
 import GenericBackupSection from '../GenericBackupSection';
 
@@ -27,10 +29,13 @@ export default function PueblosSection() {
   const [pueblos, setPueblos] = useState<Pueblo[]>([]);
   const [worlds, setWorlds] = useState<World[]>([]);
   const [edificios, setEdificios] = useState<Edificio[]>([]);
+  const [npcs, setNpcs] = useState<NPC[]>([]);
   const [puebloMemories, setPuebloMemories] = useState<Record<string, any>>({});
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingPueblo, setEditingPueblo] = useState<Pueblo | null>(null);
+  const [expandedEdificios, setExpandedEdificios] = useState<Record<string, boolean>>({});
+  const [filterWorldId, setFilterWorldId] = useState<string>('all');
   const [formData, setFormData] = useState<FormData>({
     worldId: '',
     name: '',
@@ -48,19 +53,22 @@ export default function PueblosSection() {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [pueblosRes, worldsRes, edificiosRes] = await Promise.all([
+      const [pueblosRes, worldsRes, edificiosRes, npcsRes] = await Promise.all([
         fetch('/api/pueblos'),
         fetch('/api/worlds'),
-        fetch('/api/edificios')
+        fetch('/api/edificios'),
+        fetch('/api/npcs')
       ]);
 
       const pueblosResult = await pueblosRes.json();
       const worldsResult = await worldsRes.json();
       const edificiosResult = await edificiosRes.json();
+      const npcsResult = await npcsRes.json();
 
       if (pueblosResult.success) setPueblos(pueblosResult.data);
       if (worldsResult.success) setWorlds(worldsResult.data);
       if (edificiosResult.success) setEdificios(edificiosResult.data);
+      if (npcsResult.success) setNpcs(npcsResult.data);
 
       // Cargar memorias de pueblos en paralelo
       const memoriaPromises = pueblosResult.data.map(pueblo => 
@@ -212,16 +220,83 @@ export default function PueblosSection() {
           </Button>
         </div>
 
+        {/* Filtros y Estadísticas */}
+        <div className="flex flex-wrap items-center gap-4 p-4 rounded-lg bg-muted/30 border">
+          <div className="flex items-center gap-2">
+            <Filter className="h-4 w-4 text-muted-foreground" />
+            <Label htmlFor="filterWorld" className="text-sm font-medium">Filtrar por mundo:</Label>
+            <Select value={filterWorldId} onValueChange={setFilterWorldId}>
+              <SelectTrigger id="filterWorld" className="w-48">
+                <SelectValue placeholder="Todos los mundos" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos los mundos</SelectItem>
+                {worlds.map((world) => (
+                  <SelectItem key={world.id} value={world.id}>
+                    {world.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          
+          <div className="flex-1" />
+          
+          {/* Estadísticas totales */}
+          <div className="flex flex-wrap gap-2">
+            {(() => {
+              const filteredPueblos = filterWorldId === 'all' 
+                ? pueblos 
+                : pueblos.filter(p => p.worldId === filterWorldId);
+              const filteredEdificios = filterWorldId === 'all'
+                ? edificios
+                : edificios.filter(e => {
+                    const pueblo = pueblos.find(p => p.id === e.puebloId);
+                    return pueblo?.worldId === filterWorldId;
+                  });
+              const filteredNpcs = filterWorldId === 'all'
+                ? npcs
+                : npcs.filter(n => n.location.worldId === filterWorldId);
+              
+              return (
+                <>
+                  <Badge variant="secondary" className="flex items-center gap-1">
+                    <Globe className="h-3 w-3" />
+                    {filteredPueblos.length} {filteredPueblos.length === 1 ? 'región' : 'regiones'}
+                  </Badge>
+                  <Badge variant="secondary" className="flex items-center gap-1">
+                    <Building className="h-3 w-3" />
+                    {filteredEdificios.length} {filteredEdificios.length === 1 ? 'edificio' : 'edificios'}
+                  </Badge>
+                  <Badge variant="default" className="flex items-center gap-1 bg-primary/80">
+                    <Users className="h-3 w-3" />
+                    {filteredNpcs.length} {filteredNpcs.length === 1 ? 'NPC' : 'NPCs'}
+                  </Badge>
+                </>
+              );
+            })()}
+          </div>
+        </div>
+
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {pueblos.map((pueblo) => {
+          {(filterWorldId === 'all' 
+            ? pueblos 
+            : pueblos.filter(p => p.worldId === filterWorldId)
+          ).map((pueblo) => {
             const world = worlds.find(w => w.id === pueblo.worldId);
             const edificiosEnPueblo = edificios.filter(e => e.puebloId === pueblo.id);
+            const npcsEnPueblo = npcs.filter(n => n.location.puebloId === pueblo.id);
 
             return (
               <Card key={pueblo.id}>
                 <CardHeader>
                   <CardTitle className="flex items-center justify-between">
-                    {pueblo.name}
+                    <div className="flex items-center gap-2">
+                      {pueblo.name}
+                      <Badge variant="outline" className={pueblo.type === 'nacion' ? 'border-purple-500 text-purple-500' : 'border-green-500 text-green-500'}>
+                        {pueblo.type === 'nacion' ? 'Nación' : 'Pueblo'}
+                      </Badge>
+                    </div>
                     <div className="flex gap-2">
                       <Button
                         variant="ghost"
@@ -240,17 +315,28 @@ export default function PueblosSection() {
                     </div>
                   </CardTitle>
                 </CardHeader>
-                <CardDescription className="pt-2">
-                  <div className="flex items-center gap-2 text-sm">
-                    <span className="text-muted-foreground leading-tight">{world?.name || 'Mundo desconocido'}</span>
-                    <span className="text-muted-foreground/60 mt-0.5">•</span>
-                    <span className="font-mono text-xs bg-muted/50 px-2 py-0.5 rounded border-2 border-[#2C2923] text-[#83673D] leading-tight">
-                      {pueblo.id}
-                    </span>
-                  </div>
-                </CardDescription>
                 <CardContent className="overflow-hidden">
                   <div className="max-h-96 overflow-y-auto space-y-3 pr-1 custom-scrollbar">
+                    {/* Ubicación e ID */}
+                    <div className="flex items-center gap-2 text-sm">
+                      <span className="text-muted-foreground leading-tight">{world?.name || 'Mundo desconocido'}</span>
+                      <span className="text-muted-foreground/60 mt-0.5">•</span>
+                      <span className="font-mono text-xs bg-muted/50 px-2 py-0.5 rounded border-2 border-[#2C2923] text-[#83673D] leading-tight">
+                        {pueblo.id}
+                      </span>
+                    </div>
+                    {/* Estadísticas de la Región */}
+                    <div className="flex flex-wrap gap-2">
+                      <Badge variant="secondary" className="flex items-center gap-1">
+                        <Building className="h-3 w-3" />
+                        {edificiosEnPueblo.length} {edificiosEnPueblo.length === 1 ? 'edificio' : 'edificios'}
+                      </Badge>
+                      <Badge variant="default" className="flex items-center gap-1 bg-primary/80">
+                        <Users className="h-3 w-3" />
+                        {npcsEnPueblo.length} {npcsEnPueblo.length === 1 ? 'NPC' : 'NPCs'}
+                      </Badge>
+                    </div>
+                    
                     <div className="text-sm font-medium">Descripción:</div>
                     <div className="text-sm text-muted-foreground line-clamp-2">
                       {pueblo.description || 'Sin descripción'}
@@ -315,37 +401,96 @@ export default function PueblosSection() {
                     </div>
 
                     {edificiosEnPueblo.length > 0 && (
-                      <div>
-                        <div className="border-t pt-3">
-                          <div className="flex items-center justify-between mb-2">
-                            <p className="text-sm font-medium">Edificaciones en esta región:</p>
-                            <span className="text-xs text-muted-foreground">({edificiosEnPueblo.length} edificios)</span>
-                          </div>
-                          <div className="flex items-center gap-1">
-                            <MapPin className="h-3 w-3 text-blue-500" />
-                          </div>
+                      <div className="border-t pt-3 mt-3">
+                        <div className="flex items-center justify-between mb-3">
+                          <p className="text-sm font-semibold flex items-center gap-2">
+                            <Building className="h-4 w-4 text-blue-500" />
+                            Edificaciones ({edificiosEnPueblo.length})
+                          </p>
                         </div>
                         <div className="space-y-2">
                         {edificiosEnPueblo.map((edificio) => {
-                          const edificioMemory = puebloMemories[edificio.id];
+                          const npcsEnEdificio = npcs.filter(n => n.location.edificioId === edificio.id);
+                          const isExpanded = expandedEdificios[edificio.id];
+                          
                           return (
-                            <div key={edificio.id} className="border rounded p-3">
-                              <div className="flex items-start justify-between">
-                                <span className="text-sm font-medium">{edificio.name}</span>
-                                <span className="text-xs text-muted-foreground">ID: {edificio.id}</span>
-                                <span className="text-xs text-muted-foreground">{edificios.length} NPCs</span>
+                            <Collapsible 
+                              key={edificio.id} 
+                              open={isExpanded}
+                              onOpenChange={(open) => setExpandedEdificios(prev => ({ ...prev, [edificio.id]: open }))}
+                            >
+                              <div className="border rounded-lg bg-muted/30">
+                                <CollapsibleTrigger asChild>
+                                  <div className="flex items-center justify-between p-3 cursor-pointer hover:bg-muted/50 transition-colors">
+                                    <div className="flex items-center gap-2">
+                                      {isExpanded ? (
+                                        <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                                      ) : (
+                                        <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                                      )}
+                                      <MapPin className="h-4 w-4 text-blue-500" />
+                                      <span className="text-sm font-medium">{edificio.name}</span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      <Badge variant="secondary" className="text-xs">
+                                        <Users className="h-3 w-3 mr-1" />
+                                        {npcsEnEdificio.length} NPCs
+                                      </Badge>
+                                    </div>
+                                  </div>
+                                </CollapsibleTrigger>
+                                <CollapsibleContent>
+                                  <div className="px-3 pb-3 pt-0 border-t">
+                                    {/* Info del edificio */}
+                                    <div className="text-xs text-muted-foreground mb-2 mt-2">
+                                      ID: {edificio.id}
+                                    </div>
+                                    {edificio.lore && (
+                                      <p className="text-sm text-muted-foreground mb-3 line-clamp-2">
+                                        {edificio.lore}
+                                      </p>
+                                    )}
+                                    
+                                    {/* Lista de NPCs */}
+                                    {npcsEnEdificio.length > 0 ? (
+                                      <div className="space-y-1.5">
+                                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                                          Personajes en este edificio:
+                                        </p>
+                                        <div className="grid gap-1.5">
+                                          {npcsEnEdificio.map((npc) => {
+                                            const npcName = getCardField(npc.card, 'name', 'Sin nombre');
+                                            const npcPersonality = getCardField(npc.card, 'personality', '');
+                                            return (
+                                              <div 
+                                                key={npc.id} 
+                                                className="flex items-center justify-between p-2 rounded bg-background/50 border"
+                                              >
+                                                <div className="flex-1 min-w-0">
+                                                  <p className="text-sm font-medium truncate">{npcName}</p>
+                                                  {npcPersonality && (
+                                                    <p className="text-xs text-muted-foreground truncate">
+                                                      {npcPersonality.substring(0, 60)}...
+                                                    </p>
+                                                  )}
+                                                </div>
+                                                <span className="text-xs text-muted-foreground font-mono ml-2">
+                                                  {npc.id.substring(0, 12)}...
+                                                </span>
+                                              </div>
+                                            );
+                                          })}
+                                        </div>
+                                      </div>
+                                    ) : (
+                                      <p className="text-sm text-muted-foreground italic">
+                                        Sin NPCs en este edificio
+                                      </p>
+                                    )}
+                                  </div>
+                                </CollapsibleContent>
                               </div>
-                              {edificioMemory?.consolidatedSummary && (
-                                <div className="mt-2 p-3 rounded-lg bg-indigo-50 dark:bg-indigo-950 border border-indigo-200 dark:border-indigo-800">
-                                  <p className="text-xs font-semibold text-indigo-900 dark:text-indigo-100 mb-1">
-                                    Resumen General
-                                  </p>
-                                  <p className="text-sm text-indigo-800 dark:text-indigo-200 line-clamp-3">
-                                    {edificioMemory.consolidatedSummary}
-                                  </p>
-                                </div>
-                              )}
-                            </div>
+                            </Collapsible>
                           );
                         })}
                         </div>
