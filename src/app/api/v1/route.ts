@@ -159,7 +159,7 @@ export async function GET() {
     status: 'ok',
     service: 'Bridge IA - Denizen API',
     version: '1.1.0',
-    modes: ['chat', 'resumen_sesion', 'resumen_npc', 'resumen_edificio', 'resumen_pueblo', 'resumen_mundo', 'nuevo_lore'],
+    modes: ['chat', 'resumen_sesion', 'resumen_npc', 'resumen_edificio', 'resumen_pueblo', 'resumen_mundo', 'nuevo_lore', 'nuevo_contexto'],
     queue: {
       enabled: true,
       stats: queueStats

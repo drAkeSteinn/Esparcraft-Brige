@@ -463,7 +463,9 @@ export class ResumenGeneralService {
       }
 
       try {
-        // ✅ SIMULAR HTTP REQUEST DE RESUMEN DE NPC
+        // ✅ DELEGAR AL HANDLER (handleResumenNPCTrigger)
+        // El handler hace todo: LLM, embedding del resumen anterior en npc:{id},
+        // npcSummaryDbManager.create(), y actualiza creator_notes del NPC.
         const result = await executeTrigger({
           mode: 'resumen_npc',
           npcid: npc.id
@@ -475,14 +477,7 @@ export class ResumenGeneralService {
           continue;
         }
 
-        // Guardar nuevo resumen con hash
-        await npcSummaryDbManager.create({
-          npcId: npc.id,
-          summary: result.data.summary,
-          sessionHash: currentHash,
-          version: (lastNPCSummary?.version || 0) + 1
-        });
-        
+        // ✅ No duplicamos la escritura: el handler ya creó el NPCSummary con hash y versión.
         completed++;
 
         // Actualizar progreso
@@ -551,6 +546,9 @@ export class ResumenGeneralService {
       }
 
       try {
+        // ✅ DELEGAR AL HANDLER (handleResumenEdificioTrigger)
+        // El handler hace todo: LLM, embedding del resumen anterior en edificio:{id},
+        // edificioSummaryDbManager.create(), y actualiza lore del edificio.
         const result = await executeTrigger({
           mode: 'resumen_edificio',
           edificioid: edificio.id
@@ -558,22 +556,12 @@ export class ResumenGeneralService {
 
         if (!result.success) {
           console.error(`[ResumenGeneral] Error resumen edificio ${edificio.id}:`, result.error);
+          skipped++;
           continue;
         }
 
-        await edificioSummaryDbManager.create({
-          edificioId: edificio.id,
-          summary: result.data.summary,
-          npcHash: currentHash,
-          version: (lastEdificioSummary?.version || 0) + 1
-        });
-
-        // ✅ GUARDAR RESUMEN EN eventos_recientes DEL EDIFICIO (REEMPLAZANDO)
-        await edificioDbManager.update(edificio.id, {
-          eventos_recientes: [result.data.summary]
-        });
-        console.log(`[ResumenGeneral] Resumen guardado en eventos_recientes de edificio ${edificio.id} (reemplazando)`);
-
+        // ✅ No duplicamos la escritura: el handler ya creó el EdificioSummary con hash y versión.
+        // ✅ Eliminado el update a `eventos_recientes` (campo inexistente en el schema).
         completed++;
 
         const progress = ((i + 1) / edificios.length) * 100;
@@ -628,6 +616,9 @@ export class ResumenGeneralService {
       }
 
       try {
+        // ✅ DELEGAR AL HANDLER (handleResumenPuebloTrigger)
+        // El handler hace todo: LLM, embedding del resumen anterior en pueblo:{id},
+        // puebloSummaryDbManager.create().
         const result = await executeTrigger({
           mode: 'resumen_pueblo',
           pueblid: pueblo.id
@@ -635,26 +626,12 @@ export class ResumenGeneralService {
 
         if (!result.success) {
           console.error(`[ResumenGeneral] Error resumen pueblo ${pueblo.id}:`, result.error);
+          skipped++;
           continue;
         }
 
-        await puebloSummaryDbManager.create({
-          puebloId: pueblo.id,
-          summary: result.data.summary,
-          edificioHash: currentHash,
-          version: (lastPuebloSummary?.version || 0) + 1
-        });
-
-        // ✅ GUARDAR RESUMEN EN lore.eventos DEL PUEBLO (REEMPLAZANDO)
-        const loreActual = pueblo.lore || {};
-        await puebloDbManager.update(pueblo.id, {
-          lore: {
-            ...loreActual,
-            eventos: [result.data.summary]  // ✅ REEMPLAZA (en lugar de agregar)
-          }
-        });
-        console.log(`[ResumenGeneral] Resumen guardado en lore.eventos de pueblo ${pueblo.id} (reemplazando)`);
-
+        // ✅ No duplicamos la escritura: el handler ya creó el PuebloSummary con hash y versión.
+        // ✅ Eliminado el update a `lore` (Pueblo no tiene campo lore, solo description).
         completed++;
 
         const progress = ((i + 1) / pueblos.length) * 100;
@@ -716,6 +693,9 @@ export class ResumenGeneralService {
       }
 
       try {
+        // ✅ DELEGAR AL HANDLER (handleResumenMundoTrigger)
+        // El handler hace todo: LLM, embedding del resumen anterior en mundo:{id},
+        // worldSummaryDbManager.create().
         const result = await executeTrigger({
           mode: 'resumen_mundo',
           mundoid: mundo.id
@@ -723,26 +703,13 @@ export class ResumenGeneralService {
 
         if (!result.success) {
           console.error(`[ResumenGeneral] Error resumen mundo ${mundo.id}:`, result.error);
+          skipped++;
           continue;
         }
 
-        await worldSummaryDbManager.create({
-          worldId: mundo.id,
-          summary: result.data.summary,
-          puebloHash: currentHash,
-          version: (lastWorldSummary?.version || 0) + 1
-        });
-
-        // ✅ GUARDAR RESUMEN EN lore.eventos DEL MUNDO (REEMPLAZANDO)
-        const loreActual = mundo.lore || {};
-        await worldDbManager.update(mundo.id, {
-          lore: {
-            ...loreActual,
-            eventos: [result.data.summary]
-          }
-        });
-        console.log(`[ResumenGeneral] Resumen guardado en lore.eventos de mundo ${mundo.id} (reemplazando)`);
-
+        // ✅ No duplicamos la escritura: el handler ya creó el WorldSummary con hash y versión.
+        // ✅ Eliminado el update a `lore` como objeto (World.lore es String, no Object).
+        //    El handler usa worldDbManager.updateLore() que sí hace JSON.stringify correctamente.
         completed++;
 
         const progress = ((i + 1) / mundos.length) * 100;

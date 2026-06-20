@@ -1,0 +1,901 @@
+     1→     1→import {
+     2→     2→  AnyTriggerPayload,
+     3→     3→  TriggerMode,
+     4→     4→  ChatTriggerPayload,
+     5→     5→  ResumenSesionTriggerPayload,
+     6→     6→  ResumenNPCTriggerPayload,
+     7→     7→  ResumenEdificioTriggerPayload,
+     8→     8→  ResumenPuebloTriggerPayload,
+     9→     9→  ResumenMundoTriggerPayload,
+    10→    10→  NuevoLoreTriggerPayload,
+    11→    11→  ChatMessage,
+    12→    12→  VariableContext
+    13→    13→} from './types';
+    14→    14→import { db } from './db';
+    15→    15→import { npcDbManager } from './npcDbManager';
+    16→    16→import { sessionDbManagerSingleton } from './sessionDbManager';
+    17→    17→import { worldDbManager } from './worldDbManager';
+    18→    18→import { puebloDbManager } from './puebloDbManager';
+    19→    19→import { edificioDbManager } from './edificioDbManager';
+    20→    20→import { sessionSummaryDbManager } from './resumenSummaryDbManager';
+    21→    21→import { NPCSummaryManager, EdificioSummaryManager, PuebloSummaryManager, WorldSummaryManager } from './summaryManagers';
+    22→    22→import { grimorioManager } from './fileManager';
+    23→    23→import { getCardField } from './types';
+    24→    24→import {
+    25→    25→  generateSessionSummariesHash,
+    26→    26→  generateNPCSummariesHash,
+    27→    27→  generateEdificioSummariesHash
+    28→    28→} from './hashUtils';
+    29→    29→import {
+    30→    30→  buildCompleteSessionSummaryPrompt,
+    31→    31→  buildNPCSummaryPrompt,
+    32→    32→  buildEdificioSummaryPrompt,
+    33→    33→  buildPuebloSummaryPrompt,
+    34→    34→  buildWorldSummaryPrompt,
+    35→    35→  buildCompleteChatPrompt,
+    36→    36→  buildNuevoLorePrompt
+    37→    37→} from './promptBuilder';
+    38→    38→import { replaceVariables, resolveAllVariables } from './grimorioUtils';
+    39→    39→
+    40→    40→/**
+    41→    41→ * Resultado de ejecución de un trigger
+    42→    42→ */
+    43→    43→export interface TriggerExecutionResult {
+    44→    44→  success: boolean;
+    45→    45→  data?: any;
+    46→    46→  error?: string;
+    47→    47→}
+    48→    48→
+    49→    49→/**
+    50→    50→ * ✅ FUNCIÓN CENTRAL DE EJECUCIÓN
+    51→    51→ * 
+    52→    52→ * Esta función hace EXACTAMENTE lo mismo que /api/reroute/route.ts
+    53→    53→ * pero sin la capa HTTP/NextResponse
+    54→    54→ * 
+    55→    55→ * Garantiza:
+    56→    56→ * ✅ Construcción de prompts idéntica
+    57→    57→ * ✅ Reemplazo de variables primarias (usando replaceVariables)
+    58→    58→ * ✅ Reemplazo de plantillas del Grimorio (usando resolveAllVariables)
+    59→    59→ * ✅ Misma lógica de LLM
+    60→    60→ * 
+    61→    61→ * @param payload - Payload completo del trigger
+    62→    62→ * @returns Resultado de la ejecución
+    63→    63→ */
+    64→    64→export async function executeTrigger(
+    65→    65→  payload: AnyTriggerPayload
+    66→    66→): Promise<TriggerExecutionResult> {
+    67→    67→  try {
+    68→    68→    const { mode } = payload;
+    69→    69→
+    70→    70→    // Verificar si resumen general está corriendo (solo para chat)
+    71→    71→    const systemConfig = await db.systemConfig.findUnique({
+    72→    72→      where: { key: 'resumen_general_status' }
+    73→    73→    });
+    74→    74→
+    75→    75→    if (systemConfig?.value === 'running' && mode === 'chat') {
+    76→    76→      return {
+    77→    77→        success: true,
+    78→    78→        data: { response: "resumen_general" }
+    79→    79→      };
+    80→    80→    }
+    81→    81→
+    82→    82→    // ✅ DELEGAR AL HANDLER CORRECTO
+    83→    83→    switch (mode) {
+    84→    84→      case 'chat':
+    85→    85→        return await executeChat(payload as ChatTriggerPayload);
+    86→    86→      
+    87→    87→      case 'resumen_sesion':
+    88→    88→        return await executeResumenSesion(payload as ResumenSesionTriggerPayload);
+    89→    89→      
+    90→    90→      case 'resumen_npc':
+    91→    91→        return await executeResumenNPC(payload as ResumenNPCTriggerPayload);
+    92→    92→      
+    93→    93→      case 'resumen_edificio':
+    94→    94→        return await executeResumenEdificio(payload as ResumenEdificioTriggerPayload);
+    95→    95→      
+    96→    96→      case 'resumen_pueblo':
+    97→    97→        return await executeResumenPueblo(payload as ResumenPuebloTriggerPayload);
+    98→    98→      
+    99→    99→      case 'resumen_mundo':
+   100→   100→        return await executeResumenMundo(payload as ResumenMundoTriggerPayload);
+   101→   101→      
+   102→   102→      case 'nuevo_lore':
+   103→   103→        return await executeNuevoLore(payload as NuevoLoreTriggerPayload);
+   104→   104→      
+   105→   105→      default:
+   106→   106→        return {
+   107→   107→          success: false,
+   108→   108→          error: `Unknown trigger mode: ${mode}`
+   109→   109→        };
+   110→   110→    }
+   111→   111→  } catch (error) {
+   112→   112→    console.error('[executeTrigger] Error:', error);
+   113→   113→    return {
+   114→   114→      success: false,
+   115→   115→      error: error instanceof Error ? error.message : 'Error desconocido'
+   116→   116→    };
+   117→   117→  }
+   118→   118→}
+   119→   119→
+   120→   120→// ========================================================================
+   121→   121→// RESUMEN DE SESIÓN
+   122→   122→// ========================================================================
+   123→   123→
+   124→   124→async function executeResumenSesion(
+   125→   125→  payload: ResumenSesionTriggerPayload
+   126→   126→): Promise<TriggerExecutionResult> {
+   127→   127→  const { npcid, playersessionid, systemPrompt, lastSummary, chatHistory } = payload;
+   128→   128→
+   129→   129→  // Get NPC and session
+   130→   130→  const npc = await npcDbManager.getById(npcid);
+   131→   131→  if (!npc) {
+   132→   132→    return { success: false, error: `NPC with id ${npcid} not found` };
+   133→   133→  }
+   134→   134→
+   135→   135→  const session = await sessionDbManagerSingleton.getById(playersessionid);
+   136→   136→  if (!session) {
+   137→   137→    return { success: false, error: `Session ${playersessionid} not found` };
+   138→   138→  }
+   139→   139→
+   140→   140→  // ✅ LEER CONFIGURACIÓN DE minMessages (misma configuración que usa Resumen General)
+   141→   141→  let minMessages = 10; // Valor por defecto
+   142→   142→  try {
+   143→   143→    const fs = await import('fs/promises');
+   144→   144→    const path = await import('path');
+   145→   145→    const configPath = path.join(process.cwd(), 'db', 'resumen-general-config.json');
+   146→   146→    try {
+   147→   147→      const configContent = await fs.readFile(configPath, 'utf-8');
+   148→   148→      const config = JSON.parse(configContent);
+   149→   149→      minMessages = config.minMessages || 10;
+   150→   150→      console.log(`[executeResumenSesion] minMessages leído: ${minMessages}`);
+   151→   151→    } catch (error) {
+   152→   152→      console.log('[executeResumenSesion] No se pudo leer config de minMessages, usando valor por defecto: 10');
+   153→   153→    }
+   154→   154→  } catch (error) {
+   155→   155→    console.log('[executeResumenSesion] Error al leer config de minMessages, usando valor por defecto: 10');
+   156→   156→  }
+   157→   157→
+   158→   158→  // ✅ VERIFICAR QUE LA SESIÓN TENGA SUFICIENTES MENSAJES
+   159→   159→  if (session.messages.length < minMessages) {
+   160→   160→    console.log(`[executeResumenSesion] Sesión ${playersessionid} tiene ${session.messages.length} mensajes (< ${minMessages}), OMITIENDO resumen`);
+   161→   161→    return {
+   162→   162→      success: false,
+   163→   163→      error: `La sesión tiene solo ${session.messages.length} mensajes. Se requieren al menos ${minMessages} mensajes para generar el resumen.`
+   164→   164→    };
+   165→   165→  }
+   166→   166→
+   167→   167→  console.log(`[executeResumenSesion] Sesión ${playersessionid} tiene ${session.messages.length} mensajes (>= ${minMessages}), PROCEDIENDO con resumen`);
+   168→   168→
+   169→   169→  // Get context (world, pueblo, edificio)
+   170→   170→  const world = await worldDbManager.getById(npc.location.worldId);
+   171→   171→  const pueblo = npc.location.puebloId ? await puebloDbManager.getById(npc.location.puebloId) : undefined;
+   172→   172→  const edificio = npc.location.edificioId ? await edificioDbManager.getById(npc.location.edificioId) : undefined;
+   173→   173→
+   174→   174→  // ✅ LEER CONFIGURACIÓN DE SYSTEM PROMPT
+   175→   175→  let configSystemPrompt = systemPrompt;
+   176→   176→  if (!configSystemPrompt) {
+   177→   177→    try {
+   178→   178→      const fs = await import('fs/promises');
+   179→   179→      const path = await import('path');
+   180→   180→      const configPath = path.join(process.cwd(), 'db', 'resumen-sesion-trigger-config.json');
+   181→   181→      try {
+   182→   182→        const configContent = await fs.readFile(configPath, 'utf-8');
+   183→   183→        const config = JSON.parse(configContent);
+   184→   184→        configSystemPrompt = config.systemPrompt || '';
+   185→   185→      } catch (error) {
+   186→   186→        configSystemPrompt = '';
+   187→   187→      }
+   188→   188→    } catch (error) {
+   189→   189→      configSystemPrompt = '';
+   190→   190→    }
+   191→   191→  }
+   192→   192→
+   193→   193→  // ✅ CONSTRUIR EL PROMPT COMPLETO
+   194→   194→  // NOTA: NO usa plantillas del Grimorio (grimorioTemplates: [])
+   195→   195→  const basePrompt = buildCompleteSessionSummaryPrompt({
+   196→   196→    world,
+   197→   197→    pueblo,
+   198→   198→    edificio,
+   199→   199→    npc,
+   200→   200→    session
+   201→   201→  }, {
+   202→   202→    systemPrompt: configSystemPrompt,
+   203→   203→    lastSummary,
+   204→   204→    chatHistory: chatHistory || session.messages.map(m => `${m.role}: ${m.content}`).join('\n\n'),
+   205→   205→    grimorioTemplates: [] // ✅ NO USAR PLANTILLAS DE GRIMORIO
+   206→   206→  });
+   207→   207→
+   208→   208→  // ✅ REEMPLAZAR VARIABLES PRIMARIAS
+   209→   209→  const varContext: VariableContext = {
+   210→   210→    npc,
+   211→   211→    world,
+   212→   212→    pueblo,
+   213→   213→    edificio,
+   214→   214→    session,
+   215→   215→    char: getCardField(npc?.card, 'name', ''),
+   216→   216→    lastSummary
+   217→   217→  };
+   218→   218→  const resolvedPrompt = replaceVariables(basePrompt, varContext);
+   219→   219→
+   220→   220→  // ✅ CONSTRUIR MENSAJES
+   221→   221→  const messages: ChatMessage[] = [
+   222→   222→    {
+   223→   223→      role: 'system',
+   224→   224→      content: resolvedPrompt,
+   225→   225→      timestamp: new Date().toISOString()
+   226→   226→    }
+   227→   227→  ];
+   228→   228→
+   229→   229→  // ✅ LLAMAR AL LLM
+   230→   230→  const llmResponse = await callLLM(messages);
+   231→   231→
+   232→   232→  // ✅ GUARDAR EN DB
+   233→   233→  await sessionSummaryDbManager.create({
+   234→   234→    sessionId: playersessionid,
+   235→   235→    npcId: npcid,
+   236→   236→    playerName: session.playerName,
+   237→   237→    npcName: getCardField(npc.card, 'name', ''),
+   238→   238→    summary: llmResponse,
+   239→   239→    timestamp: new Date().toISOString(),
+   240→   240→    version: 1
+   241→   241→  });
+   242→   242→
+   243→   243→  // ✅ LIMPIAR MENSAJES DE LA SESIÓN DESPUÉS DE RESUMIR
+   244→   244→  await sessionDbManagerSingleton.clearMessages(playersessionid);
+   245→   245→  console.log(`[executeResumenSesion] Sesión ${playersessionid}: ${session.messages.length} mensajes eliminados después de resumir`);
+   246→   246→
+   247→   247→  return {
+   248→   248→    success: true,
+   249→   249→    data: { summary: llmResponse }
+   250→   250→  };
+   251→   251→}
+   252→   252→
+   253→   253→// ========================================================================
+   254→   254→// RESUMEN DE NPC
+   255→   255→// ========================================================================
+   256→   256→
+   257→   257→async function executeResumenNPC(
+   258→   258→  payload: ResumenNPCTriggerPayload
+   259→   259→): Promise<TriggerExecutionResult> {
+   260→   260→  const { npcid, systemPrompt, allSummaries } = payload;
+   261→   261→
+   262→   262→  // Get NPC
+   263→   263→  const npc = await npcDbManager.getById(npcid);
+   264→   264→  if (!npc) {
+   265→   265→    return { success: false, error: `NPC with id ${npcid} not found` };
+   266→   266→  }
+   267→   267→
+   268→   268→  // Get context (world, pueblo, edificio)
+   269→   269→  const world = await worldDbManager.getById(npc.location.worldId);
+   270→   270→  const pueblo = npc.location.puebloId ? await puebloDbManager.getById(npc.location.puebloId) : undefined;
+   271→   271→  const edificio = npc.location.edificioId ? await edificioDbManager.getById(npc.location.edificioId) : undefined;
+   272→   272→
+   273→   273→  // ✅ LEER CONFIGURACIÓN
+   274→   274→  let configSystemPrompt = systemPrompt;
+   275→   275→  if (!configSystemPrompt) {
+   276→   276→    try {
+   277→   277→      const fs = await import('fs/promises');
+   278→   278→      const path = await import('path');
+   279→   279→      const configPath = path.join(process.cwd(), 'db', 'resumen-npc-trigger-config.json');
+   280→   280→      try {
+   281→   281→        const configContent = await fs.readFile(configPath, 'utf-8');
+   282→   282→        const config = JSON.parse(configContent);
+   283→   283→        configSystemPrompt = config.systemPrompt || '';
+   284→   284→      } catch (error) {
+   285→   285→        configSystemPrompt = '';
+   286→   286→      }
+   287→   287→    } catch (error) {
+   288→   288→      configSystemPrompt = '';
+   289→   289→    }
+   290→   290→  }
+   291→   291→
+   292→   292→  // ✅ OBTENER RESÚMENES DE SESIONES DEL NPC
+   293→   293→  const npcSummaries = await sessionSummaryDbManager.getByNPCId(npcid);
+   294→   294→  let formattedSummaries = allSummaries;
+   295→   295→
+   296→   296→  if (!formattedSummaries && npcSummaries.length > 0) {
+   297→   297→    const summariesByPlayer = npcSummaries.reduce((acc, s) => {
+   298→   298→      const playerName = s.playerName || 'Unknown';
+   299→   299→      if (!acc[playerName]) acc[playerName] = [];
+   300→   300→      acc[playerName].push(s);
+   301→   301→      return acc;
+   302→   302→    }, {} as Record<string, any[]>);
+   303→   303→
+   304→   304→    const memoriesSections: string[] = [];
+   305→   305→    for (const [playerName, summaries] of Object.entries(summariesByPlayer)) {
+   306→   306→      memoriesSections.push(`Memoria de ${playerName}`);
+   307→   307→      summaries.forEach(s => memoriesSections.push(s.summary));
+   308→   308→    }
+   309→   309→
+   310→   310→    formattedSummaries = `***
+   311→   311→MEMORIAS DE LOS AVENTUREROS
+   312→   312→${memoriesSections.join('\n')}
+   313→   313→***`;
+   314→   314→  }
+   315→   315→
+   316→   316→  // ✅ CALCULAR HASH ACTUAL DE LOS RESÚMENES DE SESIONES DEL NPC
+   317→   317→  const currentHash = generateSessionSummariesHash(npcSummaries);
+   318→   318→
+   319→   319→  // ✅ OBTENER ÚLTIMO RESUMEN GUARDADO DEL NPC
+   320→   320→  const npcSummaryMgr = new NPCSummaryManager();
+   321→   321→  const lastNPCSummary = await npcSummaryMgr.getLatest(npcid);
+   322→   322→
+   323→   323→  console.log(`[executeResumenNPC] NPC ${npcid} - Resúmenes: ${npcSummaries.length}, Hash actual: ${currentHash}`);
+   324→   324→
+   325→   325→  // ✅ VERIFICAR SI HUBO CAMBIOS
+   326→   326→  if (lastNPCSummary?.sessionHash === currentHash) {
+   327→   327→    console.log(`[executeResumenNPC] NPC ${npcid} - SIN CAMBIOS, SKIP`);
+   328→   328→    return {
+   329→   329→      success: false,
+   330→   330→      error: `No hubo cambios en las sesiones del NPC ${npcid}. Los resúmenes son iguales.`
+   331→   331→    };
+   332→   332→  }
+   333→   333→
+   334→   334→  console.log(`[executeResumenNPC] NPC ${npcid} - HAY CAMBIOS, PROCEDIENDO CON RESUMEN`);
+   335→   335→
+   336→   336→  // ✅ CONSTRUIR EL PROMPT COMPLETO
+   337→   337→  const existingMemory = {};
+   338→   338→  const npcName = getCardField(npc?.card, 'name', '');
+   339→   339→  const varContext: VariableContext = {
+   340→   340→    npc,
+   341→   341→    world,
+   342→   342→    pueblo,
+   343→   343→    edificio,
+   344→   344→    char: npcName
+   345→   345→  };
+   346→   346→
+   347→   347→  let messages = buildNPCSummaryPrompt(
+   348→   348→    npc,
+   349→   349→    [],
+   350→   350→    existingMemory,
+   351→   351→    {
+   352→   352→      systemPrompt: configSystemPrompt,
+   353→   353→      allSummaries: formattedSummaries
+   354→   354→    }
+   355→   355→  );
+   356→   356→
+   357→   357→  // ✅ REEMPLAZAR VARIABLES PRIMARIAS Y PLANTILLAS DE GRIMORIO
+   358→   358→  const grimorioCards = grimorioManager.getAll();
+   359→   359→  const systemPromptRaw = messages[0]?.content || '';
+   360→   360→  const { result: systemPromptResolved } = resolveAllVariables(
+   361→   361→    systemPromptRaw, 
+   362→   362→    varContext, 
+   363→   363→    grimorioCards
+   364→   364→  );
+   365→   365→
+   366→   366→  messages = [
+   367→   367→    {
+   368→   368→      role: 'system',
+   369→   369→      content: systemPromptResolved,
+   370→   370→      timestamp: new Date().toISOString()
+   371→   371→    },
+   372→   372→    ...messages.slice(1)
+   373→   373→  ];
+   374→   374→
+   375→   375→  // ✅ LLAMAR AL LLM
+   376→   376→  const llmResponse = await callLLM(messages);
+   377→   377→
+   378→   378→  // ✅ GUARDAR RESUMEN EN creator_notes DE LA CARD DEL NPC (EN LA DB)
+   379→   379→  if (npc?.card) {
+   380→   380→    const updatedCard: any = { ...npc.card };
+   381→   381→
+   382→   382→    if (updatedCard.data) {
+   383→   383→      updatedCard.data = {
+   384→   384→        ...updatedCard.data,
+   385→   385→        creator_notes: llmResponse
+   386→   386→      };
+   387→   387→    } else {
+   388→   388→      updatedCard.data = {
+   389→   389→        creator_notes: llmResponse
+   390→   390→      };
+   391→   391→    }
+   392→   392→
+   393→   393→    await npcDbManager.update(npcid, { card: updatedCard });
+   394→   394→    console.log(`[executeResumenNPC] Resumen guardado en creator_notes de la card del NPC ${npcid}`);
+   395→   395→  }
+   396→   396→
+   397→   397→  // ✅ GUARDAR EN TABLA NPCSummary PARA HISTÓRICO (CON VERSIÓN)
+   398→   398→  const nextVersion = (lastNPCSummary?.version || 0) + 1;
+   399→   399→  await npcSummaryMgr.create({
+   400→   400→    npcId: npcid,
+   401→   401→    summary: llmResponse,
+   402→   402→    sessionHash: currentHash,
+   403→   403→    version: nextVersion
+   404→   404→  });
+   405→   405→  console.log(`[executeResumenNPC] NPC ${npcid} - Resumen guardado en DB con versión ${nextVersion}`);
+   406→   406→
+   407→   407→  return {
+   408→   408→    success: true,
+   409→   409→    data: { summary: llmResponse, version: nextVersion }
+   410→   410→  };
+   411→   411→}
+   412→   412→
+   413→   413→// ========================================================================
+   414→   414→// RESUMEN DE EDIFICIO
+   415→   415→// ========================================================================
+   416→   416→
+   417→   417→async function executeResumenEdificio(
+   418→   418→  payload: ResumenEdificioTriggerPayload
+   419→   419→): Promise<TriggerExecutionResult> {
+   420→   420→  const { edificioid, systemPrompt } = payload;
+   421→   421→
+   422→   422→  const edificio = await edificioDbManager.getById(edificioid);
+   423→   423→  if (!edificio) {
+   424→   424→    return { success: false, error: `Edificio with id ${edificioid} not found` };
+   425→   425→  }
+   426→   426→
+   427→   427→  // Get context (world, pueblo)
+   428→   428→  const world = await worldDbManager.getById(edificio.worldId);
+   429→   429→  const pueblo = edificio.puebloId ? await puebloDbManager.getById(edificio.puebloId) : undefined;
+   430→   430→
+   431→   431→  // ✅ LEER CONFIGURACIÓN
+   432→   432→  let configSystemPrompt = systemPrompt;
+   433→   433→  if (!configSystemPrompt) {
+   434→   434→    try {
+   435→   435→      const fs = await import('fs/promises');
+   436→   436→      const path = await import('path');
+   437→   437→      const configPath = path.join(process.cwd(), 'db', 'resumen-edificio-trigger-config.json');
+   438→   438→      try {
+   439→   439→        const configContent = await fs.readFile(configPath, 'utf-8');
+   440→   440→        const config = JSON.parse(configContent);
+   441→   441→        configSystemPrompt = config.systemPrompt || '';
+   442→   442→      } catch (error) {
+   443→   443→        configSystemPrompt = '';
+   444→   444→      }
+   445→   445→    } catch (error) {
+   446→   446→      configSystemPrompt = '';
+   447→   447→    }
+   448→   448→  }
+   449→   449→
+   450→   450→  // ✅ OBTENER creator_notes DE LOS NPCs
+   451→   451→  const npcs = await npcDbManager.getByEdificioId(edificioid);
+   452→   452→  const npcSummaries = npcs
+   453→   453→    .map(npc => {
+   454→   454→      const creatorNotes = npc?.card?.data?.creator_notes || '';
+   455→   455→      return {
+   456→   456→        npcId: npc.id,
+   457→   457→        npcName: npc.card?.data?.name || npc.card?.name || 'Unknown',
+   458→   458→        consolidatedSummary: creatorNotes
+   459→   459→      };
+   460→   460→    })
+   461→   461→    .filter(n => n.consolidatedSummary !== '');
+   462→   462→
+   463→   463→  // ✅ CALCULAR HASH DE LOS RESÚMENES DE NPCs DEL EDIFICIO
+   464→   464→  const npcSummaryMgr = new NPCSummaryManager();
+   465→   465→  const allNPCSummaries = [];
+   466→   466→
+   467→   467→  for (const npc of npcs) {
+   468→   468→    const npcSummaries = await npcSummaryMgr.getByNPCId(npc.id);
+   469→   469→    if (npcSummaries) {
+   470→   470→      allNPCSummaries.push(npcSummaries);
+   471→   471→    }
+   472→   472→  }
+   473→   473→
+   474→   474→  const currentHash = generateNPCSummariesHash(allNPCSummaries);
+   475→   475→
+   476→   476→  // ✅ OBTENER ÚLTIMO RESUMEN GUARDADO DEL EDIFICIO
+   477→   477→  const edificioSummaryMgr = new EdificioSummaryManager();
+   478→   478→  const lastEdificioSummary = await edificioSummaryMgr.getLatest(edificioid);
+   479→   479→
+   480→   480→  console.log(`[executeResumenEdificio] Edificio ${edificioid} - NPCs: ${npcs.length}, Hash actual: ${currentHash}`);
+   481→   481→
+   482→   482→  // ✅ VERIFICAR SI HUBO CAMBIOS EN LOS RESÚMENES DE NPCs
+   483→   483→  if (lastEdificioSummary?.npcHash === currentHash) {
+   484→   484→    console.log(`[executeResumenEdificio] Edificio ${edificioid} - SIN CAMBIOS, SKIP`);
+   485→   485→    return {
+   486→   486→      success: false,
+   487→   487→      error: `No hubo cambios en los resúmenes de NPCs del edificio ${edificioid}. Los resúmenes son iguales.`
+   488→   488→    };
+   489→   489→  }
+   490→   490→
+   491→   491→  console.log(`[executeResumenEdificio] Edificio ${edificioid} - HAY CAMBIOS, PROCEDIENDO CON RESUMEN`);
+   492→   492→
+   493→   493→  // ✅ CONSTRUIR EL PROMPT COMPLETO
+   494→   494→  const edificioName = edificio.name;
+   495→   495→  const varContext: VariableContext = {
+   496→   496→    edificio,
+   497→   497→    world,
+   498→   498→    pueblo,
+   499→   499→    char: edificioName
+   500→   500→  };
+   501→   501→
+   502→   502→  let messages = buildEdificioSummaryPrompt(
+   503→   503→    edificio,
+   504→   504→    [],
+   505→   505→    undefined,
+   506→   506→    {
+   507→   507→      systemPrompt: configSystemPrompt
+   508→   508→    }
+   509→   509→  );
+   510→   510→
+   511→   511→  // ✅ REEMPLAZAR VARIABLES PRIMARIAS Y PLANTILLAS DE GRIMORIO
+   512→   512→  const grimorioCards = grimorioManager.getAll();
+   513→   513→  const systemPromptRaw = messages[0]?.content || '';
+   514→   514→  const { result: systemPromptResolved } = resolveAllVariables(
+   515→   515→    systemPromptRaw, 
+   516→   516→    varContext, 
+   517→   517→    grimorioCards
+   518→   518→  );
+   519→   519→
+   520→   520→  messages = [
+   521→   521→    {
+   522→   522→      role: 'system',
+   523→   523→      content: systemPromptResolved,
+   524→   524→      timestamp: new Date().toISOString()
+   525→   525→    },
+   526→   526→    ...messages.slice(1)
+   527→   527→  ];
+   528→   528→
+   529→   529→  // ✅ LLAMAR AL LLM
+   530→   530→  const llmResponse = await callLLM(messages);
+   531→   531→
+   532→   532→  // ✅ GUARDAR RESUMEN EN eventos_recientes DEL EDIFICIO (EN LA DB)
+   533→   533→  await edificioDbManager.update(edificioid, {
+   534→   534→    eventos_recientes: [llmResponse]
+   535→   535→  });
+   536→   536→  console.log(`[executeResumenEdificio] Resumen guardado en eventos_recientes del edificio ${edificioid}`);
+   537→   537→
+   538→   538→  // ✅ GUARDAR EN TABLA EdificioSummary PARA HISTÓRICO (CON VERSIÓN)
+   539→   539→  const nextVersion = (lastEdificioSummary?.version || 0) + 1;
+   540→   540→  await edificioSummaryMgr.create({
+   541→   541→    edificioId: edificioid,
+   542→   542→    summary: llmResponse,
+   543→   543→    npcHash: currentHash,
+   544→   544→    version: nextVersion
+   545→   545→  });
+   546→   546→  console.log(`[executeResumenEdificio] Edificio ${edificioid} - Resumen guardado en DB con versión ${nextVersion}`);
+   547→   547→
+   548→   548→  return {
+   549→   549→    success: true,
+   550→   550→    data: { summary: llmResponse, version: nextVersion }
+   551→   551→  };
+   552→   552→}
+   553→   553→
+   554→   554→// ========================================================================
+   555→   555→// RESUMEN DE PUEBLO
+   556→   556→// ========================================================================
+   557→   557→
+   558→   558→async function executeResumenPueblo(
+   559→   559→  payload: ResumenPuebloTriggerPayload
+   560→   560→): Promise<TriggerExecutionResult> {
+   561→   561→  const { pueblid, systemPrompt } = payload;
+   562→   562→
+   563→   563→  const pueblo = await puebloDbManager.getById(pueblid);
+   564→   564→  if (!pueblo) {
+   565→   565→    return { success: false, error: `Pueblo with id ${pueblid} not found` };
+   566→   566→  }
+   567→   567→
+   568→   568→  // Get context (world)
+   569→   569→  const world = await worldDbManager.getById(pueblo.worldId);
+   570→   570→
+   571→   571→  // ✅ LEER CONFIGURACIÓN
+   572→   572→  let configSystemPrompt = systemPrompt;
+   573→   573→  if (!configSystemPrompt) {
+   574→   574→    try {
+   575→   575→      const fs = await import('fs/promises');
+   576→   576→      const path = await import('path');
+   577→   577→      const configPath = path.join(process.cwd(), 'db', 'resumen-pueblo-trigger-config.json');
+   578→   578→      try {
+   579→   579→        const configContent = await fs.readFile(configPath, 'utf-8');
+   580→   580→        const config = JSON.parse(configContent);
+   581→   581→        configSystemPrompt = config.systemPrompt || '';
+   582→   582→      } catch (error) {
+   583→   583→        configSystemPrompt = '';
+   584→   584→      }
+   585→   585→    } catch (error) {
+   586→   586→      configSystemPrompt = '';
+   587→   587→    }
+   588→   588→  }
+   589→   589→
+   590→   590→  // ✅ OBTENER eventos_recientes DE LOS EDIFICIOS
+   591→   591→  const edificios = await edificioDbManager.getByPuebloId(pueblid);
+   592→   592→  const edificioSummaries = edificios
+   593→   593→    .map(edificio => {
+   594→   594→      const eventosRecientes = edificio.eventos_recientes || [];
+   595→   595→      const consolidatedSummary = eventosRecientes.length > 0
+   596→   596→        ? eventosRecientes.join('\n')
+   597→   597→        : '';
+   598→   598→      return {
+   599→   599→        edificioId: edificio.id,
+   600→   600→        edificioName: edificio.name,
+   601→   601→        consolidatedSummary
+   602→   602→      };
+   603→   603→    })
+   604→   604→    .filter(e => e.consolidatedSummary !== '');
+   605→   605→
+   606→   606→  // ✅ CALCULAR HASH DE LOS RESÚMENES DE EDIFICIOS DEL PUEBLO
+   607→   607→  const edificioSummaryMgr = new EdificioSummaryManager();
+   608→   608→  const allEdificioSummaries = [];
+   609→   609→
+   610→   610→  for (const edificio of edificios) {
+   611→   611→    const edificioSummaries = await edificioSummaryMgr.getByEdificioId(edificio.id);
+   612→   612→    if (edificioSummaries) {
+   613→   613→      allEdificioSummaries.push(edificioSummaries);
+   614→   614→    }
+   615→   615→  }
+   616→   616→
+   617→   617→  const currentHash = generateEdificioSummariesHash(allEdificioSummaries);
+   618→   618→
+   619→   619→  // ✅ OBTENER ÚLTIMO RESUMEN GUARDADO DEL PUEBLO
+   620→   620→  const puebloSummaryMgr = new PuebloSummaryManager();
+   621→   621→  const lastPuebloSummary = await puebloSummaryMgr.getLatest(pueblid);
+   622→   622→
+   623→   623→  console.log(`[executeResumenPueblo] Pueblo ${pueblid} - Edificios: ${edificios.length}, Hash actual: ${currentHash}`);
+   624→   624→
+   625→   625→  // ✅ VERIFICAR SI HUBO CAMBIOS EN LOS RESÚMENES DE EDIFICIOS
+   626→   626→  if (lastPuebloSummary?.edificioHash === currentHash) {
+   627→   627→    console.log(`[executeResumenPueblo] Pueblo ${pueblid} - SIN CAMBIOS, SKIP`);
+   628→   628→    return {
+   629→   629→      success: false,
+   630→   630→      error: `No hubo cambios en los resúmenes de edificios del pueblo ${pueblid}. Los resúmenes son iguales.`
+   631→   631→    };
+   632→   632→  }
+   633→   633→
+   634→   634→  console.log(`[executeResumenPueblo] Pueblo ${pueblid} - HAY CAMBIOS, PROCEDIENDO CON RESUMEN`);
+   635→   635→
+   636→   636→  // ✅ CONSTRUIR EL PROMPT COMPLETO
+   637→   637→  const puebloName = pueblo.name;
+   638→   638→  const varContext: VariableContext = {
+   639→   639→    pueblo,
+   640→   640→    world,
+   641→   641→    char: puebloName
+   642→   642→  };
+   643→   643→
+   644→   644→  let messages = buildPuebloSummaryPrompt(
+   645→   645→    pueblo,
+   646→   646→    [],
+   647→   647→    undefined,
+   648→   648→    {
+   649→   649→      systemPrompt: configSystemPrompt
+   650→   650→    }
+   651→   651→  );
+   652→   652→
+   653→   653→  // ✅ REEMPLAZAR VARIABLES PRIMARIAS Y PLANTILLAS DE GRIMORIO
+   654→   654→  const grimorioCards = grimorioManager.getAll();
+   655→   655→  const systemPromptRaw = messages[0]?.content || '';
+   656→   656→  const { result: systemPromptResolved } = resolveAllVariables(
+   657→   657→    systemPromptRaw, 
+   658→   658→    varContext, 
+   659→   659→    grimorioCards
+   660→   660→  );
+   661→   661→
+   662→   662→  messages = [
+   663→   663→    {
+   664→   664→      role: 'system',
+   665→   665→      content: systemPromptResolved,
+   666→   666→      timestamp: new Date().toISOString()
+   667→   667→    },
+   668→   668→    ...messages.slice(1)
+   669→   669→  ];
+   670→   670→
+   671→   671→  // ✅ LLAMAR AL LLM
+   672→   672→  const llmResponse = await callLLM(messages);
+   673→   673→  // ✅ GUARDAR RESUMEN EN lore.eventos DEL PUEBLO (EN LA DB)
+   674→   674→  const loreActual = pueblo.lore || {};
+   675→   675→  await puebloDbManager.update(pueblid, {
+   676→   676→    lore: {
+   677→   677→      ...loreActual,
+   678→   678→      eventos: [llmResponse]
+   679→   679→    }
+   680→   680→  });
+   681→   681→  console.log(`[executeResumenPueblo] Resumen guardado en lore.eventos del pueblo ${pueblid}`);
+   682→   682→
+   683→   683→  // ✅ GUARDAR EN TABLA PuebloSummary PARA HISTÓRICO (CON VERSIÓN)
+   684→   684→  const nextVersion = (lastPuebloSummary?.version || 0) + 1;
+   685→   685→  await puebloSummaryMgr.create({
+   686→   686→    puebloId: pueblid,
+   687→   687→    summary: llmResponse,
+   688→   688→    edificioHash: currentHash,
+   689→   689→    version: nextVersion
+   690→   690→  });
+   691→   691→  console.log(`[executeResumenPueblo] Pueblo ${pueblid} - Resumen guardado en DB con versión ${nextVersion}`);
+   692→   692→
+   693→   693→  return {
+   694→   694→    success: true,
+   695→   695→    data: { summary: llmResponse, version: nextVersion }
+   696→   696→  };
+   697→   697→}
+   698→   698→
+   699→   699→// ========================================================================
+   700→   700→// RESUMEN DE MUNDO
+   701→   701→// ========================================================================
+   702→   702→
+   703→   703→async function executeResumenMundo(
+   704→   704→  payload: ResumenMundoTriggerPayload
+   705→   705→): Promise<TriggerExecutionResult> {
+   706→   706→  const { mundoid, systemPrompt } = payload;
+   707→   707→
+   708→   708→  const world = await worldDbManager.getById(mundoid);
+   709→   709→  if (!world) {
+   710→   710→    return { success: false, error: `World with id ${mundoid} not found` };
+   711→   711→  }
+   712→   712→
+   713→   713→  // ✅ LEER CONFIGURACIÓN
+   714→   714→  let configSystemPrompt = systemPrompt;
+   715→   715→  if (!configSystemPrompt) {
+   716→   716→    try {
+   717→   717→      const fs = await import('fs/promises');
+   718→   718→      const path = await import('path');
+   719→   719→      const configPath = path.join(process.cwd(), 'db', 'resumen-mundo-trigger-config.json');
+   720→   720→      try {
+   721→   721→        const configContent = await fs.readFile(configPath, 'utf-8');
+   722→   722→        const config = JSON.parse(configContent);
+   723→   723→        configSystemPrompt = config.systemPrompt || '';
+   724→   724→      } catch (error) {
+   725→   725→        configSystemPrompt = '';
+   726→   726→      }
+   727→   727→    } catch (error) {
+   728→   728→      configSystemPrompt = '';
+   729→   729→    }
+   730→   730→  }
+   731→   731→
+   732→   732→  // ✅ OBTENER eventos DE LOS PUEBLOS
+   733→   733→  const pueblos = await puebloDbManager.getByWorldId(mundoid);
+   734→   734→  const puebloSummaries = pueblos
+   735→   735→    .map(pueblo => {
+   736→   736→      const lore = pueblo.lore || {};
+   737→   737→        const eventos = lore.eventos || [];
+   738→   738→      const consolidatedSummary = eventos.length > 0
+   739→   739→        ? eventos.join('\n')
+   740→   740→        : '';
+   741→   741→      return {
+   742→   742→        puebloId: pueblo.id,
+   743→   743→        puebloName: pueblo.name,
+   744→   744→        consolidatedSummary
+   745→   745→      };
+   746→   746→    })
+   747→   747→    .filter(p => p.consolidatedSummary !== '');
+   748→   748→
+   749→   749→
+   750→   750→  // ✅ CALCULAR HASH DE LOS RESÚMENES DE PUEBLOS DEL MUNDO
+   751→   751→  const puebloSummaryMgr = new PuebloSummaryManager();
+   752→   752→  const allPuebloSummaries = [];
+   753→   753→
+   754→   754→  for (const pueblo of pueblos) {
+   755→   755→    const puebloSummaries = await puebloSummaryMgr.getByPuebloId(pueblo.id);
+   756→   756→    if (puebloSummaries) {
+   757→   757→      allPuebloSummaries.push(puebloSummaries);
+   758→   758→    }
+   759→   759→  }
+   760→   760→
+   761→   761→  const currentHash = generatePuebloSummariesHash(allPuebloSummaries);
+   762→   762→
+   763→   763→  // ✅ OBTENER ÚLTIMO RESUMEN GUARDADO DEL MUNDO
+   764→   764→  const worldSummaryMgr = new WorldSummaryManager();
+   765→   765→  const lastWorldSummary = await worldSummaryMgr.getLatest(mundoid);
+   766→   766→
+   767→   767→  console.log(`[executeResumenMundo] Mundo ${mundoid} - Pueblos: ${pueblos.length}, Hash actual: ${currentHash}`);
+   768→   768→
+   769→   769→  // ✅ VERIFICAR SI HUBO CAMBIOS EN LOS RESÚMENES DE PUEBLOS
+   770→   770→  if (lastWorldSummary?.puebloHash === currentHash) {
+   771→   771→    console.log(`[executeResumenMundo] Mundo ${mundoid} - SIN CAMBIOS, SKIP`);
+   772→   772→    return {
+   773→   773→      success: false,
+   774→   774→      error: `No hubo cambios en los resúmenes de pueblos del mundo ${mundoid}. Los resúmenes son iguales.`
+   775→   775→    };
+   776→   776→  }
+   777→   777→
+   778→   778→  console.log(`[executeResumenMundo] Mundo ${mundoid} - HAY CAMBIOS, PROCEDIENDO CON RESUMEN`);
+   779→   779→
+   780→   780→  // ✅ CONSTRUIR EL PROMPT COMPLETO
+   781→   781→  const mundoName = world.name;
+   782→   782→  const varContext: VariableContext = {
+   783→   783→    world,
+   784→   784→    char: mundoName
+   785→   785→  };
+   786→   786→
+   787→   787→  let messages = buildWorldSummaryPrompt(
+   788→   788→    world,
+   789→   789→    [],
+   790→   790→    undefined,
+   791→   791→    {
+   792→   792→      systemPrompt: configSystemPrompt
+   793→   793→    }
+   794→   794→  );
+   795→   795→
+   796→   796→  // ✅ REEMPLAZAR VARIABLES PRIMARIAS Y PLANTILLAS DE GRIMORIO
+   797→   797→  const grimorioCards = grimorioManager.getAll();
+   798→   798→  const systemPromptRaw = messages[0]?.content || '';
+   799→   799→  const { result: systemPromptResolved } = resolveAllVariables(
+   800→   800→    systemPromptRaw, 
+   801→   801→    varContext, 
+   802→   802→    grimorioCards
+   803→   803→  );
+   804→   804→
+   805→   805→  messages = [
+   806→   806→    {
+   807→   807→      role: 'system',
+   808→   808→      content: systemPromptResolved,
+   809→   809→      timestamp: new Date().toISOString()
+   810→   810→    },
+   811→   811→    ...messages.slice(1)
+   812→   812→  ];
+   813→   813→
+   814→   814→  // ✅ LLAMAR AL LLM
+   815→   815→  const llmResponse = await callLLM(messages);
+   816→   816→
+   817→   817→  
+   818→   818→
+   819→   819→  // ✅ GUARDAR RESUMEN EN lore.eventos DEL MUNDO (EN LA DB)
+   820→   820→  const loreActual = world.lore || {};
+   821→   821→  await worldDbManager.update(mundoid, {
+   822→   822→    lore: {
+   823→   823→      ...loreActual,
+   824→   824→      eventos: [llmResponse]
+   825→   825→    }
+   826→   826→  });
+   827→   827→  console.log(`[executeResumenMundo] Resumen guardado en lore.eventos del mundo ${mundoid}`);
+   828→   828→
+   829→   829→  // ✅ GUARDAR EN TABLA WorldSummary PARA HISTÓRICO (CON VERSIÓN)
+   830→   830→  const nextVersion = (lastWorldSummary?.version || 0) + 1;
+   831→   831→  await worldSummaryMgr.create({
+   832→   832→    worldId: mundoid,
+   833→   833→    summary: llmResponse,
+   834→   834→    puebloHash: currentHash,
+   835→   835→    version: nextVersion
+   836→   836→  });
+   837→   837→  console.log(`[executeResumenMundo] Mundo ${mundoid} - Resumen guardado en DB con versión ${nextVersion}`);
+   838→   838→
+   839→   839→
+   840→   840→  
+   841→   841→
+   842→   842→  return {
+   843→   843→    success: true,
+   844→   844→    data: { summary: llmResponse }
+   845→   845→  };
+   846→   846→}
+   847→   847→
+   848→   848→// ========================================================================
+   849→   849→// OTROS TRIGGERS (CHAT, NUEVO LORE)
+   850→   850→// ========================================================================
+   851→   851→
+   852→   852→async function executeChat(payload: ChatTriggerPayload): Promise<TriggerExecutionResult> {
+   853→   853→  // Importar dinámicamente para evitar dependencia circular
+   854→   854→  const { handleChatTrigger } = await import('./triggerHandlers');
+   855→   855→  const result = await handleChatTrigger(payload);
+   856→   856→  return result;
+   857→   857→}
+   858→   858→
+   859→   859→async function executeNuevoLore(payload: NuevoLoreTriggerPayload): Promise<TriggerExecutionResult> {
+   860→   860→  // Importar dinámicamente para evitar dependencia circular
+   861→   861→  const { handleNuevoLoreTrigger } = await import('./triggerHandlers');
+   862→   862→  const result = await handleNuevoLoreTrigger(payload);
+   863→   863→  return result;
+   864→   864→}
+   865→   865→
+   866→   866→// ========================================================================
+   867→   867→// LLM SERVICE
+   868→   868→// ========================================================================
+   869→   869→
+   870→   870→const LLM_API_URL = process.env.LLM_API_URL || 'http://127.0.0.1:5000/v1/chat/completions';
+   871→   871→const LLM_MODEL = process.env.LLM_MODEL || 'local-model';
+   872→   872→const LLM_TEMPERATURE = parseFloat(process.env.LLM_TEMPERATURE || '0.7');
+   873→   873→const LLM_MAX_TOKENS = parseInt(process.env.LLM_MAX_TOKENS || '2000');
+   874→   874→
+   875→   875→async function callLLM(messages: ChatMessage[]): Promise<any> {
+   876→   876→  try {
+   877→   877→    const response = await fetch(LLM_API_URL, {
+   878→   878→      method: 'POST',
+   879→   879→      headers: {
+   880→   880→        'Content-Type': 'application/json'
+   881→   881→      },
+   882→   882→      body: JSON.stringify({
+   883→   883→        model: LLM_MODEL,
+   884→   884→        messages: messages.map(m => ({ role: m.role, content: m.content })),
+   885→   885→        temperature: LLM_TEMPERATURE,
+   886→   886→        max_tokens: LLM_MAX_TOKENS
+   887→   887→      })
+   888→   888→    });
+   889→   889→
+   890→   890→    if (!response.ok) {
+   891→   891→      throw new Error(`LLM API error: ${response.status} ${response.statusText}`);
+   892→   892→    }
+   893→   893→
+   894→   894→    const data = await response.json();
+   895→   895→    return data.choices[0]?.message?.content || '';
+   896→   896→  } catch (error) {
+   897→   897→    console.error('Error calling LLM:', error);
+   898→   898→    throw error;
+   899→   899→  }
+   900→   900→}
+   901→   901→

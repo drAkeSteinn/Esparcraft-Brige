@@ -1,0 +1,983 @@
+     1→'use client';
+     2→
+     3→import { useState, useEffect } from 'react';
+     4→import { Plus, Edit2, Trash2, MapPin, X, ScrollText, Users, Building, Globe, Filter, ChevronRight } from 'lucide-react';
+     5→import { Button } from '@/components/ui/button';
+     6→import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+     7→import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+     8→import { Input } from '@/components/ui/input';
+     9→import { Label } from '@/components/ui/label';
+    10→import { Textarea } from '@/components/ui/textarea';
+    11→import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+    12→import { Edificio, PointOfInterest, PlaceType, NPC, World, Pueblo } from '@/lib/types';
+    13→import { toast } from '@/hooks/use-toast';
+    14→import { Badge } from '@/components/ui/badge';
+    15→import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
+    16→import GenericBackupSection from '../GenericBackupSection';
+    17→
+    18→export default function EdificiosSection() {
+    19→  const [edificios, setEdificios] = useState<Edificio[]>([]);
+    20→  const [worlds, setWorlds] = useState<World[]>([]);
+    21→  const [pueblos, setPueblos] = useState<Pueblo[]>([]);
+    22→  const [edificioMemories, setEdificioMemories] = useState<Record<string, any>>({});
+    23→  const [placeTypes, setPlaceTypes] = useState<PlaceType[]>([]);
+    24→  const [npcs, setNpcs] = useState<NPC[]>([]);
+    25→  const [loading, setLoading] = useState(true);
+    26→  const [dialogOpen, setDialogOpen] = useState(false);
+    27→  const [poiDialogOpen, setPoiDialogOpen] = useState(false);
+    28→  const [editingEdificio, setEditingEdificio] = useState<Edificio | null>(null);
+    29→  const [editingPoi, setEditingPoi] = useState<PointOfInterest | null>(null);
+    30→  const [filterWorldId, setFilterWorldId] = useState<string>('all');
+    31→  const [filterPuebloId, setFilterPuebloId] = useState<string>('all');
+    32→  const [formData, setFormData] = useState({
+    33→    name: '',
+    34→    lore: '',
+    35→    rumores: '',
+    36→    eventos_recientes: '',
+    37→    worldId: '',
+    38→    puebloId: '',
+    39→    startX: '',
+    40→    startY: '',
+    41→    startZ: '',
+    42→    endX: '',
+    43→    endY: '',
+    44→    endZ: ''
+    45→  });
+    46→  const [poiFormData, setPoiFormData] = useState({
+    47→    name: '',
+    48→    coordenadas: { x: '', y: '', z: '' },
+    49→    descripcion: '',
+    50→    tipo: '',
+    51→    tags: ''
+    52→  });
+    53→
+    54→  useEffect(() => {
+    55→    fetchData();
+    56→  }, []);
+    57→
+    58→  const fetchData = async () => {
+    59→    try {
+    60→      setLoading(true);
+    61→      const [edificiosRes, worldsRes, pueblosRes, placeTypesRes, npcsRes] = await Promise.all([
+    62→        fetch('/api/edificios'),
+    63→        fetch('/api/worlds'),
+    64→        fetch('/api/pueblos'),
+    65→        fetch('/api/place-types'),
+    66→        fetch('/api/npcs')
+    67→      ]);
+    68→
+    69→      const edificiosResult = await edificiosRes.json();
+    70→      const worldsResult = await worldsRes.json();
+    71→      const pueblosResult = await pueblosRes.json();
+    72→      const placeTypesResult = await placeTypesRes.json();
+    73→      const npcsResult = await npcsRes.json();
+    74→
+    75→      if (edificiosResult.success) setEdificios(edificiosResult.data);
+    76→      if (worldsResult.success) setWorlds(worldsResult.data);
+    77→      if (pueblosResult.success) setPueblos(pueblosResult.data);
+    78→      if (placeTypesResult.success) setPlaceTypes(placeTypesResult.data);
+    79→      if (npcsResult.success) setNpcs(npcsResult.data);
+    80→
+    81→      // Cargar memorias de edificios en paralelo
+    82→      const memoriaPromises = edificiosResult.data.map(edificio =>
+    83→        fetch(`/api/edificios/${edificio.id}/memory`)
+    84→      );
+    85→
+    86→      const memoriaResponses = await Promise.all(memoriaPromises);
+    87→      const memories: Record<string, any> = {};
+    88→      for (let i = 0; i < memoriaResponses.length; i++) {
+    89→        const response = memoriaResponses[i];
+    90→        if (response.ok) {
+    91→          const result = await response.json();
+    92→          if (result.success && result.data.memory) {
+    93→            memories[edificiosResult.data[i].id] = result.data.memory;
+    94→          }
+    95→        }
+    96→      }
+    97→
+    98→      setEdificioMemories(memories);
+    99→
+   100→    } catch (error) {
+   101→      console.error('Error fetching data:', error);
+   102→      toast({
+   103→        title: 'Error',
+   104→        description: 'No se pudieron cargar los datos',
+   105→        variant: 'destructive'
+   106→      });
+   107→    } finally {
+   108→      setLoading(false);
+   109→    }
+   110→  };
+   111→
+   112→  const handleCreate = () => {
+   113→    setEditingEdificio(null);
+   114→    setFormData({
+   115→      name: '',
+   116→      lore: '',
+   117→      rumores: '',
+   118→      eventos_recientes: '',
+   119→      worldId: worlds[0]?.id || '',
+   120→      puebloId: '',
+   121→      startX: '0',
+   122→      startY: '0',
+   123→      startZ: '0',
+   124→      endX: '10',
+   125→      endY: '10',
+   126→      endZ: '10'
+   127→    });
+   128→    setDialogOpen(true);
+   129→  };
+   130→
+   131→  const handleCreatePoi = () => {
+   132→    setEditingPoi(null);
+   133→    setPoiFormData({
+   134→      name: '',
+   135→      coordenadas: { x: '', y: '', z: '' },
+   136→      descripcion: '',
+   137→      tipo: placeTypes[0]?.id || '',
+   138→      tags: ''
+   139→    });
+   140→    setPoiDialogOpen(true);
+   141→  };
+   142→
+   143→  const handleEditPoi = (poi: PointOfInterest) => {
+   144→    setEditingPoi(poi);
+   145→    setPoiFormData({
+   146→      name: poi.name,
+   147→      coordenadas: {
+   148→        x: poi.coordenadas.x.toString(),
+   149→        y: poi.coordenadas.y.toString(),
+   150→        z: poi.coordenadas.z.toString()
+   151→      },
+   152→      descripcion: poi.descripcion,
+   153→      tipo: poi.tipo,
+   154→      tags: poi.tags?.join(', ') || ''
+   155→    });
+   156→    setPoiDialogOpen(true);
+   157→  };
+   158→
+   159→  const handleDeletePoi = (poiId: string) => {
+   160→    if (!confirm('¿Estás seguro de que deseas eliminar este punto de interés?')) return;
+   161→
+   162→    if (editingEdificio) {
+   163→      const updatedEdificio = {
+   164→        ...editingEdificio,
+   165→        puntosDeInteres: (editingEdificio.puntosDeInteres || []).filter(poi => poi.id !== poiId)
+   166→      };
+   167→      setEditingEdificio(updatedEdificio);
+   168→    }
+   169→  };
+   170→
+   171→  const handleSavePoi = () => {
+   172→    if (!editingEdificio) return;
+   173→
+   174→    const newPoi: PointOfInterest = {
+   175→      id: editingPoi?.id || `POI_${Date.now()}`,
+   176→      name: poiFormData.name,
+   177→      coordenadas: {
+   178→        x: parseInt(poiFormData.coordenadas.x) || 0,
+   179→        y: parseInt(poiFormData.coordenadas.y) || 0,
+   180→        z: parseInt(poiFormData.coordenadas.z) || 0
+   181→      },
+   182→      descripcion: poiFormData.descripcion,
+   183→      tipo: poiFormData.tipo,
+   184→      tags: poiFormData.tags.split(',').map(t => t.trim()).filter(t => t)
+   185→    };
+   186→
+   187→    let updatedPois;
+   188→    if (editingPoi) {
+   189→      // Editar POI existente
+   190→      updatedPois = (editingEdificio.puntosDeInteres || []).map(poi =>
+   191→        poi.id === editingPoi.id ? newPoi : poi
+   192→      );
+   193→    } else {
+   194→      // Agregar nuevo POI
+   195→      updatedPois = [...(editingEdificio.puntosDeInteres || []), newPoi];
+   196→    }
+   197→
+   198→    setEditingEdificio({
+   199→      ...editingEdificio,
+   200→      puntosDeInteres: updatedPois
+   201→    });
+   202→
+   203→    setPoiDialogOpen(false);
+   204→  };
+   205→
+   206→  const handleEdit = (edificio: Edificio) => {
+   207→    setEditingEdificio(edificio);
+   208→    setFormData({
+   209→      name: edificio.name,
+   210→      lore: edificio.lore,
+   211→      rumores: (edificio.rumores || []).join('\n'),
+   212→      eventos_recientes: edificio.eventos_recientes.join('\n'),
+   213→      worldId: edificio.worldId,
+   214→      puebloId: edificio.puebloId,
+   215→      startX: edificio.area.start.x.toString(),
+   216→      startY: edificio.area.start.y.toString(),
+   217→      startZ: edificio.area.start.z.toString(),
+   218→      endX: edificio.area.end.x.toString(),
+   219→      endY: edificio.area.end.y.toString(),
+   220→      endZ: edificio.area.end.z.toString()
+   221→    });
+   222→    setDialogOpen(true);
+   223→  };
+   224→
+   225→  const handleDelete = async (id: string) => {
+   226→    if (!confirm('¿Estás seguro de que deseas eliminar este edificio?')) return;
+   227→
+   228→    try {
+   229→      const response = await fetch(`/api/edificios/${id}`, {
+   230→        method: 'DELETE'
+   231→      });
+   232→      const result = await response.json();
+   233→
+   234→      if (result.success) {
+   235→        toast({
+   236→          title: 'Éxito',
+   237→          description: 'Edificio eliminado correctamente'
+   238→        });
+   239→        fetchData();
+   240→      }
+   241→    } catch (error) {
+   242→      console.error('Error deleting edificio:', error);
+   243→      toast({
+   244→        title: 'Error',
+   245→        description: 'No se pudo eliminar el edificio',
+   246→        variant: 'destructive'
+   247→      });
+   248→    }
+   249→  };
+   250→
+   251→  const handleSubmit = async () => {
+   252→    try {
+   253→      const payload: any = {
+   254→        name: formData.name,
+   255→        lore: formData.lore,
+   256→        rumores: formData.rumores.split('\n').filter(r => r.trim()),
+   257→        eventos_recientes: formData.eventos_recientes.split('\n').filter(e => e.trim()),
+   258→        worldId: formData.worldId,
+   259→        puebloId: formData.puebloId,
+   260→        area: {
+   261→          start: {
+   262→            x: parseInt(formData.startX) || 0,
+   263→            y: parseInt(formData.startY) || 0,
+   264→            z: parseInt(formData.startZ) || 0
+   265→          },
+   266→          end: {
+   267→            x: parseInt(formData.endX) || 10,
+   268→            y: parseInt(formData.endY) || 10,
+   269→            z: parseInt(formData.endZ) || 10
+   270→          }
+   271→        }
+   272→      };
+   273→
+   274→      // Incluir puntos de interés si existen
+   275→      if (editingEdificio && editingEdificio.puntosDeInteres) {
+   276→        payload.puntosDeInteres = editingEdificio.puntosDeInteres;
+   277→      }
+   278→
+   279→      const url = editingEdificio ? `/api/edificios/${editingEdificio.id}` : '/api/edificios';
+   280→      const method = editingEdificio ? 'PUT' : 'POST';
+   281→
+   282→      const response = await fetch(url, {
+   283→        method,
+   284→        headers: { 'Content-Type': 'application/json' },
+   285→        body: JSON.stringify(payload)
+   286→      });
+   287→
+   288→      const result = await response.json();
+   289→
+   290→      if (result.success) {
+   291→        toast({
+   292→          title: 'Éxito',
+   293→          description: editingEdificio ? 'Edificio actualizado' : 'Edificio creado'
+   294→        });
+   295→        setDialogOpen(false);
+   296→        fetchData();
+   297→      } else {
+   298→        toast({
+   299→          title: 'Error',
+   300→          description: result.message || 'No se pudo guardar el edificio',
+   301→          variant: 'destructive'
+   302→        });
+   303→      }
+   304→    } catch (error) {
+   305→      console.error('Error saving edificio:', error);
+   306→      toast({
+   307→        title: 'Error',
+   308→        description: 'No se pudo guardar el edificio',
+   309→        variant: 'destructive'
+   310→      });
+   311→    }
+   312→  };
+   313→
+   314→  if (loading) {
+   315→    return (
+   316→      <div className="flex items-center justify-center h-96">
+   317→        <p className="text-muted-foreground">Cargando edificios...</p>
+   318→      </div>
+   319→    );
+   320→  }
+   321→
+   322→  return (
+   323→    <div className="space-y-4">
+   324→      <div className="flex items-center justify-between">
+   325→        <div>
+   326→          <h2 className="text-2xl font-bold">Edificios</h2>
+   327→          <p className="text-sm text-muted-foreground">Gestiona los edificios y sus resúmenes consolidados</p>
+   328→        </div>
+   329→        <Button onClick={handleCreate}>
+   330→          <Plus className="h-4 w-4 mr-2" />
+   331→          Crear Edificio
+   332→        </Button>
+   333→      </div>
+   334→
+   335→      {/* Filtros y Estadísticas */}
+   336→      <div className="flex flex-wrap items-center gap-4 p-4 rounded-lg bg-muted/30 border">
+   337→        <div className="flex items-center gap-2">
+   338→          <Filter className="h-4 w-4 text-muted-foreground" />
+   339→          
+   340→          {/* Filtro por Mundo */}
+   341→          <Select 
+   342→            value={filterWorldId} 
+   343→            onValueChange={(value) => {
+   344→              setFilterWorldId(value);
+   345→              setFilterPuebloId('all'); // Reset pueblo filter when world changes
+   346→            }}
+   347→          >
+   348→            <SelectTrigger className="w-40">
+   349→              <SelectValue placeholder="Mundo" />
+   350→            </SelectTrigger>
+   351→            <SelectContent>
+   352→              <SelectItem value="all">Todos los mundos</SelectItem>
+   353→              {worlds.map((world) => (
+   354→                <SelectItem key={world.id} value={world.id}>
+   355→                  {world.name}
+   356→                </SelectItem>
+   357→              ))}
+   358→            </SelectContent>
+   359→          </Select>
+   360→
+   361→          <ChevronRight className="h-4 w-4 text-muted-foreground" />
+   362→
+   363→          {/* Filtro por Región */}
+   364→          <Select value={filterPuebloId} onValueChange={setFilterPuebloId}>
+   365→            <SelectTrigger className="w-40">
+   366→              <SelectValue placeholder="Región" />
+   367→            </SelectTrigger>
+   368→            <SelectContent>
+   369→              <SelectItem value="all">Todas las regiones</SelectItem>
+   370→              {pueblos
+   371→                .filter(p => filterWorldId === 'all' || p.worldId === filterWorldId)
+   372→                .map((pueblo) => (
+   373→                  <SelectItem key={pueblo.id} value={pueblo.id}>
+   374→                    {pueblo.name}
+   375→                  </SelectItem>
+   376→                ))}
+   377→            </SelectContent>
+   378→          </Select>
+   379→        </div>
+   380→        
+   381→        <div className="flex-1" />
+   382→        
+   383→        {/* Estadísticas totales */}
+   384→        <div className="flex flex-wrap gap-2">
+   385→          {(() => {
+   386→            const filteredEdificios = edificios.filter(e => {
+   387→              if (filterPuebloId !== 'all') {
+   388→                return e.puebloId === filterPuebloId;
+   389→              }
+   390→              if (filterWorldId !== 'all') {
+   391→                const pueblo = pueblos.find(p => p.id === e.puebloId);
+   392→                return pueblo?.worldId === filterWorldId;
+   393→              }
+   394→              return true;
+   395→            });
+   396→            const filteredNpcs = npcs.filter(n => {
+   397→              if (filterPuebloId !== 'all') {
+   398→                return n.location.puebloId === filterPuebloId;
+   399→              }
+   400→              if (filterWorldId !== 'all') {
+   401→                return n.location.worldId === filterWorldId;
+   402→              }
+   403→              return true;
+   404→            });
+   405→            
+   406→            return (
+   407→              <>
+   408→                <Badge variant="secondary" className="flex items-center gap-1">
+   409→                  <Building className="h-3 w-3" />
+   410→                  {filteredEdificios.length} {filteredEdificios.length === 1 ? 'edificio' : 'edificios'}
+   411→                </Badge>
+   412→                <Badge variant="default" className="flex items-center gap-1 bg-primary/80">
+   413→                  <Users className="h-3 w-3" />
+   414→                  {filteredNpcs.length} {filteredNpcs.length === 1 ? 'NPC' : 'NPCs'}
+   415→                </Badge>
+   416→              </>
+   417→            );
+   418→          })()}
+   419→        </div>
+   420→      </div>
+   421→
+   422→      {/* Breadcrumb */}
+   423→      {(filterWorldId !== 'all' || filterPuebloId !== 'all') && (
+   424→        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+   425→          <Globe className="h-4 w-4" />
+   426→          <span>Mundos</span>
+   427→          {filterWorldId !== 'all' && (
+   428→            <>
+   429→              <ChevronRight className="h-4 w-4" />
+   430→              <span className="font-medium text-foreground">
+   431→                {worlds.find(w => w.id === filterWorldId)?.name}
+   432→              </span>
+   433→            </>
+   434→          )}
+   435→          {filterPuebloId !== 'all' && (
+   436→            <>
+   437→              <ChevronRight className="h-4 w-4" />
+   438→              <span className="font-medium text-foreground">
+   439→                {pueblos.find(p => p.id === filterPuebloId)?.name}
+   440→              </span>
+   441→            </>
+   442→          )}
+   443→          <Button 
+   444→            variant="ghost" 
+   445→            size="sm" 
+   446→            className="ml-2"
+   447→            onClick={() => {
+   448→              setFilterWorldId('all');
+   449→              setFilterPuebloId('all');
+   450→            }}
+   451→          >
+   452→            <X className="h-3 w-3 mr-1" />
+   453→            Limpiar filtro
+   454→          </Button>
+   455→        </div>
+   456→      )}
+   457→
+   458→      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+   459→        {edificios.filter(e => {
+   460→          if (filterPuebloId !== 'all') {
+   461→            return e.puebloId === filterPuebloId;
+   462→          }
+   463→          if (filterWorldId !== 'all') {
+   464→            const pueblo = pueblos.find(p => p.id === e.puebloId);
+   465→            return pueblo?.worldId === filterWorldId;
+   466→          }
+   467→          return true;
+   468→        }).map((edificio) => {
+   469→          const world = worlds.find(w => w.id === edificio.worldId);
+   470→          const pueblo = pueblos.find(p => p.id === edificio.puebloId);
+   471→          // Filtrar NPCs asignados a este edificio
+   472→          const edificioNpcs = npcs.filter(npc => 
+   473→            npc.location.scope === 'edificio' && npc.location.edificioId === edificio.id
+   474→          );
+   475→
+   476→          return (
+   477→            <Card key={edificio.id}>
+   478→              <CardHeader>
+   479→                <CardTitle className="flex items-center justify-between">
+   480→                  {edificio.name}
+   481→                  <div className="flex gap-2">
+   482→                    <Button
+   483→                      variant="ghost"
+   484→                      size="sm"
+   485→                      onClick={() => handleEdit(edificio)}
+   486→                    >
+   487→                      <Edit2 className="h-4 w-4" />
+   488→                    </Button>
+   489→                    <Button
+   490→                      variant="ghost"
+   491→                      size="sm"
+   492→                      onClick={() => handleDelete(edificio.id)}
+   493→                    >
+   494→                      <Trash2 className="h-4 w-4 text-destructive" />
+   495→                    </Button>
+   496→                  </div>
+   497→                </CardTitle>
+   498→              </CardHeader>
+   499→              <CardContent className="overflow-hidden">
+   500→                <div className="max-h-96 overflow-y-auto space-y-3 pr-1 custom-scrollbar">
+   501→                  {/* Ubicación e ID */}
+   502→                  <div className="flex items-center gap-2 text-sm">
+   503→                    <span className="text-muted-foreground leading-tight">{pueblo?.name || 'Pueblo desconocido'}</span>
+   504→                    <span className="text-muted-foreground/60 mt-0.5">•</span>
+   505→                    <span className="font-mono text-xs bg-muted/50 px-2 py-0.5 rounded border-2 border-[#2C2923] text-[#83673D] leading-tight">
+   506→                      {edificio.id}
+   507→                    </span>
+   508→                  </div>
+   509→                  <div>
+   510→                    <p className="text-sm font-medium">Descripción:</p>
+   511→                    <p className="text-sm text-muted-foreground line-clamp-2">
+   512→                      {edificio.lore || 'Sin descripción'}
+   513→                    </p>
+   514→                  </div>
+   515→
+   516→                  {edificio.rumores && edificio.rumores.length > 0 && (
+   517→                    <div>
+   518→                      <div className="flex items-center justify-between mb-2">
+   519→                        <p className="text-sm font-medium flex items-center gap-2">
+   520→                          <ScrollText className="h-3.5 w-3.5 text-[#83673D]" />
+   521→                          Rumores:
+   522→                        </p>
+   523→                        <span className="text-xs text-muted-foreground">
+   524→                          {edificio.rumores.length} {edificio.rumores.length === 1 ? 'rumor' : 'rumores'}
+   525→                        </span>
+   526→                      </div>
+   527→                      <div className="max-h-32 overflow-y-auto border-2 border-[#2C2923] bg-[#100F11] p-3 rounded">
+   528→                        <ul className="space-y-1.5">
+   529→                          {edificio.rumores.map((rumor, i) => (
+   530→                            <li key={i} className="text-sm text-[#B8B8B8] flex items-start gap-2">
+   531→                              <span className="flex-shrink-0 w-5 h-5 flex items-center justify-center bg-[#2C2923] text-[#83673D] text-xs font-mono rounded">
+   532→                                {i + 1}
+   533→                              </span>
+   534→                              <span className="break-words">{rumor}</span>
+   535→                            </li>
+   536→                          ))}
+   537→                        </ul>
+   538→                      </div>
+   539→                    </div>
+   540→                  )}
+   541→
+   542→                  {edificio.eventos_recientes.length > 0 && (
+   543→                    <div>
+   544→                      <div className="flex items-center justify-between mb-2">
+   545→                        <p className="text-sm font-medium flex items-center gap-2">
+   546→                          <ScrollText className="h-3.5 w-3.5 text-[#83673D]" />
+   547→                          Eventos Recientes:
+   548→                        </p>
+   549→                        <span className="text-xs text-muted-foreground">
+   550→                          {edificio.eventos_recientes.length} {edificio.eventos_recientes.length === 1 ? 'evento' : 'eventos'}
+   551→                        </span>
+   552→                      </div>
+   553→                      <div className="max-h-32 overflow-y-auto border-2 border-[#2C2923] bg-[#100F11] p-3 rounded">
+   554→                        <ul className="space-y-1.5">
+   555→                          {edificio.eventos_recientes.map((evento, i) => (
+   556→                            <li key={i} className="text-sm text-[#B8B8B8] flex items-start gap-2">
+   557→                              <span className="flex-shrink-0 w-5 h-5 flex items-center justify-center bg-[#2C2923] text-[#83673D] text-xs font-mono rounded">
+   558→                                {i + 1}
+   559→                              </span>
+   560→                              <span className="break-words">{evento}</span>
+   561→                            </li>
+   562→                          ))}
+   563→                        </ul>
+   564→                      </div>
+   565→                    </div>
+   566→                  )}
+   567→
+   568→                  <div className="mt-4">
+   569→                    <p className="text-xs text-muted-foreground">Coordenadas del Área:</p>
+   570→                    <p>Inicio: X:{edificio.area.start.x}, Y:{edificio.area.start.y}, Z:{edificio.area.start.z}</p>
+   571→                    <p>Fin: X:{edificio.area.end.x}, Y:{edificio.area.end.y}, Z:{edificio.area.end.z}</p>
+   572→                  </div>
+   573→
+   574→                  {edificioMemories[edificio.id]?.consolidatedSummary && (
+   575→                    <div className="mt-3 p-3 rounded-lg bg-indigo-50 dark:bg-indigo-950 border border-indigo-200 dark:border-indigo-800">
+   576→                      <p className="text-xs font-semibold text-indigo-900 dark:text-indigo-100 mb-1">
+   577→                        Último Resumen General
+   578→                      </p>
+   579→                      <p className="text-sm text-indigo-800 dark:text-indigo-200 line-clamp-3">
+   580→                        {edificioMemories[edificio.id].consolidatedSummary}
+   581→                      </p>
+   582→                    </div>
+   583→                  )}
+   584→
+   585→                  {edificio.puntosDeInteres && edificio.puntosDeInteres.length > 0 && (
+   586→                    <div className="mt-3">
+   587→                      <p className="text-sm font-medium mb-2">Tipos de lugar ({edificio.puntosDeInteres.length}):</p>
+   588→                      <div className="flex flex-wrap gap-1">
+   589→                        {edificio.puntosDeInteres.map((poi, i) => {
+   590→                          const placeType = placeTypes.find(pt => pt.id === poi.tipo);
+   591→                          return (
+   592→                            <Badge key={i} variant="secondary" className="text-xs">
+   593→                              <MapPin className="h-3 w-3 mr-1" />
+   594→                              {placeType?.name || poi.tipo}
+   595→                            </Badge>
+   596→                          );
+   597→                        })}
+   598→                      </div>
+   599→                    </div>
+   600→                  )}
+   601→
+   602→                  {edificioNpcs.length > 0 && (
+   603→                    <div className="mt-3">
+   604→                      <p className="text-sm font-medium mb-2">NPCs asignados ({edificioNpcs.length}):</p>
+   605→                      <div className="flex flex-wrap gap-2">
+   606→                        {edificioNpcs.map((npc) => {
+   607→                          const npcName = npc.card?.data?.name || npc.card?.name || 'NPC sin nombre';
+   608→                          const npcAvatar = npc.card?.data?.avatar || npc.card?.avatar;
+   609→                          const npcInitial = typeof npcName === 'string' && npcName.length > 0 
+   610→                            ? npcName.charAt(0).toUpperCase() 
+   611→                            : 'N';
+   612→                          return (
+   613→                            <div
+   614→                              key={npc.id}
+   615→                              className="flex items-center gap-2 bg-secondary/50 px-2 py-1 rounded-md"
+   616→                              title={npcName}
+   617→                            >
+   618→                              <Avatar className="h-5 w-5">
+   619→                                {npcAvatar ? (
+   620→                                  <AvatarImage src={npcAvatar} alt={npcName} />
+   621→                                ) : (
+   622→                                  <AvatarFallback className="text-[10px]">
+   623→                                    {npcInitial}
+   624→                                  </AvatarFallback>
+   625→                                )}
+   626→                              </Avatar>
+   627→                              <span className="text-xs font-medium">
+   628→                                {npcName}
+   629→                              </span>
+   630→                            </div>
+   631→                          );
+   632→                        })}
+   633→                      </div>
+   634→                    </div>
+   635→                  )}
+   636→                </div>
+   637→              </CardContent>
+   638→            </Card>
+   639→          );
+   640→        })}
+   641→      </div>
+   642→
+   643→      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+   644→        <DialogContent className="max-h-[90vh] overflow-y-auto">
+   645→          <DialogHeader>
+   646→            <DialogTitle>
+   647→              {editingEdificio ? 'Editar Edificio' : 'Crear Nuevo Edificio'}
+   648→            </DialogTitle>
+   649→            <DialogDescription>
+   650→              {editingEdificio ? 'Actualiza la información del edificio' : 'Completa la información del nuevo edificio'}
+   651→            </DialogDescription>
+   652→          </DialogHeader>
+   653→          <div className="space-y-4">
+   654→            <div>
+   655→              <Label htmlFor="name">Nombre del Edificio</Label>
+   656→              <Input
+   657→                id="name"
+   658→                value={formData.name}
+   659→                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+   660→                placeholder="Ej: Torre del Reloj"
+   661→              />
+   662→            </div>
+   663→
+   664→            <div>
+   665→              <Label htmlFor="worldId">Mundo</Label>
+   666→              <Select
+   667→                value={formData.worldId}
+   668→                onValueChange={(value) => setFormData({ ...formData, worldId: value, puebloId: '' })}
+   669→              >
+   670→                <SelectTrigger id="worldId">
+   671→                  <SelectValue placeholder="Selecciona un mundo" />
+   672→                </SelectTrigger>
+   673→                <SelectContent>
+   674→                  {worlds.map(world => (
+   675→                    <SelectItem key={world.id} value={world.id}>
+   676→                      {world.name}
+   677→                    </SelectItem>
+   678→                  ))}
+   679→                </SelectContent>
+   680→              </Select>
+   681→            </div>
+   682→
+   683→            <div>
+   684→              <Label htmlFor="puebloId">Región/Pueblo</Label>
+   685→              <Select
+   686→                value={formData.puebloId}
+   687→                onValueChange={(value) => setFormData({ ...formData, puebloId: value })}
+   688→              >
+   689→                <SelectTrigger id="puebloId">
+   690→                  <SelectValue placeholder="Selecciona una región" />
+   691→                </SelectTrigger>
+   692→                <SelectContent>
+   693→                  {pueblos.filter(p => p.worldId === formData.worldId).map(pueblo => (
+   694→                    <SelectItem key={pueblo.id} value={pueblo.id}>
+   695→                      {pueblo.name}
+   696→                    </SelectItem>
+   697→                  ))}
+   698→                </SelectContent>
+   699→              </Select>
+   700→            </div>
+   701→
+   702→            <div>
+   703→              <Label htmlFor="lore">Descripción/Lore</Label>
+   704→              <Textarea
+   705→                id="lore"
+   706→                value={formData.lore}
+   707→                onChange={(e) => setFormData({ ...formData, lore: e.target.value })}
+   708→                placeholder="Describe el edificio, su historia, características especiales..."
+   709→                rows={4}
+   710→              />
+   711→            </div>
+   712→
+   713→            <div>
+   714→              <Label htmlFor="rumores">Rumores (uno por línea)</Label>
+   715→              <Textarea
+   716→                id="rumores"
+   717→                value={formData.rumores}
+   718→                onChange={(e) => setFormData({ ...formData, rumores: e.target.value })}
+   719→                placeholder="Cada rumor en una línea nueva"
+   720→                rows={3}
+   721→              />
+   722→            </div>
+   723→
+   724→            <div>
+   725→              <Label htmlFor="eventos_recientes">Eventos Recientes (uno por línea)</Label>
+   726→              <Textarea
+   727→                id="eventos_recientes"
+   728→                value={formData.eventos_recientes}
+   729→                onChange={(e) => setFormData({ ...formData, eventos_recientes: e.target.value })}
+   730→                placeholder="Cada evento en una línea nueva"
+   731→                rows={3}
+   732→              />
+   733→            </div>
+   734→
+   735→            <div>
+   736→              <Label>Coordenadas del Área (Inicio)</Label>
+   737→              <div className="grid grid-cols-3 gap-2">
+   738→                <div>
+   739→                  <Label htmlFor="startX" className="text-xs">X</Label>
+   740→                  <Input
+   741→                    id="startX"
+   742→                    type="number"
+   743→                    value={formData.startX}
+   744→                    onChange={(e) => setFormData({ ...formData, startX: e.target.value })}
+   745→                  />
+   746→                </div>
+   747→                <div>
+   748→                  <Label htmlFor="startY" className="text-xs">Y</Label>
+   749→                  <Input
+   750→                    id="startY"
+   751→                    type="number"
+   752→                    value={formData.startY}
+   753→                    onChange={(e) => setFormData({ ...formData, startY: e.target.value })}
+   754→                  />
+   755→                </div>
+   756→                <div>
+   757→                  <Label htmlFor="startZ" className="text-xs">Z</Label>
+   758→                  <Input
+   759→                    id="startZ"
+   760→                    type="number"
+   761→                    value={formData.startZ}
+   762→                    onChange={(e) => setFormData({ ...formData, startZ: e.target.value })}
+   763→                  />
+   764→                </div>
+   765→              </div>
+   766→            </div>
+   767→
+   768→            <div>
+   769→              <Label>Coordenadas del Área (Fin)</Label>
+   770→              <div className="grid grid-cols-3 gap-2">
+   771→                <div>
+   772→                  <Label htmlFor="endX" className="text-xs">X</Label>
+   773→                  <Input
+   774→                    id="endX"
+   775→                    type="number"
+   776→                    value={formData.endX}
+   777→                    onChange={(e) => setFormData({ ...formData, endX: e.target.value })}
+   778→                  />
+   779→                </div>
+   780→                <div>
+   781→                  <Label htmlFor="endY" className="text-xs">Y</Label>
+   782→                  <Input
+   783→                    id="endY"
+   784→                    type="number"
+   785→                    value={formData.endY}
+   786→                    onChange={(e) => setFormData({ ...formData, endY: e.target.value })}
+   787→                  />
+   788→                </div>
+   789→                <div>
+   790→                  <Label htmlFor="endZ" className="text-xs">Z</Label>
+   791→                  <Input
+   792→                    id="endZ"
+   793→                    type="number"
+   794→                    value={formData.endZ}
+   795→                    onChange={(e) => setFormData({ ...formData, endZ: e.target.value })}
+   796→                  />
+   797→                </div>
+   798→              </div>
+   799→            </div>
+   800→
+   801→            {/* Sección de Tipos de lugar (Puntos de interés) */}
+   802→            <div className="border-t pt-4">
+   803→              <div className="flex items-center justify-between mb-3">
+   804→                <h3 className="text-lg font-semibold">Tipos de lugar</h3>
+   805→                <Button size="sm" onClick={handleCreatePoi}>
+   806→                  <Plus className="h-4 w-4 mr-2" />
+   807→                  Agregar Tipo de lugar
+   808→                </Button>
+   809→              </div>
+   810→
+   811→              {editingEdificio && editingEdificio.puntosDeInteres && editingEdificio.puntosDeInteres.length > 0 ? (
+   812→                <div className="space-y-2 max-h-64 overflow-y-auto">
+   813→                  {editingEdificio.puntosDeInteres.map((poi) => {
+   814→                    const placeType = placeTypes.find(pt => pt.id === poi.tipo);
+   815→                    return (
+   816→                      <div key={poi.id} className="flex items-center justify-between p-3 border rounded-lg">
+   817→                        <div className="flex-1">
+   818→                          <div className="flex items-center gap-2">
+   819→                            <Badge variant="outline">{placeType?.name || poi.tipo}</Badge>
+   820→                            <span className="font-medium">{poi.name}</span>
+   821→                          </div>
+   822→                          <p className="text-sm text-muted-foreground mt-1">{poi.descripcion}</p>
+   823→                          <p className="text-xs text-muted-foreground">
+   824→                            Coordenadas: X:{poi.coordenadas.x}, Y:{poi.coordenadas.y}, Z:{poi.coordenadas.z}
+   825→                          </p>
+   826→                        </div>
+   827→                        <div className="flex gap-2">
+   828→                          <Button
+   829→                            variant="ghost"
+   830→                            size="sm"
+   831→                            onClick={() => handleEditPoi(poi)}
+   832→                          >
+   833→                            <Edit2 className="h-4 w-4" />
+   834→                          </Button>
+   835→                          <Button
+   836→                            variant="ghost"
+   837→                            size="sm"
+   838→                            onClick={() => handleDeletePoi(poi.id)}
+   839→                          >
+   840→                            <Trash2 className="h-4 w-4 text-destructive" />
+   841→                          </Button>
+   842→                        </div>
+   843→                      </div>
+   844→                    );
+   845→                  })}
+   846→                </div>
+   847→              ) : (
+   848→                <p className="text-sm text-muted-foreground text-center py-4">
+   849→                  No hay tipos de lugar agregados. Haz clic en "Agregar Tipo de lugar" para comenzar.
+   850→                </p>
+   851→              )}
+   852→            </div>
+   853→          </div>
+   854→          <DialogFooter>
+   855→            <Button onClick={handleSubmit}>
+   856→              {editingEdificio ? 'Actualizar' : 'Crear'}
+   857→            </Button>
+   858→          </DialogFooter>
+   859→        </DialogContent>
+   860→      </Dialog>
+   861→
+   862→      {/* Dialog para agregar/editar Puntos de Interés */}
+   863→      <Dialog open={poiDialogOpen} onOpenChange={setPoiDialogOpen}>
+   864→        <DialogContent>
+   865→          <DialogHeader>
+   866→            <DialogTitle>
+   867→              {editingPoi ? 'Editar Tipo de lugar' : 'Nuevo Tipo de lugar'}
+   868→            </DialogTitle>
+   869→            <DialogDescription>
+   870→              {editingPoi ? 'Actualiza la información del punto de interés' : 'Agrega un nuevo punto de interés al edificio'}
+   871→            </DialogDescription>
+   872→          </DialogHeader>
+   873→          <div className="space-y-4">
+   874→            <div>
+   875→              <Label htmlFor="poiTipo">Tipo de lugar</Label>
+   876→              <Select
+   877→                value={poiFormData.tipo}
+   878→                onValueChange={(value) => setPoiFormData({ ...poiFormData, tipo: value })}
+   879→              >
+   880→                <SelectTrigger id="poiTipo">
+   881→                  <SelectValue placeholder="Selecciona un tipo" />
+   882→                </SelectTrigger>
+   883→                <SelectContent>
+   884→                  {placeTypes.map(pt => (
+   885→                    <SelectItem key={pt.id} value={pt.id}>
+   886→                      {pt.name}
+   887→                    </SelectItem>
+   888→                  ))}
+   889→                </SelectContent>
+   890→              </Select>
+   891→            </div>
+   892→
+   893→            <div>
+   894→              <Label htmlFor="poiName">Nombre</Label>
+   895→              <Input
+   896→                id="poiName"
+   897→                value={poiFormData.name}
+   898→                onChange={(e) => setPoiFormData({ ...poiFormData, name: e.target.value })}
+   899→                placeholder="Ej: Mesa 1, Silla de la barra..."
+   900→              />
+   901→            </div>
+   902→
+   903→            <div>
+   904→              <Label htmlFor="poiDescripcion">Descripción</Label>
+   905→              <Textarea
+   906→                id="poiDescripcion"
+   907→                value={poiFormData.descripcion}
+   908→                onChange={(e) => setPoiFormData({ ...poiFormData, descripcion: e.target.value })}
+   909→                placeholder="Describe qué se hace en este punto..."
+   910→                rows={3}
+   911→              />
+   912→            </div>
+   913→
+   914→            <div>
+   915→              <Label>Coordenadas</Label>
+   916→              <div className="grid grid-cols-3 gap-2">
+   917→                <div>
+   918→                  <Label htmlFor="poiX" className="text-xs">X</Label>
+   919→                  <Input
+   920→                    id="poiX"
+   921→                    type="number"
+   922→                    value={poiFormData.coordenadas.x}
+   923→                    onChange={(e) => setPoiFormData({ 
+   924→                      ...poiFormData, 
+   925→                      coordenadas: { ...poiFormData.coordenadas, x: e.target.value } 
+   926→                    })}
+   927→                  />
+   928→                </div>
+   929→                <div>
+   930→                  <Label htmlFor="poiY" className="text-xs">Y</Label>
+   931→                  <Input
+   932→                    id="poiY"
+   933→                    type="number"
+   934→                    value={poiFormData.coordenadas.y}
+   935→                    onChange={(e) => setPoiFormData({ 
+   936→                      ...poiFormData, 
+   937→                      coordenadas: { ...poiFormData.coordenadas, y: e.target.value } 
+   938→                    })}
+   939→                  />
+   940→                </div>
+   941→                <div>
+   942→                  <Label htmlFor="poiZ" className="text-xs">Z</Label>
+   943→                  <Input
+   944→                    id="poiZ"
+   945→                    type="number"
+   946→                    value={poiFormData.coordenadas.z}
+   947→                    onChange={(e) => setPoiFormData({ 
+   948→                      ...poiFormData, 
+   949→                      coordenadas: { ...poiFormData.coordenadas, z: e.target.value } 
+   950→                    })}
+   951→                  />
+   952→                </div>
+   953→              </div>
+   954→            </div>
+   955→
+   956→            <div>
+   957→              <Label htmlFor="poiTags">Tags (separados por coma)</Label>
+   958→              <Input
+   959→                id="poiTags"
+   960→                value={poiFormData.tags}
+   961→                onChange={(e) => setPoiFormData({ ...poiFormData, tags: e.target.value })}
+   962→                placeholder="Ej: comercio, descanso, social"
+   963→              />
+   964→            </div>
+   965→          </div>
+   966→          <DialogFooter>
+   967→            <Button onClick={handleSavePoi}>
+   968→              {editingPoi ? 'Actualizar' : 'Agregar'}
+   969→            </Button>
+   970→          </DialogFooter>
+   971→        </DialogContent>
+   972→
+   973→      <GenericBackupSection
+   974→        entityType="edificios"
+   975→        entityName="Edificio"
+   976→        entityNamePlural="Edificios"
+   977→        apiPath="edificios"
+   978→      />
+   979→      </Dialog>
+   980→    </div>
+   981→  );
+   982→}
+   983→

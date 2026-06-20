@@ -82,6 +82,6 @@ export async function GET() {
     status: 'ok',
     service: 'Bridge IA - Gestor Narrativo',
     version: '1.0.0',
-    modes: ['chat', 'resumen_sesion', 'resumen_npc', 'nuevo_lore']
+    modes: ['chat', 'resumen_sesion', 'resumen_npc', 'nuevo_lore', 'nuevo_contexto']
   });
 }

@@ -1,0 +1,700 @@
+     1→     1→'use client';
+     2→     2→
+     3→     3→import { useState, useEffect } from 'react';
+     4→     4→import { FileText, User, Bot, MapPin, Globe, Plus, Edit2, Trash2, Copy, Eye, Search, X, Book, Info, Database } from 'lucide-react';
+     5→     5→import { Button } from '@/components/ui/button';
+     6→     6→import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+     7→     7→import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+     8→     8→import { Input } from '@/components/ui/input';
+     9→     9→import { Label } from '@/components/ui/label';
+    10→    10→import { Textarea } from '@/components/ui/textarea';
+    11→    11→import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+    12→    12→import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+    13→    13→import { Badge } from '@/components/ui/badge';
+    14→    14→import { toast } from '@/hooks/use-toast';
+    15→    15→import { GrimorioCard, GrimorioCardType, GrimorioCardCategory } from '@/lib/types';
+    16→    16→import { isValidPrimaryVariableKey, isValidTemplateKey, extractTemplateVariables } from '@/lib/grimorioUtils';
+    17→    17→import VariablesReference from './VariablesReference';
+    18→    18→import VariableTag from './VariableTag';
+    19→    19→
+    20→    20→// Tipos de cards
+    21→    21→const TIPOS_CARD = [
+    22→    22→  { value: 'variable', label: 'Variable Primaria', icon: Database, color: 'bg-rose-100 text-rose-700', description: 'Solo informativa - documentación de variables del sistema' },
+    23→    23→  { value: 'plantilla', label: 'Plantilla', icon: FileText, color: 'bg-fantasy-aged-gold text-fantasy-deep-black', description: 'Reutilizable - puede contener variables primarias y plantillas anidadas' }
+    24→    24→];
+    25→    25→
+    26→    26→// Categorías disponibles (todas en la misma fila con estilo consistente)
+    27→    27→const CATEGORIAS = [
+    28→    28→  { value: 'general', label: 'General', icon: FileText, color: 'bg-fantasy-aged-gold text-fantasy-deep-black' },
+    29→    29→  { value: 'jugador', label: 'Jugador', icon: User, color: 'bg-fantasy-aged-gold text-fantasy-deep-black' },
+    30→    30→  { value: 'npc', label: 'NPC', icon: Bot, color: 'bg-fantasy-aged-gold text-fantasy-deep-black' },
+    31→    31→  { value: 'ubicacion', label: 'Ubicación', icon: MapPin, color: 'bg-fantasy-aged-gold text-fantasy-deep-black' },
+    32→    32→  { value: 'mundo', label: 'Mundo', icon: Globe, color: 'bg-fantasy-aged-gold text-fantasy-deep-black' },
+    33→    33→  { value: 'variables', label: 'Variables', icon: Database, color: 'bg-rose-100 text-rose-700', description: 'Variables primarias del sistema' }
+    34→    34→];
+    35→    35→
+    36→    36→export default function GrimorioTab() {
+    37→    37→  const [cards, setCards] = useState<GrimorioCard[]>([]);
+    38→    38→  const [filteredCards, setFilteredCards] = useState<GrimorioCard[]>([]);
+    39→    39→  const [loading, setLoading] = useState(true);
+    40→    40→  const [dialogOpen, setDialogOpen] = useState(false);
+    41→    41→  const [editingCard, setEditingCard] = useState<GrimorioCard | null>(null);
+    42→    42→  const [activeTab, setActiveTab] = useState('general');
+    43→    43→  const [searchQuery, setSearchQuery] = useState('');
+    44→    44→  const [previewCard, setPreviewCard] = useState<GrimorioCard | null>(null);
+    45→    45→  const [previewOpen, setPreviewOpen] = useState(false);
+    46→    46→  const [previewContent, setPreviewContent] = useState('');
+    47→    47→  const [variablesRefOpen, setVariablesRefOpen] = useState(false);
+    48→    48→  const [tipoFilter, setTipoFilter] = useState<GrimorioCardType | 'todos'>('todos');
+    49→    49→
+    50→    50→  // Form state
+    51→    51→  const [formData, setFormData] = useState({
+    52→    52→    key: '',
+    53→    53→    nombre: '',
+    54→    54→    plantilla: '',
+    55→    55→    categoria: 'general' as GrimorioCardCategory,
+    56→    56→    tipo: 'plantilla' as GrimorioCardType,
+    57→    57→    descripcion: ''
+    58→    58→  });
+    59→    59→
+    60→    60→  useEffect(() => {
+    61→    61→    fetchCards();
+    62→    62→  }, []);
+    63→    63→
+    64→    64→  useEffect(() => {
+    65→    65→    filterCards();
+    66→    66→  }, [searchQuery, activeTab, cards, tipoFilter]);
+    67→    67→
+    68→    68→  const fetchCards = async () => {
+    69→    69→    try {
+    70→    70→      setLoading(true);
+    71→    71→      const response = await fetch('/api/grimorio');
+    72→    72→      const result = await response.json();
+    73→    73→
+    74→    74→      if (result.success) {
+    75→    75→        setCards(result.data.cards);
+    76→    76→      } else {
+    77→    77→        toast({
+    78→    78→          title: 'Error',
+    79→    79→          description: 'No se pudieron cargar las plantillas del grimorio',
+    80→    80→          variant: 'destructive'
+    81→    81→        });
+    82→    82→      }
+    83→    83→    } catch (error) {
+    84→    84→      console.error('Error fetching cards:', error);
+    85→    85→      toast({
+    86→    86→        title: 'Error',
+    87→    87→        description: 'No se pudieron cargar las plantillas del grimorio',
+    88→    88→        variant: 'destructive'
+    89→    89→      });
+    90→    90→    } finally {
+    91→    91→      setLoading(false);
+    92→    92→    }
+    93→    93→  };
+    94→    94→
+    95→    95→  const filterCards = () => {
+    96→    96→    let filtered = cards.filter(card => card.categoria === activeTab);
+    97→    97→
+    98→    98→    // Filtro por tipo
+    99→    99→    if (tipoFilter !== 'todos') {
+   100→   100→      filtered = filtered.filter(card => card.tipo === tipoFilter);
+   101→   101→    }
+   102→   102→
+   103→   103→    if (searchQuery.trim()) {
+   104→   104→      const searchLower = searchQuery.toLowerCase();
+   105→   105→      filtered = filtered.filter(card =>
+   106→   106→        card.nombre.toLowerCase().includes(searchLower) ||
+   107→   107→        card.key.toLowerCase().includes(searchLower) ||
+   108→   108→        card.plantilla.toLowerCase().includes(searchLower) ||
+   109→   109→        (card.descripcion && card.descripcion.toLowerCase().includes(searchLower))
+   110→   110→      );
+   111→   111→    }
+   112→   112→
+   113→   113→    setFilteredCards(filtered);
+   114→   114→  };
+   115→   115→
+   116→   116→  const handleCreate = () => {
+   117→   117→    setEditingCard(null);
+   118→   118→    setFormData({
+   119→   119→      key: '',
+   120→   120→      nombre: '',
+   121→   121→      plantilla: '',
+   122→   122→      categoria: activeTab as GrimorioCardCategory,
+   123→   123→      tipo: 'plantilla' as GrimorioCardType,
+   124→   124→      descripcion: ''
+   125→   125→    });
+   126→   126→    setDialogOpen(true);
+   127→   127→  };
+   128→   128→
+   129→   129→  const handleEdit = (card: GrimorioCard) => {
+   130→   130→    setEditingCard(card);
+   131→   131→    setFormData({
+   132→   132→      key: card.key,
+   133→   133→      nombre: card.nombre,
+   134→   134→      plantilla: card.plantilla,
+   135→   135→      categoria: card.categoria,
+   136→   136→      tipo: card.tipo,
+   137→   137→      descripcion: card.descripcion || ''
+   138→   138→    });
+   139→   139→    setDialogOpen(true);
+   140→   140→  };
+   141→   141→
+   142→   142→  const handleDelete = async (id: string) => {
+   143→   143→    if (!confirm('¿Estás seguro de que deseas eliminar esta plantilla del grimorio?')) return;
+   144→   144→
+   145→   145→    try {
+   146→   146→      const response = await fetch(`/api/grimorio/${id}`, {
+   147→   147→        method: 'DELETE'
+   148→   148→      });
+   149→   149→      const result = await response.json();
+   150→   150→
+   151→   151→      if (result.success) {
+   152→   152→        toast({
+   153→   153→          title: 'Éxito',
+   154→   154→          description: 'Plantilla eliminada correctamente'
+   155→   155→        });
+   156→   156→        fetchCards();
+   157→   157→      } else {
+   158→   158→        toast({
+   159→   159→          title: 'Error',
+   160→   160→          description: result.message || 'No se pudo eliminar la plantilla',
+   161→   161→          variant: 'destructive'
+   162→   162→        });
+   163→   163→      }
+   164→   164→    } catch (error) {
+   165→   165→      console.error('Error deleting card:', error);
+   166→   166→      toast({
+   167→   167→        title: 'Error',
+   168→   168→        description: 'No se pudo eliminar la plantilla',
+   169→   169→        variant: 'destructive'
+   170→   170→      });
+   171→   171→    }
+   172→   172→  };
+   173→   173→
+   174→   174→  // Helpers para validación
+   175→   175→  const getRequiredFields = () => {
+   176→   176→    if (formData.tipo === 'variable' && editingCard) {
+   177→   177→      // Variables primarias en modo edición: solo nombre es obligatorio
+   178→   178→      return ['nombre'];
+   179→   179→    } else if (formData.tipo === 'variable' && !editingCard) {
+   180→   180→      // Variables primarias en modo creación: bloqueado
+   181→   181→      return [];
+   182→   182→    } else if (formData.tipo === 'plantilla') {
+   183→   183→      // Plantillas: key, nombre, plantilla y categoria son obligatorios
+   184→   184→      return ['key', 'nombre', 'plantilla', 'categoria', 'tipo'];
+   185→   185→    } else {
+   186→   186→      // Otros casos: validación estándar
+   187→   187→      return ['key', 'nombre', 'plantilla', 'categoria', 'tipo'];
+   188→   188→    }
+   189→   189→  };
+   190→   190→
+   191→   191→  const getMissingFields = () => {
+   192→   192→    const requiredFields = getRequiredFields();
+   193→   193→    return requiredFields.filter(field => !formData[field as keyof typeof formData]?.toString().trim());
+   194→   194→  };
+   195→   195→
+   196→   196→  const handleSubmit = async () => {
+   197→   197→    try {
+   198→   198→      // Validaciones
+   199→   199→      const missingFields = getMissingFields();
+   200→   200→      if (missingFields.length > 0) {
+   201→   201→        toast({
+   202→   202→          title: 'Error',
+   203→   203→          description: `Faltan campos requeridos: ${missingFields.join(', ')}`,
+   204→   204→          variant: 'destructive'
+   205→   205→        });
+   206→   206→        return;
+   207→   207→      }
+   208→   208→
+   209→   209→      // Validación de formato de key según tipo
+   210→   210→      if (formData.tipo === 'variable') {
+   211→   211→        if (!isValidPrimaryVariableKey(formData.key)) {
+   212→   212→          toast({
+   213→   213→            title: 'Formato de key inválido',
+   214→   214→            description: 'Las variables primarias deben seguir el formato: jugador.*, npc.*, mundo.*, pueblo.*, edificio.*, o ser una variable simple (nombre, raza, nivel, etc.)',
+   215→   215→            variant: 'destructive'
+   216→   216→          });
+   217→   217→          return;
+   218→   218→        }
+   219→   219→      } else if (formData.tipo === 'plantilla') {
+   220→   220→        if (!isValidTemplateKey(formData.key)) {
+   221→   221→          toast({
+   222→   222→            title: 'Formato de key inválido',
+   223→   223→            description: 'Las plantillas deben tener un nombre simple sin puntos (ej: user_data, quest_info, greeting_message)',
+   224→   224→            variant: 'destructive'
+   225→   225→          });
+   226→   226→          return;
+   227→   227→        }
+   228→   228→      }
+   229→   229→
+   230→   230→      // ✅ Plantillas anidadas PERMITIDAS: solo informamos al usuario
+   231→   231→      const nestedTemplates = extractTemplateVariables(formData.plantilla);
+   232→   232→      if (nestedTemplates.length > 0) {
+   233→   233→        toast({
+   234→   234→          title: 'Plantillas anidadas detectadas',
+   235→   235→          description: `Se resolverán en cascada (máx 10 niveles): ${nestedTemplates.map(t => `"${t}"`).join(', ')}`,
+   236→   236→        });
+   237→   237→        // No retornamos: dejamos que continue con el guardado
+   238→   238→      }
+   239→   239→
+   240→   240→      const url = editingCard ? `/api/grimorio/${editingCard.id}` : '/api/grimorio';
+   241→   241→      const method = editingCard ? 'PUT' : 'POST';
+   242→   242→
+   243→   243→      const response = await fetch(url, {
+   244→   244→        method,
+   245→   245→        headers: { 'Content-Type': 'application/json' },
+   246→   246→        body: JSON.stringify(formData)
+   247→   247→      });
+   248→   248→
+   249→   249→      const result = await response.json();
+   250→   250→
+   251→   251→      if (result.success) {
+   252→   252→        toast({
+   253→   253→          title: 'Éxito',
+   254→   254→          description: editingCard ? 'Plantilla actualizada' : 'Plantilla creada'
+   255→   255→        });
+   256→   256→
+   257→   257→        // Mostrar advertencias si las hay
+   258→   258→        if (result.validations?.warnings && result.validations.warnings.length > 0) {
+   259→   259→          result.validations.warnings.forEach(warning => {
+   260→   260→            toast({
+   261→   261→              title: 'Advertencia',
+   262→   262→              description: warning,
+   263→   263→              variant: 'default'
+   264→   264→            });
+   265→   265→          });
+   266→   266→        }
+   267→   267→
+   268→   268→        setDialogOpen(false);
+   269→   269→        fetchCards();
+   270→   270→      } else {
+   271→   271→        toast({
+   272→   272→          title: 'Error',
+   273→   273→          description: result.error || result.message || 'No se pudo guardar la plantilla',
+   274→   274→          variant: 'destructive'
+   275→   275→        });
+   276→   276→      }
+   277→   277→    } catch (error) {
+   278→   278→      console.error('Error saving card:', error);
+   279→   279→      toast({
+   280→   280→        title: 'Error',
+   281→   281→        description: 'No se pudo guardar la plantilla',
+   282→   282→        variant: 'destructive'
+   283→   283→      });
+   284→   284→    }
+   285→   285→  };
+   286→   286→
+   287→   287→  const handlePreview = async (card: GrimorioCard) => {
+   288→   288→    try {
+   289→   289→      const context = {
+   290→   290→        jugador: {
+   291→   291→          nombre: 'drAke',
+   292→   292→          raza: 'Humano',
+   293→   293→          nivel: '10',
+   294→   294→          salud_actual: '100%',
+   295→   295→          reputacion: '6',
+   296→   296→          almakos: '1000',
+   297→   297→          deuda: '100',
+   298→   298→          piedras_del_alma: '5',
+   299→   299→          hora: '10:30pm',
+   300→   300→          clima: 'soleado'
+   301→   301→        },
+   302→   302→        mensaje: 'Hola'
+   303→   303→      };
+   304→   304→
+   305→   305→      const response = await fetch(`/api/grimorio/apply/${card.id}`, {
+   306→   306→        method: 'POST',
+   307→   307→        headers: { 'Content-Type': 'application/json' },
+   308→   308→        body: JSON.stringify({ context })
+   309→   309→      });
+   310→   310→
+   311→   311→      const result = await response.json();
+   312→   312→
+   313→   313→      if (result.success) {
+   314→   314→        setPreviewContent(result.data.template);
+   315→   315→        setPreviewCard(card);
+   316→   316→        setPreviewOpen(true);
+   317→   317→      } else {
+   318→   318→        toast({
+   319→   319→          title: 'Error',
+   320→   320→          description: 'No se pudo generar el preview',
+   321→   321→          variant: 'destructive'
+   322→   322→        });
+   323→   323→      }
+   324→   324→    } catch (error) {
+   325→   325→      console.error('Error generating preview:', error);
+   326→   326→      toast({
+   327→   327→        title: 'Error',
+   328→   328→        description: 'No se pudo generar el preview',
+   329→   329→        variant: 'destructive'
+   330→   330→      });
+   331→   331→    }
+   332→   332→  };
+   333→   333→
+   334→   334→  const handleCopyTemplate = async (plantilla: string, nombre: string) => {
+   335→   335→    try {
+   336→   336→      await navigator.clipboard.writeText(plantilla);
+   337→   337→      toast({
+   338→   338→        title: 'Copiado',
+   339→   339→        description: `Plantilla "${nombre}" copiada al portapapeles`
+   340→   340→      });
+   341→   341→    } catch (error) {
+   342→   342→      console.error('Error copying template:', error);
+   343→   343→    }
+   344→   344→  };
+   345→   345→
+   346→   346→  const getCategoriaInfo = (categoria: GrimorioCardCategory) => {
+   347→   347→    return CATEGORIAS.find(c => c.value === categoria) || CATEGORIAS[0];
+   348→   348→  };
+   349→   349→
+   350→   350→  const getTipoInfo = (tipo: GrimorioCardType) => {
+   351→   351→    return TIPOS_CARD.find(t => t.value === tipo) || TIPOS_CARD[0];
+   352→   352→  };
+   353→   353→
+   354→   354→  if (loading) {
+   355→   355→    return (
+   356→   356→      <div className="flex items-center justify-center h-96">
+   357→   357→        <p className="text-muted-foreground">Cargando plantillas del grimorio...</p>
+   358→   358→      </div>
+   359→   359→    );
+   360→   360→  }
+   361→   361→
+   362→   362→  return (
+   363→   363→    <div className="space-y-4">
+   364→   364→      <div className="flex items-center justify-between">
+   365→   365→        <div>
+   366→   366→          <h2 className="text-2xl font-bold">Grimorio</h2>
+   367→   367→          <p className="text-sm text-muted-foreground">
+   368→   368→            Plantillas reutilizables con variables
+   369→   369→          </p>
+   370→   370→        </div>
+   371→   371→        <div className="flex gap-2">
+   372→   372→          <Button variant="outline" onClick={() => setVariablesRefOpen(true)}>
+   373→   373→            <Info className="h-4 w-4 mr-2" />
+   374→   374→            Referencia de Variables
+   375→   375→          </Button>
+   376→   376→          {activeTab !== 'variables' && (
+   377→   377→            <Button onClick={handleCreate}>
+   378→   378→              <Plus className="h-4 w-4 mr-2" />
+   379→   379→              Nueva Plantilla
+   380→   380→            </Button>
+   381→   381→          )}
+   382→   382→        </div>
+   383→   383→      </div>
+   384→   384→
+   385→   385→      <div className="flex gap-2 flex-col sm:flex-row">
+   386→   386→        <div className="relative flex-1">
+   387→   387→          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+   388→   388→          <Input
+   389→   389→            type="text"
+   390→   390→            placeholder="Buscar por nombre, key o texto de la plantilla..."
+   391→   391→            value={searchQuery}
+   392→   392→            onChange={(e) => setSearchQuery(e.target.value)}
+   393→   393→            className="pl-10"
+   394→   394→          />
+   395→   395→        </div>
+   396→   396→        <Select value={tipoFilter} onValueChange={(value: GrimorioCardType | 'todos') => setTipoFilter(value)}>
+   397→   397→          <SelectTrigger className="w-full sm:w-[200px]">
+   398→   398→            <SelectValue placeholder="Filtrar por tipo" />
+   399→   399→          </SelectTrigger>
+   400→   400→          <SelectContent>
+   401→   401→            <SelectItem value="todos">
+   402→   402→              <div className="flex items-center gap-2">
+   403→   403→                <Database className="h-4 w-4 text-muted-foreground" />
+   404→   404→                <span>Todos los tipos</span>
+   405→   405→              </div>
+   406→   406→            </SelectItem>
+   407→   407→            {TIPOS_CARD.map((tipo) => (
+   408→   408→              <SelectItem key={tipo.value} value={tipo.value}>
+   409→   409→                <div className="flex items-center gap-2">
+   410→   410→                  <tipo.icon className={`h-4 w-4 ${tipo.color.split(' ')[1]}`} />
+   411→   411→                  <span>{tipo.label}</span>
+   412→   412→                </div>
+   413→   413→              </SelectItem>
+   414→   414→            ))}
+   415→   415→          </SelectContent>
+   416→   416→        </Select>
+   417→   417→      </div>
+   418→   418→
+   419→   419→      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+   420→   420→        <TabsList className="grid w-full grid-cols-6 lg:w-auto lg:inline-grid">
+   421→   421→          {CATEGORIAS.map((cat) => (
+   422→   422→            <TabsTrigger key={cat.value} value={cat.value} className="flex items-center gap-2">
+   423→   423→              <cat.icon className={`h-4 w-4 ${cat.color.split(' ')[1]}`} />
+   424→   424→              <span>{cat.label}</span>
+   425→   425→            </TabsTrigger>
+   426→   426→          ))}
+   427→   427→        </TabsList>
+   428→   428→
+   429→   429→        {CATEGORIAS.map((cat) => (
+   430→   430→          <TabsContent key={cat.value} value={cat.value} className="mt-6">
+   431→   431→            {filteredCards.length === 0 ? (
+   432→   432→              <div className="text-center py-12">
+   433→   433→                <p className="text-muted-foreground">No hay plantillas en esta categoría</p>
+   434→   434→                <p className="text-sm text-muted-foreground mt-2">
+   435→   435→                  Clic en "Nueva Plantilla" para crear una en "{cat.label}"
+   436→   436→                </p>
+   437→   437→              </div>
+   438→   438→            ) : (
+   439→   439→              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+   440→   440→                {filteredCards.map((card) => {
+   441→   441→                  const tipoInfo = getTipoInfo(card.tipo);
+   442→   442→                  return (
+   443→   443→                    <Card key={card.id} className={`flex flex-col border-2 ${tipoInfo.value === 'variable' ? 'border-fantasy-textured bg-fantasy-deep-black' : 'border-fantasy-aged-gold bg-fantasy-deep-black'}`}>
+   444→   444→                      <CardHeader>
+   445→   445→                        <div className="flex items-start justify-between">
+   446→   446→                          <div className="flex-1">
+   447→   447→                            <VariableTag variableKey={card.key} className="mb-2" />
+   448→   448→                            <CardTitle className="text-lg">{card.nombre}</CardTitle>
+   449→   449→                          </div>
+   450→   450→                          <div className="flex gap-1 items-center">
+   451→   451→                            {tipoInfo.value === 'variable' ? (
+   452→   452→                              <tipoInfo.icon className="h-5 w-5 text-slate-500" />
+   453→   453→                            ) : (
+   454→   454→                              <FileText className="h-5 w-5 text-fantasy-aged-gold" />
+   455→   455→                            )}
+   456→   456→                            {tipoInfo.value === 'variable' && (
+   457→   457→                              <Badge variant="outline" className={`ml-2 ${tipoInfo.color} text-xs`}>
+   458→   458→                                {tipoInfo.label}
+   459→   459→                              </Badge>
+   460→   460→                            )}
+   461→   461→                            {tipoInfo.value === 'plantilla' && (
+   462→   462→                              <Button
+   463→   463→                                variant="ghost"
+   464→   464→                                size="sm"
+   465→   465→                                onClick={() => handlePreview(card)}
+   466→   466→                                className="h-8 w-8 p-0"
+   467→   467→                              >
+   468→   468→                                <Eye className="h-4 w-4 text-fantasy-aged-gold" />
+   469→   469→                              </Button>
+   470→   470→                            )}
+   471→   471→                            <Button
+   472→   472→                              variant="ghost"
+   473→   473→                              size="sm"
+   474→   474→                              onClick={() => handleEdit(card)}
+   475→   475→                            >
+   476→   476→                              <Edit2 className="h-4 w-4" />
+   477→   477→                            </Button>
+   478→   478→                            <Button
+   479→   479→                              variant="ghost"
+   480→   480→                              size="sm"
+   481→   481→                              onClick={() => handleDelete(card.id)}
+   482→   482→                            >
+   483→   483→                              <Trash2 className="h-4 w-4 text-destructive" />
+   484→   484→                            </Button>
+   485→   485→                          </div>
+   486→   486→                        </div>
+   487→   487→                      </CardHeader>
+   488→   488→                      <CardContent className="flex-1 flex flex-col">
+   489→   489→                        {tipoInfo.value === 'plantilla' ? (
+   490→   490→                          <>
+   491→   491→                            <div className="bg-fantasy-deep-black rounded-lg p-4 mb-3 border-2 border-fantasy-textured">
+   492→   492→                              <pre className="text-xs whitespace-pre-wrap break-words max-h-32 overflow-y-auto text-foreground">
+   493→   493→                                {card.plantilla}
+   494→   494→                              </pre>
+   495→   495→                            </div>
+   496→   496→                            <div className="mt-auto">
+   497→   497→                              <Button
+   498→   498→                                variant="outline"
+   499→   499→                                size="sm"
+   500→   500→                                onClick={() => handleCopyTemplate(card.plantilla, card.nombre)}
+   501→   501→                                className="w-full"
+   502→   502→                              >
+   503→   503→                                <Copy className="h-3 w-3 mr-2" />
+   504→   504→                                Copiar Plantilla
+   505→   505→                              </Button>
+   506→   506→                            </div>
+   507→   507→                          </>
+   508→   508→                        ) : (
+   509→   509→                          <>
+   510→   510→                            <div className="bg-fantasy-deep-black rounded-lg p-4 mb-3 border border-fantasy-textured">
+   511→   511→                              <p className="text-sm text-foreground">
+   512→   512→                                {card.descripcion || 'Sin descripción'}
+   513→   513→                              </p>
+   514→   514→                            </div>
+   515→   515→                            <div className="mt-auto">
+   516→   516→                              <Button
+   517→   517→                                variant="outline"
+   518→   518→                                size="sm"
+   519→   519→                                onClick={() => handleCopyTemplate(`{{${card.key}}}`, card.nombre)}
+   520→   520→                                className="w-full"
+   521→   521→                              >
+   522→   522→                                <Copy className="h-3 w-3 mr-2" />
+   523→   523→                                Copiar Key
+   524→   524→                              </Button>
+   525→   525→                            </div>
+   526→   526→                          </>
+   527→   527→                        )}
+   528→   528→                      </CardContent>
+   529→   529→                    </Card>
+   530→   530→                  );
+   531→   531→                })}
+   532→   532→              </div>
+   533→   533→            )}
+   534→   534→          </TabsContent>
+   535→   535→        ))}
+   536→   536→      </Tabs>
+   537→   537→
+   538→   538→      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+   539→   539→        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+   540→   540→          <DialogHeader>
+   541→   541→            <DialogTitle>
+   542→   542→              {editingCard
+   543→   543→                ? (formData.tipo === 'variable' ? 'Editar Variable Primaria' : 'Editar Plantilla')
+   544→   544→                : (formData.tipo === 'variable' ? 'Crear Nueva Variable Primaria' : 'Crear Nueva Plantilla')
+   545→   545→              }
+   546→   546→            </DialogTitle>
+   547→   547→            <DialogDescription>
+   548→   548→              {editingCard
+   549→   549→                ? (formData.tipo === 'variable' ? 'Actualiza la información de la variable primaria' : 'Actualiza la información de la plantilla')
+   550→   550→                : (formData.tipo === 'variable' ? 'Completa los campos para crear una variable primaria (documentación)' : 'Completa los campos para crear una plantilla reutilizable')
+   551→   551→              }
+   552→   552→            </DialogDescription>
+   553→   553→          </DialogHeader>
+   554→   554→
+   555→   555→          <div className="space-y-6">
+   556→   556→            {/* Campo de categoría */}
+   557→   557→            <div>
+   558→   558→              <Label htmlFor="categoria">Categoría *</Label>
+   559→   559→              <Select
+   560→   560→                value={formData.categoria}
+   561→   561→                onValueChange={(value: GrimorioCardCategory) => setFormData({ ...formData, categoria: value })}
+   562→   562→              >
+   563→   563→                <SelectTrigger className="w-full">
+   564→   564→                  <SelectValue placeholder="Seleccionar categoría" />
+   565→   565→                </SelectTrigger>
+   566→   566→                <SelectContent>
+   567→   567→                  {CATEGORIAS.map((cat) => (
+   568→   568→                    <SelectItem key={cat.value} value={cat.value}>
+   569→   569→                      <div className="flex items-center gap-2">
+   570→   570→                        <cat.icon className={`h-4 w-4 ${cat.color.split(' ')[1]}`} />
+   571→   571→                        <span>{cat.label}</span>
+   572→   572→                      </div>
+   573→   573→                    </SelectItem>
+   574→   574→                  ))}
+   575→   575→                </SelectContent>
+   576→   576→              </Select>
+   577→   577→            </div>
+   578→   578→
+   579→   579→            <div className="h-px border-b border-fantasy-textured my-6"></div>
+   580→   580→
+   581→   581→            {/* Campos del formulario */}
+   582→   582→            <div className="space-y-4">
+   583→   583→              <div>
+   584→   584→                <Label htmlFor="key">Key (identificador único) *</Label>
+   585→   585→                <Input
+   586→   586→                  id="key"
+   587→   587→                  value={formData.key}
+   588→   588→                  onChange={(e) => setFormData({ ...formData, key: e.target.value })}
+   589→   589→                  placeholder="ej: user_data, quest_info"
+   590→   590→                  disabled={formData.tipo === 'variable' && editingCard}
+   591→   591→                />
+   592→   592→                {formData.tipo === 'plantilla' && (
+   593→   593→                  <p className="text-xs text-fantasy-aged-gold mt-1">
+   594→   594→                    El nombre simple sin puntos para usar en plantillas
+   595→   595→                  </p>
+   596→   596→                )}
+   597→   597→              </div>
+   598→   598→
+   599→   599→              <div>
+   600→   600→                <Label htmlFor="nombre">Nombre *</Label>
+   601→   601→                <Input
+   602→   602→                  id="nombre"
+   603→   603→                  value={formData.nombre}
+   604→   604→                  onChange={(e) => setFormData({ ...formData, nombre: e.target.value })}
+   605→   605→                  placeholder="ej: Datos del Usuario, Información de Quest"
+   606→   606→                />
+   607→   607→                <p className="text-xs text-fantasy-aged-gold mt-1">
+   608→   608→                  El nombre descriptivo de la plantilla
+   609→   609→                </p>
+   610→   610→              </div>
+   611→   611→
+   612→   612→              {formData.tipo === 'plantilla' && (
+   613→   613→                <div>
+   614→   614→                  <Label htmlFor="plantilla">Plantilla *</Label>
+   615→   615→                  <Textarea
+   616→   616→                    id="plantilla"
+   617→   617→                    value={formData.plantilla}
+   618→   618→                    onChange={(e) => setFormData({ ...formData, plantilla: e.target.value })}
+   619→   619→                    placeholder="DATOS DEL AVENTURERO&#10;Nombre: {{jugador.nombre}}..."
+   620→   620→                    className="min-h-32 font-mono"
+   621→   621→                  />
+   622→   622→                </div>
+   623→   623→              )}
+   624→   624→
+   625→   625→              <div>
+   626→   626→                <Label htmlFor="descripcion">Descripción</Label>
+   627→   627→                <Textarea
+   628→   628→                  id="descripcion"
+   629→   629→                  value={formData.descripcion}
+   630→   630→                  onChange={(e) => setFormData({ ...formData, descripcion: e.target.value })}
+   631→   631→                  placeholder={formData.tipo === 'variable' ? 'Describe para qué sirve esta variable del sistema...' : 'Describe para qué sirve esta plantilla...'}
+   632→   632→                  rows={3}
+   633→   633→                />
+   634→   634→              </div>
+   635→   635→            </div>
+   636→   636→
+   637→   637→            {/* Mensajes informativos */}
+   638→   638→            {formData.tipo === 'variable' && editingCard && (
+   639→   639→              <div className="bg-fantasy-deep-black rounded-lg p-4 border border-fantasy-textured">
+   640→   640→                <div className="flex items-start gap-2">
+   641→   641→                  <Info className="h-5 w-5 text-fantasy-aged-gold mt-0.5" />
+   642→   642→                  <div className="space-y-1">
+   643→   643→                    <h4 className="font-semibold text-fantasy-aged-gold">Modo Edición de Variable Primaria</h4>
+   644→   644→                    <p className="text-sm text-fantasy-aged-gold">
+   645→   645→                      Solo puedes editar el nombre y la descripción. La key, categoría y tipo son fijos porque las variables primarias son del sistema.
+   646→   646→                    </p>
+   647→   647→                  </div>
+   648→   648→                </div>
+   649→   649→              </div>
+   650→   650→            )}
+   651→   651→
+   652→   652→            {formData.tipo === 'plantilla' && (
+   653→   653→              <div className="bg-fantasy-deep-black rounded-lg p-4 border border-fantasy-textured">
+   654→   654→                <div className="flex items-center gap-2 mb-2">
+   655→   655→                  <Book className="h-4 w-4 text-fantasy-aged-gold" />
+   656→   656→                  <h3 className="text-sm font-semibold text-fantasy-aged-gold">Variables Disponibles:</h3>
+   657→   657→                </div>
+   658→   658→                <div className="text-xs text-foreground space-y-2">
+   659→   659→                  <p>Variables primarias: jugador.*, npc.*, mundo.*, etc.</p>
+   660→   660→                  <p className="text-xs text-fantasy-aged-gold">
+   661→   661→                    Ejemplos: <span className="font-mono text-fantasy-aged-gold">user_data</span>, <span className="font-mono text-fantasy-aged-gold">quest_info</span>
+   662→   662→                  </p>
+   663→   663→                  <p className="text-xs text-fantasy-aged-gold">
+   664→   664→                    Las plantillas pueden incluir variables primarias del sistema.
+   665→   665→                  </p>
+   666→   666→                </div>
+   667→   667→              </div>
+   668→   668→            )}
+   669→   669→          </div>
+   670→   670→
+   671→   671→          <DialogFooter>
+   672→   672→            <Button onClick={handleSubmit}>
+   673→   673→              {editingCard ? 'Actualizar' : 'Crear'} {formData.tipo === 'variable' ? 'Variable' : 'Plantilla'}
+   674→   674→            </Button>
+   675→   675→          </DialogFooter>
+   676→   676→        </DialogContent>
+   677→   677→      </Dialog>
+   678→   678→
+   679→   679→      <Dialog open={previewOpen} onOpenChange={setPreviewOpen} showCloseButton={false}>
+   680→   680→        <DialogContent className="max-w-4xl">
+   681→   681→          <DialogHeader>
+   682→   682→            <DialogTitle>Previsualización</DialogTitle>
+   683→   683→            <DialogDescription>
+   684→   684→              {previewCard && `Plantilla: ${previewCard.nombre}`}
+   685→   685→            </DialogDescription>
+   686→   686→          </DialogHeader>
+   687→   687→          {previewCard && (
+   688→   688→            <div className="bg-fantasy-deep-black rounded-lg p-4 border border-fantasy-textured">
+   689→   689→              <pre className="text-xs whitespace-pre-wrap break-words max-h-96 overflow-y-auto text-foreground">
+   690→   690→                {previewContent}
+   691→   691→              </pre>
+   692→   692→            </div>
+   693→   693→          )}
+   694→   694→        </DialogContent>
+   695→   695→      </Dialog>
+   696→   696→
+   697→   697→      <VariablesReference open={variablesRefOpen} onClose={() => setVariablesRefOpen(false)} />
+   698→   698→    </div>
+   699→   699→  );
+   700→   700→}

@@ -751,6 +751,31 @@ export class LanceDBWrapper {
     try {
       const table = await getEmbeddingsTable();
 
+      // ===== Validación de dimensión (protección contra cambio de modelo silencioso) =====
+      // LanceDB trunca/rellena con null si la dimensión no coincide, produciendo datos corruptos.
+      // Validamos explícitamente antes de insertar para fallar temprano con un mensaje claro.
+      try {
+        const schema = await table.schema();
+        const vectorField = schema.fields.find((f: any) => f.name === 'vector');
+        if (vectorField) {
+          // El tipo es FixedSizeList[N]<Float32>; extraemos N del tipo
+          const vectorType: any = vectorField.type;
+          const tableDimension = vectorType?.listSize ?? vectorType?.child?.length;
+          if (tableDimension && vector.length !== tableDimension) {
+            const errMsg = `DIMENSION_MISMATCH: El vector tiene dimensión ${vector.length} pero la tabla LanceDB fue creada para dimensión ${tableDimension}. ` +
+              `Esto ocurre cuando se cambia el modelo de embeddings sin reiniciar la base de datos. ` +
+              `Opciones: (1) vuelve al modelo anterior, (2) use el botón "Reiniciar Base de Datos" en Config → Embeddings, ` +
+              `(3) use "Re-embed todos los datos" para regenerar los vectores con el modelo actual.`;
+            console.error(`❌ ${errMsg}`);
+            throw new Error(errMsg);
+          }
+        }
+      } catch (schemaErr: any) {
+        // Si no podemos leer el schema (tabla vacía o recién creada), no bloqueamos
+        if (schemaErr?.message?.includes('DIMENSION_MISMATCH')) throw schemaErr;
+        console.warn('[insertEmbedding] No se pudo validar dimensión del schema:', schemaErr?.message);
+      }
+
       // Normalizar el vector para similitud coseno
       const normalizedVector = normalizeVector(vector);
 
@@ -801,6 +826,31 @@ export class LanceDBWrapper {
     try {
       const table = await getEmbeddingsTable();
 
+      // ===== Validación de dimensión (protección contra cambio de modelo silencioso) =====
+      // LanceDB lanza error feo "No vector column found to match with the query vector dimension: X"
+      // si la dimensión del query no coincide con la de la tabla. Lo detectamos antes y damos mensaje claro.
+      let tableDimension: number | null = null;
+      try {
+        const schema = await table.schema();
+        const vectorField = schema.fields.find((f: any) => f.name === 'vector');
+        if (vectorField) {
+          const vectorType: any = vectorField.type;
+          tableDimension = vectorType?.listSize ?? vectorType?.child?.length ?? null;
+        }
+      } catch (schemaErr: any) {
+        console.warn('[searchSimilar] No se pudo leer schema:', schemaErr?.message);
+      }
+
+      if (tableDimension && queryVector.length !== tableDimension) {
+        const errMsg = `DIMENSION_MISMATCH: El vector de búsqueda tiene dimensión ${queryVector.length} pero la tabla LanceDB fue creada para dimensión ${tableDimension}. ` +
+          `Esto ocurre cuando se cambia el modelo de embeddings sin reiniciar la base de datos. ` +
+          `Opciones: (1) vuelva al modelo anterior con dimensión ${tableDimension}, ` +
+          `(2) use "Reiniciar Base de Datos" en Config → Embeddings para borrar y recrear con dimensión ${queryVector.length}, ` +
+          `(3) use "Re-embed todos los datos" para regenerar los vectores con el modelo actual.`;
+        console.error(`❌ ${errMsg}`);
+        throw new Error(errMsg);
+      }
+
       // Normalizar el vector de búsqueda para similitud coseno
       const normalizedQueryVector = normalizeVector(queryVector);
 
@@ -811,55 +861,44 @@ export class LanceDBWrapper {
 
       let results: any[];
 
-      if (namespace && namespace !== 'default' && namespace !== 'all') {
-        try {
-          const namespaceTable = await db!.openTable(namespace);
-          const searchResults = await namespaceTable
-            .search(normalizedQueryVector)
-            .limit(limit)
-            .toArray();
+      // ===== Búsqueda unificada en tabla única 'embeddings' =====
+      // Todos los embeddings viven en la tabla 'embeddings' con un campo `namespace` (string).
+      // Filtramos por ese campo (no abrimos tablas separadas por namespace).
+      //
+      // Estrategia: pedimos más resultados de los necesarios (limit * 10) y filtramos
+      // por namespace en memoria. Esto es necesario porque LanceDB no soporta WHERE
+      // combinado con SEARCH de forma eficiente en todas las versiones.
+      const searchLimit = (namespace && namespace !== 'all') ? limit * 20 : limit * 10;
+      const allResults = await table
+        .search(normalizedQueryVector)
+        .limit(searchLimit)
+        .toArray();
 
-          results = searchResults.map((row: any) => ({
-            ...row,
-            similarity: l2ToCosineSimilarity(row._distance || 0)
-          })).filter((r: any) => r.similarity >= threshold);
-        } catch {
-          console.log(`ℹ️  Tabla de namespace "${namespace}" no existe`);
-          results = [];
-        }
-      } else {
-        // Buscar en la tabla principal de embeddings
-        const allResults = await table
-          .search(normalizedQueryVector)
-          .limit(limit * 10)
-          .toArray();
+      console.log(`   Resultados sin filtrar: ${allResults.length}${namespace && namespace !== 'all' ? ` (filtrando por ns="${namespace}")` : ''}`);
 
-        console.log(`   Resultados sin filtrar: ${allResults.length}`);
-
-        // Mostrar distancias para debug
-        if (allResults.length > 0) {
-          const topResults = allResults.slice(0, 3);
-          topResults.forEach((r: any, i: number) => {
-            const sim = l2ToCosineSimilarity(r._distance || 0);
-            console.log(`   #${i + 1}: distancia_L2=${r._distance?.toFixed(4)}, similitud_coseno=${sim.toFixed(4)}, namespace=${r.namespace}`);
-          });
-        }
-
-        results = allResults
-          .map((row: any) => ({
-            ...row,
-            similarity: l2ToCosineSimilarity(row._distance || 0)
-          }))
-          .filter((r: any) => {
-            const ns = r.namespace || 'default';
-            // Si no se especifica namespace, aceptar todos
-            if (!namespace || namespace === 'all') {
-              return r.similarity >= threshold;
-            }
-            return ns === namespace && r.similarity >= threshold;
-          })
-          .slice(0, limit);
+      // Mostrar distancias para debug
+      if (allResults.length > 0) {
+        const topResults = allResults.slice(0, 3);
+        topResults.forEach((r: any, i: number) => {
+          const sim = l2ToCosineSimilarity(r._distance || 0);
+          console.log(`   #${i + 1}: distancia_L2=${r._distance?.toFixed(4)}, similitud_coseno=${sim.toFixed(4)}, namespace=${r.namespace}`);
+        });
       }
+
+      results = allResults
+        .map((row: any) => ({
+          ...row,
+          similarity: l2ToCosineSimilarity(row._distance || 0)
+        }))
+        .filter((r: any) => {
+          const ns = r.namespace || 'default';
+          // Si no se especifica namespace, aceptar todos
+          if (!namespace || namespace === 'all') {
+            return r.similarity >= threshold;
+          }
+          return ns === namespace && r.similarity >= threshold;
+        })
+        .slice(0, limit);
 
       console.log(`   Resultados finales: ${results.length}`);
 

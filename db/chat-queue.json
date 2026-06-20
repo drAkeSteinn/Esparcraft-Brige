@@ -1,0 +1,48 @@
+{
+  "queue": [
+    {
+      "id": "chat_1781921892063_tsrt5hc",
+      "payload": {
+        "mode": "chat",
+        "npcid": "NPC_1768826192806",
+        "playersessionid": "SESSION_TEST_AUTORESTORE_1781921892",
+        "message": "hola, probando auto-restore",
+        "jugador": {
+          "nombre": "TestBot"
+        }
+      },
+      "status": "failed",
+      "addedAt": "2026-06-20T02:18:12.063Z",
+      "retryCount": 2,
+      "startedAt": "2026-06-20T02:18:12.415Z",
+      "error": "fetch failed",
+      "completedAt": "2026-06-20T02:18:12.478Z"
+    },
+    {
+      "id": "chat_1781921925856_9dywapw",
+      "payload": {
+        "mode": "chat",
+        "npcid": "NPC_1768826192806",
+        "playersessionid": "SESSION_1781899160651",
+        "message": "test flujo existente",
+        "jugador": {
+          "nombre": "TestBot"
+        }
+      },
+      "status": "failed",
+      "addedAt": "2026-06-20T02:18:45.856Z",
+      "retryCount": 2,
+      "startedAt": "2026-06-20T02:18:45.972Z",
+      "error": "fetch failed",
+      "completedAt": "2026-06-20T02:18:46.017Z"
+    }
+  ],
+  "stats": {
+    "totalProcessed": 0,
+    "totalFailed": 2,
+    "currentQueueSize": 1,
+    "isProcessing": true,
+    "currentItemId": "chat_1781921925856_9dywapw"
+  },
+  "savedAt": "2026-06-20T02:18:46.018Z"
+}

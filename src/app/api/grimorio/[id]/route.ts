@@ -39,6 +39,7 @@ export async function PUT(
 
     // Determinar tipo
     const tipo = body.tipo || existingCard.tipo;
+    const isConditional = (body.templateType || existingCard.templateType) === 'condicional';
 
     // Validar campos requeridos según tipo
     if (tipo === 'variable') {
@@ -47,14 +48,21 @@ export async function PUT(
         return NextResponse.json({ success: false, error: 'Falta el nombre de la variable' }, { status: 400 });
       }
     } else if (tipo === 'plantilla') {
-      // Plantillas: nombre, plantilla y categoria son obligatorios
-      if (!body.nombre || !body.plantilla || !body.categoria) {
+      // Plantillas normales: nombre, plantilla y categoria son obligatorios
+      // Plantillas condicionales: nombre y categoria (plantilla puede estar vacío)
+      if (!body.nombre || !body.categoria) {
         return NextResponse.json({ success: false, error: 'Faltan campos requeridos' }, { status: 400 });
+      }
+      if (!isConditional && !body.plantilla) {
+        return NextResponse.json({ success: false, error: 'Falta el campo plantilla' }, { status: 400 });
       }
     } else {
       // Tipo no especificado: validación estándar
-      if (!body.nombre || !body.plantilla || !body.categoria) {
+      if (!body.nombre || !body.categoria) {
         return NextResponse.json({ success: false, error: 'Faltan campos requeridos' }, { status: 400 });
+      }
+      if (!isConditional && !body.plantilla) {
+        return NextResponse.json({ success: false, error: 'Falta el campo plantilla' }, { status: 400 });
       }
     }
 
@@ -94,13 +102,14 @@ export async function PUT(
       }
     }
 
-    // Validar estructura de plantilla si es tipo 'plantilla'
-    if (tipo === 'plantilla') {
-      const validations = validateTemplateStructure(body.plantilla, 'plantilla');
-      if (validations.nestedTemplates.length > 0) {
+    // Validar estructura de plantilla si es tipo 'plantilla' (no aplica a condicionales)
+    if (tipo === 'plantilla' && !isConditional) {
+      const validations = validateTemplateStructure(body.plantilla || '', 'plantilla');
+      // ✅ Las plantillas anidadas SÍ están permitidas. Solo bloqueamos errores reales.
+      if (!validations.valid) {
         return NextResponse.json({
           success: false,
-          error: 'Las plantillas no pueden contener otras plantillas',
+          error: 'Estructura de plantilla inválida',
           validations: {
             nestedTemplates: validations.nestedTemplates,
             missingVariables: validations.missingVariables,
@@ -110,11 +119,37 @@ export async function PUT(
       }
     }
 
+    // ✅ Plantilla condicional: validar templateType y conditionalConfig
+    const templateType = (body.templateType || existingCard.templateType) === 'condicional' ? 'condicional' : 'normal';
+    let conditionalConfig = null;
+    if (templateType === 'condicional') {
+      const cfg = body.conditionalConfig || existingCard.conditionalConfig;
+      if (!cfg || !cfg.npcId) {
+        return NextResponse.json({
+          success: false,
+          error: 'Las plantillas condicionales requieren conditionalConfig.npcId'
+        }, { status: 400 });
+      }
+      if (!Array.isArray(cfg.branches)) {
+        return NextResponse.json({
+          success: false,
+          error: 'conditionalConfig.branches debe ser un array'
+        }, { status: 400 });
+      }
+      conditionalConfig = {
+        npcId: cfg.npcId,
+        branches: cfg.branches,
+        defaultTemplate: cfg.defaultTemplate || ''
+      };
+    }
+
     // Construir objeto de actualización
     const updates: any = {
       nombre: body.nombre.trim(),
-      plantilla: body.plantilla ? body.plantilla.trim() : '',
+      plantilla: isConditional ? '' : (body.plantilla ? body.plantilla.trim() : ''),
       categoria: body.categoria.trim(),
+      templateType,
+      conditionalConfig,
       descripcion: body.descripcion?.trim()
     };
 

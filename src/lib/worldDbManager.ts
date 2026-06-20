@@ -16,11 +16,7 @@ function toDomainWorld(dbWorld: any): World {
   return {
     id: dbWorld.id,
     name: dbWorld.name,
-    lore: dbWorld.lore ? JSON.parse(dbWorld.lore) : {
-      estado_mundo: '',
-      rumores: [],
-      eventos: []
-    },
+    lore: dbWorld.lore || '',
     area: dbWorld.area ? JSON.parse(dbWorld.area) : undefined,
   };
 }
@@ -29,7 +25,7 @@ function toDBWorld(world: World): any {
   return {
     id: world.id,
     name: world.name,
-    lore: JSON.stringify(world.lore),
+    lore: world.lore,
     area: world.area ? JSON.stringify(world.area) : null,
   };
 }
@@ -159,11 +155,20 @@ export const worldDbManager = {
   },
 
   /**
-   * Elimina un mundo
+   * Elimina un mundo (y su namespace)
    */
   async delete(id: string): Promise<boolean> {
     try {
       console.log('worldDbManager.delete - ID recibido:', id);
+      // Eliminar namespace del mundo
+      try {
+        const { namespaceManager } = await import('./namespaceManager');
+        await namespaceManager.deleteEntityNamespace('mundo', id);
+        console.log(`[worldDbManager.delete] Namespace mundo:${id} eliminado`);
+      } catch (nsErr: any) {
+        console.warn(`[worldDbManager.delete] No se pudo eliminar namespace:`, nsErr?.message);
+      }
+
       await db.world.delete({
         where: { id }
       });

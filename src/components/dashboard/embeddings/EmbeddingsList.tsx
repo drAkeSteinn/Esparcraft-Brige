@@ -32,10 +32,44 @@ export default function EmbeddingsList({ onRefresh }: EmbeddingsListProps) {
   const [filterSourceType, setFilterSourceType] = useState<string>('all');
   const [selectedEmbedding, setSelectedEmbedding] = useState<Embedding | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  // Namespaces disponibles cargados dinámicamente de la API
+  const [availableNamespaces, setAvailableNamespaces] = useState<string[]>([]);
 
   useEffect(() => {
     fetchEmbeddings();
+    fetchAvailableNamespaces();
   }, [filterNamespace, filterSourceType]);
+
+  const fetchAvailableNamespaces = async () => {
+    try {
+      const response = await fetch('/api/embeddings/verify-namespace');
+      const data = await response.json();
+      if (data.success) {
+        // Extraer todos los namespaces de todos los tipos (mundo, pueblo, edificio, npc, sesion)
+        const ns = data.data.namespaces;
+        const all: string[] = [];
+        ['mundo', 'pueblo', 'edificio', 'npc', 'sesion'].forEach((type) => {
+          if (ns[type]) {
+            ns[type].forEach((n: any) => all.push(n.namespace));
+          }
+        });
+        // Añadir namespaces sueltos que aparezcan en embeddings pero no en la tabla namespaces
+        const statsRes = await fetch('/api/embeddings/stats');
+        const statsData = await statsRes.json();
+        if (statsData.success) {
+          const nsInUse = Object.keys(statsData.data.embeddingsByNamespace || {});
+          nsInUse.forEach((n) => {
+            if (!all.includes(n)) all.push(n);
+          });
+        }
+        // Añadir 'default' siempre al inicio si hay embeddings allí
+        if (!all.includes('default')) all.unshift('default');
+        setAvailableNamespaces(all.sort());
+      }
+    } catch (error) {
+      console.error('Error fetching available namespaces:', error);
+    }
+  };
 
   const fetchEmbeddings = async () => {
     setLoading(true);
@@ -148,11 +182,9 @@ export default function EmbeddingsList({ onRefresh }: EmbeddingsListProps) {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Todos los namespaces</SelectItem>
-                  <SelectItem value="default">Default</SelectItem>
-                  <SelectItem value="worlds">Mundos</SelectItem>
-                  <SelectItem value="npcs">NPCs</SelectItem>
-                  <SelectItem value="sessions">Sesiones</SelectItem>
-                  <SelectItem value="custom">Personalizado</SelectItem>
+                  {availableNamespaces.map((ns) => (
+                    <SelectItem key={ns} value={ns}>{ns}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>

@@ -10,8 +10,6 @@ function toDomainEdificio(dbEdificio: any): Edificio {
     puebloId: dbEdificio.puebloId,
     name: dbEdificio.name,
     lore: dbEdificio.lore,
-    rumores: dbEdificio.rumores ? JSON.parse(dbEdificio.rumores) : undefined,
-    eventos_recientes: dbEdificio.eventos_recientes ? JSON.parse(dbEdificio.eventos_recientes) : [],
     area: dbEdificio.area ? JSON.parse(dbEdificio.area) : { start: { x: 0, y: 0, z: 0 }, end: { x: 0, y: 0, z: 0 } },
     puntosDeInteres: dbEdificio.puntosDeInteres ? JSON.parse(dbEdificio.puntosDeInteres) : undefined,
   };
@@ -24,8 +22,6 @@ function toDBEdificio(edificio: Edificio): any {
     puebloId: edificio.puebloId,
     name: edificio.name,
     lore: edificio.lore,
-    rumores: edificio.rumores ? JSON.stringify(edificio.rumores) : null,
-    eventos_recientes: edificio.eventos_recientes ? JSON.stringify(edificio.eventos_recientes) : null,
     area: JSON.stringify(edificio.area),
     puntosDeInteres: edificio.puntosDeInteres ? JSON.stringify(edificio.puntosDeInteres) : null,
   };
@@ -176,40 +172,6 @@ export const edificioDbManager = {
   },
 
   /**
-   * Actualiza los eventos recientes de un edificio
-   */
-  async updateEventosRecientes(id: string, eventos_recientes: string[]): Promise<Edificio | null> {
-    const existing = await this.getById(id);
-    if (!existing) return null;
-
-    const result = await db.edificio.update({
-      where: { id },
-      data: {
-        eventos_recientes: JSON.stringify(eventos_recientes)
-      }
-    });
-
-    return toDomainEdificio(result);
-  },
-
-  /**
-   * Actualiza los rumores de un edificio
-   */
-  async updateRumores(id: string, rumores: string[]): Promise<Edificio | null> {
-    const existing = await this.getById(id);
-    if (!existing) return null;
-
-    const result = await db.edificio.update({
-      where: { id },
-      data: {
-        rumores: JSON.stringify(rumores)
-      }
-    });
-
-    return toDomainEdificio(result);
-  },
-
-  /**
    * Actualiza los puntos de interés de un edificio
    */
   async updatePuntosDeInteres(id: string, puntosDeInteres: any[]): Promise<Edificio | null> {
@@ -227,10 +189,19 @@ export const edificioDbManager = {
   },
 
   /**
-   * Elimina un edificio
+   * Elimina un edificio (y su namespace)
    */
   async delete(id: string): Promise<boolean> {
     try {
+      // Eliminar namespace del edificio
+      try {
+        const { namespaceManager } = await import('./namespaceManager');
+        await namespaceManager.deleteEntityNamespace('edificio', id);
+        console.log(`[edificioDbManager.delete] Namespace edificio:${id} eliminado`);
+      } catch (nsErr: any) {
+        console.warn(`[edificioDbManager.delete] No se pudo eliminar namespace:`, nsErr?.message);
+      }
+
       await db.edificio.delete({
         where: { id }
       });

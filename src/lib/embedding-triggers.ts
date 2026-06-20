@@ -3,11 +3,21 @@
  *
  * Este servicio gestiona la creación automática de embeddings
  * cuando se crean o actualizan recursos en el sistema.
+ *
+ * Sistema de namespaces por entidad:
+ *   - mundo:{worldId}
+ *   - pueblo:{puebloId}
+ *   - edificio:{edificioId}
+ *   - npc:{npcId}
+ *   - sesion:{sessionId}
+ *
+ * Al embeddear un recurso, se asegura primero que su namespace exista.
  */
 
 import { getEmbeddingClient } from './embeddings/client';
 import { worldManager, puebloManager, edificioManager, npcManager, sessionManager } from './fileManager';
 import { getSimilarityThreshold, getMaxResults } from './config-persistence';
+import { namespaceManager, buildNamespace, type EntityType } from './namespaceManager';
 
 export class EmbeddingTriggers {
   /**
@@ -30,14 +40,15 @@ export class EmbeddingTriggers {
 Mundo: ${world.name}
 
 Estado del mundo:
-${world.lore.estado_mundo}
-
-Rumores:
-${world.lore.rumores.map((r, i) => `${i + 1}. ${r}`).join('\n')}
+${world.lore}
       `.trim();
 
       // Eliminar embeddings anteriores del mundo
       await client.deleteBySource('world', worldId);
+
+      // Asegurar que el namespace del mundo exista
+      const namespace = buildNamespace('mundo', worldId);
+      await namespaceManager.ensureWorldNamespace(worldId);
 
       // Crear nuevo embedding
       await client.createEmbedding({
@@ -46,15 +57,13 @@ ${world.lore.rumores.map((r, i) => `${i + 1}. ${r}`).join('\n')}
           title: world.name,
           type: 'world',
           name: world.name,
-          estado_mundo: world.lore.estado_mundo,
-          rumores: world.lore.rumores
         },
-        namespace: 'worlds',
+        namespace,
         source_type: 'world',
         source_id: worldId
       });
 
-      console.log(`✅ Embeddings creados para mundo: ${worldId}`);
+      console.log(`✅ Embeddings creados para mundo: ${worldId} (namespace: ${namespace})`);
     } catch (error) {
       console.error(`Error generando embeddings para mundo ${worldId}:`, error);
     }
@@ -81,16 +90,14 @@ ${pueblo.type === 'nacion' ? 'Nación' : 'Pueblo'}: ${pueblo.name}
 
 Descripción:
 ${pueblo.description}
-
-Estado:
-${pueblo.lore.estado_pueblo}
-
-Rumores:
-${pueblo.lore.rumores.map((r, i) => `${i + 1}. ${r}`).join('\n')}
       `.trim();
 
       // Eliminar embeddings anteriores del pueblo
       await client.deleteBySource('pueblo', puebloId);
+
+      // Asegurar que el namespace del pueblo (y su mundo padre) exista
+      const namespace = buildNamespace('pueblo', puebloId);
+      await namespaceManager.ensurePuebloNamespace(puebloId);
 
       // Crear nuevo embedding
       await client.createEmbedding({
@@ -102,12 +109,12 @@ ${pueblo.lore.rumores.map((r, i) => `${i + 1}. ${r}`).join('\n')}
           name: pueblo.name,
           description: pueblo.description
         },
-        namespace: 'pueblos',
+        namespace,
         source_type: 'pueblo',
         source_id: puebloId
       });
 
-      console.log(`✅ Embeddings creados para pueblo: ${puebloId}`);
+      console.log(`✅ Embeddings creados para pueblo: ${puebloId} (namespace: ${namespace})`);
     } catch (error) {
       console.error(`Error generando embeddings para pueblo ${puebloId}:`, error);
     }
@@ -132,11 +139,8 @@ ${pueblo.lore.rumores.map((r, i) => `${i + 1}. ${r}`).join('\n')}
       const content = `
 Edificio: ${edificio.name}
 
-Lore:
+Estado del edificio:
 ${edificio.lore}
-
-Eventos recientes:
-${edificio.eventos_recientes.map((e, i) => `${i + 1}. ${e}`).join('\n')}
 
 Ubicación:
 Desde (${edificio.area.start.x}, ${edificio.area.start.y}, ${edificio.area.start.z})
@@ -145,6 +149,10 @@ hasta (${edificio.area.end.x}, ${edificio.area.end.y}, ${edificio.area.end.z})
 
       // Eliminar embeddings anteriores del edificio
       await client.deleteBySource('edificio', edificioId);
+
+      // Asegurar que el namespace del edificio (y su pueblo/mundo padre) exista
+      const namespace = buildNamespace('edificio', edificioId);
+      await namespaceManager.ensureEdificioNamespace(edificioId);
 
       // Crear nuevo embedding
       await client.createEmbedding({
@@ -156,12 +164,12 @@ hasta (${edificio.area.end.x}, ${edificio.area.end.y}, ${edificio.area.end.z})
           lore: edificio.lore,
           area: edificio.area
         },
-        namespace: 'edificios',
+        namespace,
         source_type: 'edificio',
         source_id: edificioId
       });
 
-      console.log(`✅ Embeddings creados para edificio: ${edificioId}`);
+      console.log(`✅ Embeddings creados para edificio: ${edificioId} (namespace: ${namespace})`);
     } catch (error) {
       console.error(`Error generando embeddings para edificio ${edificioId}:`, error);
     }
@@ -203,6 +211,10 @@ ${card.first_mes ? `Primer mensaje: ${card.first_mes}` : ''}
       // Eliminar embeddings anteriores del NPC
       await client.deleteBySource('npc', npcId);
 
+      // Asegurar que el namespace del NPC (y su jerarquía edificio/pueblo/mundo) exista
+      const namespace = buildNamespace('npc', npcId);
+      await namespaceManager.ensureNpcNamespace(npcId);
+
       // Crear nuevo embedding
       await client.createEmbedding({
         content,
@@ -215,12 +227,12 @@ ${card.first_mes ? `Primer mensaje: ${card.first_mes}` : ''}
           scenario: card.scenario,
           location: npc.location
         },
-        namespace: 'npcs',
+        namespace,
         source_type: 'npc',
         source_id: npcId
       });
 
-      console.log(`✅ Embeddings creados para NPC: ${npcId}`);
+      console.log(`✅ Embeddings creados para NPC: ${npcId} (namespace: ${namespace})`);
     } catch (error) {
       console.error(`Error generando embeddings para NPC ${npcId}:`, error);
     }
@@ -260,6 +272,10 @@ Mensajes intercambiados: ${session.messages.length}
       // Eliminar embeddings anteriores de la sesión
       await client.deleteBySource('session', sessionId);
 
+      // Asegurar que el namespace de la sesión (y su NPC padre) exista
+      const namespace = buildNamespace('sesion', sessionId);
+      await namespaceManager.ensureSessionNamespace(sessionId);
+
       // Crear nuevo embedding
       await client.createEmbedding({
         content,
@@ -271,12 +287,12 @@ Mensajes intercambiados: ${session.messages.length}
           messagesCount: session.messages.length,
           summary: session.summary
         },
-        namespace: 'sessions',
+        namespace,
         source_type: 'session',
         source_id: sessionId
       });
 
-      console.log(`✅ Embeddings creados para sesión: ${sessionId}`);
+      console.log(`✅ Embeddings creados para sesión: ${sessionId} (namespace: ${namespace})`);
     } catch (error) {
       console.error(`Error generando embeddings para sesión ${sessionId}:`, error);
     }
@@ -285,9 +301,14 @@ Mensajes intercambiados: ${session.messages.length}
   /**
    * Busca contexto relevante de embeddings para una consulta
    * Usa la configuración persistente para threshold y maxResults
+   *
+   * Si se pasa `namespaces` (array), busca en cada uno secuencialmente y
+   * combina los resultados. Útil para búsqueda jerárquica
+   * (sesión → NPC → edificio → pueblo → mundo).
    */
   static async searchContext(query: string, options?: {
     namespace?: string;
+    namespaces?: string[]; // búsqueda jerárquica
     source_type?: string;
     limit?: number;
     threshold?: number;
@@ -299,6 +320,53 @@ Mensajes intercambiados: ${session.messages.length}
       const threshold = options?.threshold ?? getSimilarityThreshold();
       const limit = options?.limit ?? getMaxResults();
 
+      // Si se pasa array de namespaces, buscar en cada uno y combinar
+      if (options?.namespaces && options.namespaces.length > 0) {
+        const allResults: any[] = [];
+        const seenIds = new Set<string>();
+
+        // Buscar en cada namespace de la jerarquía
+        // Limitamos cada búsqueda individual para no exceder el total deseado
+        const perNamespaceLimit = Math.max(1, Math.ceil(limit / options.namespaces.length));
+
+        for (const ns of options.namespaces) {
+          try {
+            const nsResults = await client.searchSimilar({
+              query,
+              namespace: ns,
+              limit: perNamespaceLimit,
+              threshold,
+            });
+            for (const r of nsResults) {
+              if (!seenIds.has(r.id)) {
+                seenIds.add(r.id);
+                allResults.push(r);
+              }
+            }
+          } catch (nsErr: any) {
+            console.warn(`[searchContext] Error buscando en namespace ${ns}:`, nsErr?.message);
+          }
+        }
+
+        // Ordenar por similitud y limitar al total
+        allResults.sort((a, b) => b.similarity - a.similarity);
+        const finalResults = allResults.slice(0, limit);
+
+        if (finalResults.length === 0) {
+          return '';
+        }
+
+        const context = finalResults.map((result, index) => {
+          const metadata = result.metadata;
+          const title = metadata.title || `Documento ${index + 1}`;
+          return `• ${title}\n  ${result.content}`;
+        }).join('\n\n');
+
+        console.log(`[EmbeddingTriggers] Búsqueda jerárquica en ${options.namespaces.length} namespaces: ${finalResults.length} contextos relevantes`);
+        return context;
+      }
+
+      // Búsqueda simple (un namespace o todos)
       const results = await client.searchSimilar({
         query,
         namespace: options?.namespace,
@@ -315,13 +383,8 @@ Mensajes intercambiados: ${session.messages.length}
       const context = results.map((result, index) => {
         const metadata = result.metadata;
         const title = metadata.title || `Documento ${index + 1}`;
-        const similarity = (result.similarity * 100).toFixed(1);
-
-        return `
-[Contexto ${index + 1}] - ${title} (${similarity}% similar)
-${result.content}
-        `.trim();
-      }).join('\n\n---\n\n');
+        return `• ${title}\n  ${result.content}`;
+      }).join('\n\n');
 
       console.log(`[EmbeddingTriggers] Encontrados ${results.length} contextos relevantes (threshold=${threshold}, limit=${limit})`);
       return context;
@@ -329,6 +392,71 @@ ${result.content}
       console.error('Error buscando contexto de embeddings:', error);
       return '';
     }
+  }
+
+  /**
+   * Busca contexto en la jerarquía completa de una entidad.
+   * Ej: para una sesión, busca en sesion:{id} → npc:{npcId} → edificio/pueblo/mundo.
+   *
+   * @param entityType Tipo de entidad desde donde se inicia la búsqueda
+   * @param entityId ID de la entidad
+   * @param query Texto de consulta (mensaje del jugador, etc.)
+   */
+  static async searchContextInHierarchy(
+    entityType: EntityType,
+    entityId: string,
+    query: string,
+    options?: { limit?: number; threshold?: number }
+  ): Promise<string> {
+    // Asegurar que toda la jerarquía tenga namespaces
+    try {
+      await namespaceManager.ensureForEntity(entityType, entityId);
+    } catch (e: any) {
+      console.warn(`[searchContextInHierarchy] No se pudo asegurar namespace para ${entityType}:${entityId}:`, e?.message);
+    }
+
+    // Obtener jerarquía (del más específico al más general)
+    const hierarchy = await namespaceManager.getNamespaceHierarchy(entityType, entityId);
+    console.log(`[searchContextInHierarchy] Jerarquía para ${entityType}:${entityId}:`, hierarchy);
+
+    return this.searchContext(query, {
+      namespaces: hierarchy,
+      limit: options?.limit ?? getMaxResults(),
+      threshold: options?.threshold ?? getSimilarityThreshold(),
+    });
+  }
+
+  /**
+   * Busca contexto relevante de embeddings optimizado para CHAT.
+   * Solo busca en los namespaces de: sesión → NPC → edificio.
+   * No busca en pueblo ni mundo (más eficiente y relevante para el contexto inmediato).
+   *
+   * @param entityType 'sesion' o 'npc' (punto de partida)
+   * @param entityId ID de la entidad
+   * @param query Mensaje del jugador
+   */
+  static async searchContextForChat(
+    entityType: EntityType,
+    entityId: string,
+    query: string,
+    options?: { limit?: number; threshold?: number }
+  ): Promise<string> {
+    // Asegurar que la jerarquía de chat tenga namespaces
+    try {
+      await namespaceManager.ensureForEntity(entityType, entityId);
+    } catch (e: any) {
+      console.warn(`[searchContextForChat] No se pudo asegurar namespace para ${entityType}:${entityId}:`, e?.message);
+    }
+
+    // Obtener jerarquía optimizada para chat (solo sesión + NPC + edificio)
+    const chatHierarchy = await namespaceManager.getChatHierarchy(entityType, entityId);
+    console.log(`[searchContextForChat] Jerarquía de chat para ${entityType}:${entityId}:`, chatHierarchy);
+
+    return this.searchContext(query, {
+      namespaces: chatHierarchy,
+      limit: options?.limit ?? getMaxResults(),
+      threshold: options?.threshold ?? getSimilarityThreshold(),
+    });
   }
 
   /**

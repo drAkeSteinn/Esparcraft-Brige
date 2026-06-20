@@ -2,5 +2,7 @@
   "ollamaUrl": "http://localhost:11434",
   "model": "bge-m3:567m",
   "dimension": 1024,
-  "updatedAt": "2026-02-15T00:28:13.593Z"
+  "updatedAt": "2026-06-19T17:42:18.415Z",
+  "similarityThreshold": 0.7,
+  "maxResults": 10
 }

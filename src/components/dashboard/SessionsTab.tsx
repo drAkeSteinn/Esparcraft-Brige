@@ -1,12 +1,11 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Trash2, Play, Eye, MessageSquare } from 'lucide-react';
+import { Trash2, Play, Eye, MessageSquare, List, Settings } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -14,8 +13,47 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Session, NPC, World, Pueblo, Edificio } from '@/lib/types';
 import { toast } from '@/hooks/use-toast';
+import SessionConfig from './settings/SessionConfig';
 
 export default function SessionsTab() {
+  const [activeSubtab, setActiveSubtab] = useState<'sessions' | 'config'>('sessions');
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <h2 className="text-2xl font-bold">Sesiones</h2>
+        <p className="text-muted-foreground">Visualiza, gestiona y configura las sesiones de chat</p>
+      </div>
+
+      <Tabs value={activeSubtab} onValueChange={(v) => setActiveSubtab(v as 'sessions' | 'config')} className="w-full">
+        <TabsList className="grid w-full grid-cols-2 md:w-auto md:inline-grid">
+          <TabsTrigger value="sessions" className="flex items-center gap-2">
+            <List className="h-4 w-4" />
+            <span>Sesiones</span>
+          </TabsTrigger>
+          <TabsTrigger value="config" className="flex items-center gap-2">
+            <Settings className="h-4 w-4" />
+            <span>Configuración</span>
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="sessions" className="mt-6">
+          <SessionsList />
+        </TabsContent>
+
+        <TabsContent value="config" className="mt-6">
+          <SessionConfig onConfigSaved={() => {}} />
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+}
+
+// ============================================================
+// Sub-componente: lista de sesiones (contenido del sub-tab "Sesiones")
+// ============================================================
+
+function SessionsList() {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [summaries, setSummaries] = useState<Record<string, string>>({});
   const [lastPrompts, setLastPrompts] = useState<Record<string, string>>({});
@@ -206,8 +244,8 @@ export default function SessionsTab() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold">Sesiones y Prompts</h2>
-          <p className="text-muted-foreground">Visualiza y gestiona las sesiones de chat</p>
+          <h3 className="text-lg font-semibold">Sesiones de chat</h3>
+          <p className="text-sm text-muted-foreground">Visualiza y gestiona las sesiones existentes</p>
         </div>
         <Button onClick={() => {
           setSelectedSession(null);
@@ -219,7 +257,7 @@ export default function SessionsTab() {
         </Button>
       </div>
 
-      <ScrollArea className="h-[calc(100vh-200px)]">
+      <ScrollArea className="h-[calc(100vh-280px)]">
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 pr-4">
           {sessions.map((session) => (
             <Card key={session.id}>

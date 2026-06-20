@@ -146,6 +146,13 @@ export default function RouterTab() {
     systemPrompt: ''
   });
 
+  const [nuevoContextoForm, setNuevoContextoForm] = useState({
+    type: 'npc' as 'npc' | 'edificio' | 'pueblo' | 'nacion' | 'mundo',
+    typeid: '',
+    targetid: '',
+    duration: '7'
+  });
+
   useEffect(() => {
     fetchData();
   }, []);
@@ -1335,7 +1342,7 @@ ${memoriesSections.join('\n')}
 
       {/* Main Tabs */}
       <Tabs defaultValue="chat" className="w-full">
-        <TabsList className="grid w-full grid-cols-8">
+        <TabsList className="grid w-full grid-cols-9">
           <TabsTrigger value="chat">
             <MessageSquare className="h-4 w-4 mr-2" />
             Chat
@@ -1363,6 +1370,10 @@ ${memoriesSections.join('\n')}
           <TabsTrigger value="nuevo_lore">
             <FileText className="h-4 w-4 mr-2" />
             Nuevo Lore
+          </TabsTrigger>
+          <TabsTrigger value="nuevo_contexto">
+            <MapPin className="h-4 w-4 mr-2" />
+            Nuevo Contexto
           </TabsTrigger>
           <TabsTrigger value="resumen_general">
             <Layers className="h-4 w-4 mr-2" />
@@ -2483,7 +2494,7 @@ ${memoriesSections.join('\n')}
                       <div className="grid grid-cols-2 gap-2 text-muted-foreground">
                         <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}edificio.name{KEY_EXAMPLE_2}</span>
                         <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}edificio.descripcion{KEY_EXAMPLE_2}</span>
-                        <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}edificio.eventos{KEY_EXAMPLE_2}</span>
+                        <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}edificio.estado{KEY_EXAMPLE_2}</span>
                         <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}edificio.type{KEY_EXAMPLE_2}</span>
                         <span className="font-mono bg-background px-2 py-1 rounded text-blue-600 dark:text-blue-400">{KEY_EXAMPLE_1}edificio.poislist{KEY_EXAMPLE_2}</span>
                       </div>
@@ -2771,8 +2782,7 @@ ${memoriesSections.join('\n')}
                         <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}pueblo.name{KEY_EXAMPLE_2}</span>
                         <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}pueblo.type{KEY_EXAMPLE_2}</span>
                         <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}pueblo.descripcion{KEY_EXAMPLE_2}</span>
-                        <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}pueblo.estado{KEY_EXAMPLE_2}</span>
-                        <span className="font-mono bg-background px-2 py-1 rounded text-blue-600 dark:text-blue-400">{KEY_EXAMPLE_1}pueblo.rumores{KEY_EXAMPLE_2}</span>
+                        <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}pueblo.descripcion{KEY_EXAMPLE_2}</span>
                       </div>
                     </div>
 
@@ -2789,7 +2799,6 @@ ${memoriesSections.join('\n')}
                       <div className="grid grid-cols-3 gap-2 text-muted-foreground">
                         <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}mundo{KEY_EXAMPLE_2}</span>
                         <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}mundo.name{KEY_EXAMPLE_2}</span>
-                        <span className="font-mono bg-background px-2 py-1 rounded text-blue-600 dark:text-blue-400">{KEY_EXAMPLE_1}mundo.rumores{KEY_EXAMPLE_2}</span>
                       </div>
                     </div>
                   </div>
@@ -3057,7 +3066,6 @@ ${memoriesSections.join('\n')}
                       <div className="grid grid-cols-2 gap-2 text-muted-foreground">
                         <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}mundo.name{KEY_EXAMPLE_2}</span>
                         <span className="font-mono bg-background px-2 py-1 rounded">{KEY_EXAMPLE_1}mundo.estado{KEY_EXAMPLE_2}</span>
-                        <span className="font-mono bg-background px-2 py-1 rounded text-blue-600 dark:text-blue-400">{KEY_EXAMPLE_1}mundo.rumores{KEY_EXAMPLE_2}</span>
                       </div>
                     </div>
 
@@ -3384,6 +3392,250 @@ ${memoriesSections.join('\n')}
               >
                 <Send className="h-5 w-5 mr-2" />
                 Generar Nuevo Lore
+              </Button>
+            </div>
+          </div>
+        </TabsContent>
+
+        {/* Nuevo Contexto Trigger */}
+        <TabsContent value="nuevo_contexto" className="space-y-4">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Configuración de Nuevo Contexto</CardTitle>
+                <CardDescription>
+                  Da acceso temporal a los namespaces de otra entidad. Como si la entidad hubiera "visitado" otro lugar.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label>Tipo de Entidad (quién recibe)</Label>
+                    <Select
+                      value={nuevoContextoForm.type}
+                      onValueChange={(v) => setNuevoContextoForm({ ...nuevoContextoForm, type: v as any, typeid: '', targetid: '' })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="npc">NPC</SelectItem>
+                        <SelectItem value="edificio">Edificio</SelectItem>
+                        <SelectItem value="pueblo">Pueblo/Nación</SelectItem>
+                        <SelectItem value="mundo">Mundo</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label>Duración (días)</Label>
+                    <Input
+                      type="number"
+                      min="1"
+                      max="365"
+                      value={nuevoContextoForm.duration}
+                      onChange={(e) => setNuevoContextoForm({ ...nuevoContextoForm, duration: e.target.value })}
+                      placeholder="7"
+                    />
+                  </div>
+                </div>
+
+                {/* Selector de entidad que recibe el contexto */}
+                <div>
+                  <Label>Entidad que recibe el contexto</Label>
+                  {nuevoContextoForm.type === 'npc' && (
+                    <Select
+                      value={nuevoContextoForm.typeid}
+                      onValueChange={(v) => setNuevoContextoForm({ ...nuevoContextoForm, typeid: v })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecciona NPC" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {npcs.map((npc) => (
+                          <SelectItem key={npc.id} value={npc.id}>
+                            {npc.card?.data?.name || npc.card?.name || npc.id}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                  {nuevoContextoForm.type === 'edificio' && (
+                    <Select
+                      value={nuevoContextoForm.typeid}
+                      onValueChange={(v) => setNuevoContextoForm({ ...nuevoContextoForm, typeid: v })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecciona edificio" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {edificios.map((edificio) => (
+                          <SelectItem key={edificio.id} value={edificio.id}>
+                            {edificio.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                  {nuevoContextoForm.type === 'pueblo' && (
+                    <Select
+                      value={nuevoContextoForm.typeid}
+                      onValueChange={(v) => setNuevoContextoForm({ ...nuevoContextoForm, typeid: v })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecciona pueblo/nación" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {pueblos.map((pueblo) => (
+                          <SelectItem key={pueblo.id} value={pueblo.id}>
+                            {pueblo.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                  {nuevoContextoForm.type === 'mundo' && (
+                    <Select
+                      value={nuevoContextoForm.typeid}
+                      onValueChange={(v) => setNuevoContextoForm({ ...nuevoContextoForm, typeid: v })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecciona mundo" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {worlds.map((world) => (
+                          <SelectItem key={world.id} value={world.id}>
+                            {world.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                </div>
+
+                {/* Selector de target (cualquier tipo) */}
+                <div>
+                  <Label>Target (cuyo namespace se comparte)</Label>
+                  <p className="text-xs text-muted-foreground mb-2">
+                    Selecciona cualquier entidad. El sistema detecta automáticamente el tipo.
+                  </p>
+                  <div className="grid grid-cols-1 gap-2">
+                    {/* NPCs */}
+                    {npcs.length > 0 && (
+                      <Select
+                        value={nuevoContextoForm.targetid}
+                        onValueChange={(v) => setNuevoContextoForm({ ...nuevoContextoForm, targetid: v })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecciona target (NPCs, Edificios, Pueblos, Mundos)" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {npcs.length > 0 && (
+                            <>
+                              <div className="text-xs font-semibold text-muted-foreground px-2 py-1">NPCs</div>
+                              {npcs.map((npc) => (
+                                <SelectItem key={npc.id} value={npc.id}>
+                                  {npc.card?.data?.name || npc.card?.name || npc.id}
+                                </SelectItem>
+                              ))}
+                            </>
+                          )}
+                          {edificios.length > 0 && (
+                            <>
+                              <div className="text-xs font-semibold text-muted-foreground px-2 py-1">Edificios</div>
+                              {edificios.map((edificio) => (
+                                <SelectItem key={edificio.id} value={edificio.id}>
+                                  {edificio.name}
+                                </SelectItem>
+                              ))}
+                            </>
+                          )}
+                          {pueblos.length > 0 && (
+                            <>
+                              <div className="text-xs font-semibold text-muted-foreground px-2 py-1">Pueblos/Naciones</div>
+                              {pueblos.map((pueblo) => (
+                                <SelectItem key={pueblo.id} value={pueblo.id}>
+                                  {pueblo.name}
+                                </SelectItem>
+                              ))}
+                            </>
+                          )}
+                          {worlds.length > 0 && (
+                            <>
+                              <div className="text-xs font-semibold text-muted-foreground px-2 py-1">Mundos</div>
+                              {worlds.map((world) => (
+                                <SelectItem key={world.id} value={world.id}>
+                                  {world.name}
+                                </SelectItem>
+                              ))}
+                            </>
+                          )}
+                        </SelectContent>
+                      </Select>
+                    )}
+                  </div>
+                </div>
+
+                <div className="bg-muted/50 p-3 rounded-lg text-xs text-muted-foreground space-y-1">
+                  <p className="font-medium text-foreground">¿Cómo funciona?</p>
+                  <p>• La entidad seleccionada tendrá acceso temporal al namespace del target</p>
+                  <p>• Durante el chat, buscará embeddings en sus propios namespaces + los del target</p>
+                  <p>• Si el target es un edificio, también hereda contextos de NPCs en ese edificio (cascading)</p>
+                  <p>• Cuando expire la duración, perderá el acceso automáticamente</p>
+                </div>
+              </CardContent>
+            </Card>
+
+            <div className="space-y-4">
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between">
+                  <div>
+                    <CardTitle className="flex items-center gap-2">
+                      <MapPin className="h-5 w-5" />
+                      JSON de Request
+                    </CardTitle>
+                  </div>
+                  <Badge variant="secondary">
+                    {countTokens(JSON.stringify({
+                      mode: 'nuevo_contexto',
+                      type: nuevoContextoForm.type,
+                      typeid: nuevoContextoForm.typeid,
+                      targetid: nuevoContextoForm.targetid,
+                      duration: nuevoContextoForm.duration
+                    }, null, 2))} tokens
+                  </Badge>
+                </CardHeader>
+                <CardContent>
+                  <ScrollArea className="h-[200px] pr-4">
+                    <pre className="text-xs bg-muted p-4 rounded-lg overflow-x-auto">
+                      {JSON.stringify({
+                        mode: 'nuevo_contexto',
+                        type: nuevoContextoForm.type,
+                        typeid: nuevoContextoForm.typeid || '(seleccionar)',
+                        targetid: nuevoContextoForm.targetid || '(seleccionar)',
+                        duration: nuevoContextoForm.duration
+                      }, null, 2)}
+                    </pre>
+                  </ScrollArea>
+                </CardContent>
+              </Card>
+
+              <Button
+                className="w-full"
+                size="lg"
+                onClick={() => {
+                  const payload = {
+                    mode: 'nuevo_contexto',
+                    type: nuevoContextoForm.type,
+                    typeid: nuevoContextoForm.typeid,
+                    targetid: nuevoContextoForm.targetid,
+                    duration: nuevoContextoForm.duration
+                  };
+                  sendRequest('nuevo_contexto', payload);
+                }}
+                disabled={!nuevoContextoForm.typeid || !nuevoContextoForm.targetid}
+              >
+                <Send className="h-5 w-5 mr-2" />
+                Crear Contexto Adicional
               </Button>
             </div>
           </div>

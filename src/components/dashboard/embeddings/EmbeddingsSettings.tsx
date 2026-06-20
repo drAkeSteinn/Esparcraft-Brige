@@ -135,6 +135,8 @@ export default function EmbeddingsSettings({ onConfigSaved }: EmbeddingsSettings
   // Estado de reset
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
   const [resetting, setResetting] = useState(false);
+  const [reembedding, setReembedding] = useState(false);
+  const [dimensionWarning, setDimensionWarning] = useState<string | null>(null);
 
   // ============================================
   // EFECTOS
@@ -278,10 +280,46 @@ export default function EmbeddingsSettings({ onConfigSaved }: EmbeddingsSettings
       const data = await response.json();
 
       if (data.success) {
-        toast({
-          title: '✅ Configuración Guardada',
-          description: `${embeddingConfig.model} (${embeddingConfig.dimension}D) - Threshold: ${(embeddingConfig.similarityThreshold * 100).toFixed(0)}%`
-        });
+        // Caso 1: se realizó migración automática (cambio de modelo con datos existentes)
+        if (data.data?.migration?.performed) {
+          const m = data.data.migration;
+          if (m.error) {
+            // Migración con error
+            toast({
+              title: '⚠️ Migración con errores',
+              description: `La BD se reinició pero hubo errores: ${m.error}`,
+              variant: 'destructive',
+            });
+            setDimensionWarning(`Migración parcial: ${m.error}`);
+          } else {
+            // Migración exitosa
+            const breakdown = m.reembeddedBreakdown
+              ? Object.entries(m.reembeddedBreakdown)
+                  .filter(([, v]) => (v as number) > 0)
+                  .map(([k, v]) => `${k}: ${v}`)
+                  .join(', ')
+              : '';
+            toast({
+              title: '✅ Migración automática completada',
+              description: `BD reiniciada y ${m.reembeddedResources} recursos re-embeddeados con "${m.newModel}" (${m.newDimension}D).${breakdown ? `\nDesglose: ${breakdown}` : ''}`,
+            });
+            setDimensionWarning(null);
+          }
+        } else if (data.data?.warnings?.dimensionChanged || data.data?.warnings?.modelChanged) {
+          // Caso 2: cambió el modelo pero no había datos (no se requiere migración)
+          toast({
+            title: '✅ Configuración Guardada',
+            description: `${embeddingConfig.model} (${embeddingConfig.dimension}D) - ${data.data?.message || 'Sin migración necesaria (no había embeddings previos)'}`,
+          });
+          setDimensionWarning(null);
+        } else {
+          // Caso 3: no cambió nada, solo guardó
+          toast({
+            title: '✅ Configuración Guardada',
+            description: `${embeddingConfig.model} (${embeddingConfig.dimension}D) - Threshold: ${(embeddingConfig.similarityThreshold * 100).toFixed(0)}%`
+          });
+          setDimensionWarning(null);
+        }
 
         if (onConfigSaved) onConfigSaved();
       } else {
@@ -295,6 +333,38 @@ export default function EmbeddingsSettings({ onConfigSaved }: EmbeddingsSettings
       });
     } finally {
       setSavingOllama(false);
+    }
+  };
+
+  // Re-embed todos los datos con el modelo actual
+  const handleReembedAll = async () => {
+    setReembedding(true);
+    try {
+      const response = await fetch('/api/embeddings/trigger', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'all' }),
+      });
+      const data = await response.json();
+      if (data.success) {
+        toast({
+          title: '✅ Re-embedding completado',
+          description: 'Todos los vectores han sido regenerados con el modelo actual.',
+        });
+        setDimensionWarning(null);
+        loadLanceDBInfo();
+        if (onConfigSaved) onConfigSaved();
+      } else {
+        throw new Error(data.error || 'Error al re-embed');
+      }
+    } catch (error: any) {
+      toast({
+        title: 'Error en re-embedding',
+        description: error.message,
+        variant: 'destructive',
+      });
+    } finally {
+      setReembedding(false);
     }
   };
 
@@ -651,7 +721,7 @@ export default function EmbeddingsSettings({ onConfigSaved }: EmbeddingsSettings
                 {savingOllama ? (
                   <>
                     <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                    Guardando...
+                    Guardando (migrando BD si cambió el modelo)...
                   </>
                 ) : (
                   <>
@@ -660,6 +730,11 @@ export default function EmbeddingsSettings({ onConfigSaved }: EmbeddingsSettings
                   </>
                 )}
               </Button>
+              <p className="text-xs text-muted-foreground mt-2">
+                Si cambias el modelo y ya hay embeddings almacenados, la base de datos se
+                reiniciará automáticamente y se regenerarán los vectores con el nuevo modelo.
+                Los vectores subidos manualmente se perderán.
+              </p>
             </CardContent>
           </Card>
 
@@ -760,6 +835,73 @@ export default function EmbeddingsSettings({ onConfigSaved }: EmbeddingsSettings
             </CardContent>
           </Card>
 
+          {/* Warning de cambio de modelo detectado */}
+          {dimensionWarning && (
+            <Card className="border-amber-500/50 bg-amber-500/5">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-amber-700 dark:text-amber-400">
+                  <AlertTriangle className="h-5 w-5" />
+                  Cambio de modelo detectado
+                </CardTitle>
+                <CardDescription className="text-amber-700 dark:text-amber-400">
+                  {dimensionWarning}
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Alert className="mb-4 border-amber-500/30 bg-amber-500/10">
+                  <AlertTriangle className="h-4 w-4 text-amber-600" />
+                  <AlertDescription>
+                    Los embeddings existentes tienen una dimensión o modelo distinto al recién guardado.
+                    Las búsquedas pueden fallar o devolver resultados incorrectos.
+                  </AlertDescription>
+                </Alert>
+                <div className="flex flex-wrap gap-2">
+                  <Button onClick={handleReembedAll} disabled={reembedding}>
+                    {reembedding ? <RefreshCw className="h-4 w-4 mr-2 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-2" />}
+                    {reembedding ? 'Re-embedding...' : 'Re-embed todos los datos'}
+                  </Button>
+                  <Button variant="outline" onClick={() => setResetDialogOpen(true)} disabled={resetting}>
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Reiniciar BD (borrar todo)
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground mt-3">
+                  <strong>Re-embed</strong>: regenera los vectores de todos los recursos (mundos, pueblos, edificios, NPCs, sesiones) con el modelo actual.
+                  Los vectores antiguos se eliminan y reemplazan. No afecta a datos subidos manualmente.
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  <strong>Reiniciar BD</strong>: borra TODOS los vectores (incluidos los manuales) y recrea la tabla con la dimensión actual.
+                </p>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Re-embed todos los datos (siempre disponible, no solo cuando hay warning) */}
+          {!dimensionWarning && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <RefreshCw className="h-5 w-5" />
+                  Re-embed todos los datos
+                </CardTitle>
+                <CardDescription>
+                  Regenera los embeddings de todos los recursos (mundos, pueblos, edificios, NPCs, sesiones)
+                  con el modelo actual ({embeddingConfig.model} · {embeddingConfig.dimension}D).
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Button onClick={handleReembedAll} disabled={reembedding || !embeddingConfig.model}>
+                  {reembedding ? <RefreshCw className="h-4 w-4 mr-2 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-2" />}
+                  {reembedding ? 'Re-embedding en curso...' : 'Re-embed todos los datos'}
+                </Button>
+                <p className="text-xs text-muted-foreground mt-2">
+                  Útil después de cambiar el modelo de embeddings, o si los datos fuente han cambiado.
+                  No afecta a vectores subidos manualmente.
+                </p>
+              </CardContent>
+            </Card>
+          )}
+
           {/* Reiniciar Base de Datos */}
           <Card className="border-destructive/50">
             <CardHeader>
@@ -775,7 +917,7 @@ export default function EmbeddingsSettings({ onConfigSaved }: EmbeddingsSettings
               <Alert className="mb-4">
                 <AlertTriangle className="h-4 w-4" />
                 <AlertDescription>
-                  Esta acción eliminará TODOS los embeddings. La BD se recreará con dimensión {embeddingConfig.dimension}D.
+                  Esta acción eliminará TODOS los embeddings (incluidos los manuales). La BD se recreará con dimensión {embeddingConfig.dimension}D.
                 </AlertDescription>
               </Alert>
 

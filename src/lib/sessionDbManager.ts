@@ -1,6 +1,31 @@
 import { db } from './db';
 import { Session, SessionSummaryEntry, ChatMessage } from './types';
 import { sessionSummaryDbManager } from './sessionSummaryDbManager';
+import { getSessionConfig } from './sessionConfig';
+import { scheduleAutoSummary } from './autoSummary';
+
+/**
+ * Aplica el límite de maxMessageHistory a un array de mensajes.
+ * Si la configuración está en 0 o no definida, no aplica límite.
+ * Conserva los mensajes más recientes.
+ */
+function applyMaxMessageHistory(messages: ChatMessage[]): ChatMessage[] {
+  try {
+    const { maxMessageHistory } = getSessionConfig();
+    if (maxMessageHistory && maxMessageHistory > 0 && messages.length > maxMessageHistory) {
+      // Conservar los últimos N mensajes (los más recientes)
+      const truncated = messages.slice(-maxMessageHistory);
+      console.log(
+        `[sessionDbManager] Histórico truncado: ${messages.length} → ${truncated.length} mensajes (maxMessageHistory=${maxMessageHistory})`
+      );
+      return truncated;
+    }
+  } catch (e) {
+    // Si no se puede leer la config, no aplicar límite (mejor perder límite que datos)
+    console.warn('[sessionDbManager] No se pudo leer maxMessageHistory:', (e as Error).message);
+  }
+  return messages;
+}
 
 // Helper para convertir entre modelos de DB y TypeScript
 function toDomainSession(dbSession: any, includeSummary = false): Session {
@@ -245,12 +270,14 @@ export const sessionDbManager = {
 
   /**
    * Agrega un mensaje a la sesión
+   * Aplica maxMessageHistory: si la sesión excede el límite, trunca los mensajes más viejos.
+   * Tras agregar, programa un auto-summary con debounce (si está habilitado en la config).
    */
   async addMessage(id: string, message: ChatMessage): Promise<Session | null> {
     const existing = await this.getById(id);
     if (!existing) return null;
 
-    const updatedMessages = [...existing.messages, message];
+    const updatedMessages = applyMaxMessageHistory([...existing.messages, message]);
 
     const result = await db.session.update({
       where: { id },
@@ -259,18 +286,23 @@ export const sessionDbManager = {
         lastActivity: new Date()
       }
     });
+
+    // Programar auto-summary (debounce de 3s, fire-and-forget)
+    scheduleAutoSummary(id);
 
     return toDomainSession(result, true);
   },
 
   /**
    * Agrega múltiples mensajes a la sesión
+   * Aplica maxMessageHistory: si la sesión excede el límite, trunca los mensajes más viejos.
+   * Tras agregar, programa un auto-summary con debounce (si está habilitado en la config).
    */
   async addMessages(id: string, messages: ChatMessage[]): Promise<Session | null> {
     const existing = await this.getById(id);
     if (!existing) return null;
 
-    const updatedMessages = [...existing.messages, ...messages];
+    const updatedMessages = applyMaxMessageHistory([...existing.messages, ...messages]);
 
     const result = await db.session.update({
       where: { id },
@@ -279,6 +311,9 @@ export const sessionDbManager = {
         lastActivity: new Date()
       }
     });
+
+    // Programar auto-summary (debounce de 3s, fire-and-forget)
+    scheduleAutoSummary(id);
 
     return toDomainSession(result, true);
   },
@@ -296,6 +331,25 @@ export const sessionDbManager = {
         messages: '[]',
         lastActivity: new Date()
       }
+    });
+
+    return toDomainSession(result, true);
+  },
+
+  /**
+   * Reemplaza los mensajes de una sesión por un nuevo array.
+   * Útil para conservar solo los últimos N mensajes tras un resumen.
+   */
+  async updateMessages(id: string, messages: ChatMessage[]): Promise<Session | null> {
+    const existing = await this.getById(id);
+    if (!existing) return null;
+
+    const result = await db.session.update({
+      where: { id },
+      data: {
+        messages: JSON.stringify(messages),
+        lastActivity: new Date(),
+      },
     });
 
     return toDomainSession(result, true);
@@ -366,6 +420,15 @@ export const sessionDbManager = {
    */
   async delete(id: string): Promise<boolean> {
     try {
+      // Eliminar el namespace de la sesión antes de borrarla
+      try {
+        const { namespaceManager } = await import('./namespaceManager');
+        await namespaceManager.deleteEntityNamespace('sesion', id);
+        console.log(`[sessionDbManager.delete] Namespace sesion:${id} eliminado`);
+      } catch (nsErr: any) {
+        console.warn(`[sessionDbManager.delete] No se pudo eliminar namespace:`, nsErr?.message);
+      }
+
       await db.session.delete({
         where: { id }
       });
@@ -377,10 +440,30 @@ export const sessionDbManager = {
   },
 
   /**
-   * Elimina todas las sesiones de un NPC
+   * Elimina todas las sesiones de un NPC (y sus namespaces)
    */
   async deleteByNPCId(npcId: string): Promise<boolean> {
     try {
+      // Obtener los IDs de las sesiones antes de borrarlas para limpiar sus namespaces
+      const sessions = await db.session.findMany({
+        where: { npcId },
+        select: { id: true }
+      });
+
+      // Eliminar namespaces de cada sesión
+      try {
+        const { namespaceManager } = await import('./namespaceManager');
+        for (const s of sessions) {
+          try {
+            await namespaceManager.deleteEntityNamespace('sesion', s.id);
+          } catch (nsErr: any) {
+            console.warn(`[deleteByNPCId] Error eliminando namespace sesion:${s.id}:`, nsErr?.message);
+          }
+        }
+      } catch (importErr: any) {
+        console.warn(`[deleteByNPCId] No se pudo importar namespaceManager:`, importErr?.message);
+      }
+
       await db.session.deleteMany({
         where: { npcId }
       });
@@ -392,10 +475,30 @@ export const sessionDbManager = {
   },
 
   /**
-   * Elimina todas las sesiones de un player
+   * Elimina todas las sesiones de un player (y sus namespaces)
    */
   async deleteByPlayerId(playerId: string): Promise<boolean> {
     try {
+      // Obtener los IDs de las sesiones antes de borrarlas para limpiar sus namespaces
+      const sessions = await db.session.findMany({
+        where: { playerId },
+        select: { id: true }
+      });
+
+      // Eliminar namespaces de cada sesión
+      try {
+        const { namespaceManager } = await import('./namespaceManager');
+        for (const s of sessions) {
+          try {
+            await namespaceManager.deleteEntityNamespace('sesion', s.id);
+          } catch (nsErr: any) {
+            console.warn(`[deleteByPlayerId] Error eliminando namespace sesion:${s.id}:`, nsErr?.message);
+          }
+        }
+      } catch (importErr: any) {
+        console.warn(`[deleteByPlayerId] No se pudo importar namespaceManager:`, importErr?.message);
+      }
+
       await db.session.deleteMany({
         where: { playerId }
       });
@@ -403,6 +506,40 @@ export const sessionDbManager = {
     } catch (error) {
       console.error('Error deleting Sessions by Player:', error);
       return false;
+    }
+  },
+
+  /**
+   * Lista las sesiones inactivas (lastActivity más antigua que el timeout).
+   * @param inactivityTimeoutSeconds segundos de inactividad para considerar una sesión inactiva
+   */
+  async getInactiveSessions(inactivityTimeoutSeconds: number): Promise<Session[]> {
+    const cutoff = new Date(Date.now() - inactivityTimeoutSeconds * 1000);
+    const sessions = await db.session.findMany({
+      where: { lastActivity: { lt: cutoff } },
+      orderBy: { lastActivity: 'asc' },
+    });
+    return sessions.map((s: any) => toDomainSession(s, false));
+  },
+
+  /**
+   * Elimina las sesiones inactivas (lastActivity más antigua que el timeout).
+   * @param inactivityTimeoutSeconds segundos de inactividad para considerar una sesión inactiva
+   * @returns número de sesiones eliminadas
+   */
+  async cleanInactiveSessions(inactivityTimeoutSeconds: number): Promise<number> {
+    const cutoff = new Date(Date.now() - inactivityTimeoutSeconds * 1000);
+    try {
+      const result = await db.session.deleteMany({
+        where: { lastActivity: { lt: cutoff } },
+      });
+      console.log(
+        `[sessionDbManager] Sesiones inactivas eliminadas: ${result.count} (cutoff: ${cutoff.toISOString()})`
+      );
+      return result.count;
+    } catch (error) {
+      console.error('Error cleaning inactive sessions:', error);
+      return 0;
     }
   },
 

@@ -1,0 +1,870 @@
+     1→'use client';
+     2→
+     3→import { useState, useEffect } from 'react';
+     4→import { Plus, Edit2, Trash2, FileUp, FileDown, Code, AlertCircle, CheckCircle, Globe, MapPin, Building, User, ScrollText, Hash, Zap } from 'lucide-react';
+     5→import { Button } from '@/components/ui/button';
+     6→import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+     7→import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+     8→import { Input } from '@/components/ui/input';
+     9→import { Label } from '@/components/ui/label';
+    10→import { Textarea } from '@/components/ui/textarea';
+    11→import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+    12→import { ScrollArea } from '@/components/ui/scroll-area';
+    13→import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+    14→import { Badge } from '@/components/ui/badge';
+    15→import { NPC, World, Pueblo, Edificio, SillyTavernCard, getCardField, JsonResponseConfig } from '@/lib/types';
+    16→import { toast } from '@/hooks/use-toast';
+    17→import NPCBackupSection from './NPCBackupSection';
+    18→import NPCAttributesPanel from './NPCAttributesPanel';
+    19→import ContextoAdicionalPanel from './ContextoAdicionalPanel';
+    20→import NPCActionsPanel from './NPCActionsPanel';
+    21→
+    22→export default function NpcsTab() {
+    23→  const [npcs, setNpcs] = useState<NPC[]>([]);
+    24→  const [worlds, setWorlds] = useState<World[]>([]);
+    25→  const [pueblos, setPueblos] = useState<Pueblo[]>([]);
+    26→  const [edificios, setEdificios] = useState<Edificio[]>([]);
+    27→  const [npcMemories, setNpcMemories] = useState<Record<string, any>>({});
+    28→  const [loading, setLoading] = useState(true);
+    29→  const [editingView, setEditingView] = useState(false);
+    30→  const [importOpen, setImportOpen] = useState(false);
+    31→  const [editingNpc, setEditingNpc] = useState<NPC | null>(null);
+    32→  const [importedCard, setImportedCard] = useState<SillyTavernCard | null>(null);
+    33→  const [formData, setFormData] = useState({
+    34→    id: '',
+    35→    worldId: '',
+    36→    puebloId: '',
+    37→    edificioId: '',
+    38→    cardName: '',
+    39→    cardDescription: '',
+    40→    cardPersonality: '',
+    41→    cardScenario: '',
+    42→    cardFirstMes: '',
+    43→    cardMesExample: '',
+    44→    cardSystemPrompt: '',
+    45→    cardPostHistoryInstructions: '',
+    46→    cardCreatorNotes: '',
+    47→    cardAlternateGreetings: ''
+    48→  });
+    49→
+    50→  // Estado para configuración JSON
+    51→  const [jsonConfig, setJsonConfig] = useState<JsonResponseConfig>({
+    52→    enabled: false,
+    53→    schema: null,
+    54→    exampleResponse: null,
+    55→    fallbackResponse: null,
+    56→    correctionPrompt: null,
+    57→    maxRetries: 2
+    58→  });
+    59→  const [jsonConfigLoading, setJsonConfigLoading] = useState(false);
+    60→
+    61→  useEffect(() => {
+    62→    fetchData();
+    63→  }, []);
+    64→
+    65→  const fetchData = async () => {
+    66→    try {
+    67→      setLoading(true);
+    68→      const [npcsRes, worldsRes, pueblosRes, edificiosRes] = await Promise.all([
+    69→        fetch('/api/npcs'),
+    70→        fetch('/api/worlds'),
+    71→        fetch('/api/pueblos'),
+    72→        fetch('/api/edificios')
+    73→      ]);
+    74→      const npcsResult = await npcsRes.json();
+    75→      const worldsResult = await worldsRes.json();
+    76→      const pueblosResult = await pueblosRes.json();
+    77→      const edificiosResult = await edificiosRes.json();
+    78→
+    79→      if (npcsResult.success) {
+    80→        setNpcs(npcsResult.data);
+    81→        
+    82→        // Cargar memorias de los NPCs en paralelo
+    83→        const memoryPromises = npcsResult.data.map((npc: NPC) => 
+    84→          fetch(`/api/npcs/${npc.id}/memory`)
+    85→        );
+    86→        const memoryResponses = await Promise.all(memoryPromises);
+    87→        const memories: Record<string, any> = {};
+    88→        for (let i = 0; i < memoryResponses.length; i++) {
+    89→          const memoryResult = await memoryResponses[i].json();
+    90→          if (memoryResult.success && memoryResult.data.memory) {
+    91→            memories[npcsResult.data[i].id] = memoryResult.data.memory;
+    92→          }
+    93→        }
+    94→        setNpcMemories(memories);
+    95→      }
+    96→      if (worldsResult.success) setWorlds(worldsResult.data);
+    97→      if (pueblosResult.success) setPueblos(pueblosResult.data);
+    98→      if (edificiosResult.success) setEdificios(edificiosResult.data);
+    99→    } catch (error) {
+   100→      console.error('Error fetching data:', error);
+   101→      toast({
+   102→        title: 'Error',
+   103→        description: 'No se pudieron cargar los datos',
+   104→        variant: 'destructive'
+   105→      });
+   106→    } finally {
+   107→      setLoading(false);
+   108→    }
+   109→  };
+   110→
+   111→  const handleCreate = () => {
+   112→    setEditingNpc(null);
+   113→    setImportedCard(null);
+   114→    setFormData({
+   115→      id: '',
+   116→      worldId: '',
+   117→      puebloId: 'none',
+   118→      edificioId: 'none',
+   119→      cardName: '',
+   120→      cardDescription: '',
+   121→      cardPersonality: '',
+   122→      cardScenario: '',
+   123→      cardFirstMes: '',
+   124→      cardMesExample: '',
+   125→      cardSystemPrompt: '',
+   126→      cardPostHistoryInstructions: '',
+   127→      cardCreatorNotes: '',
+   128→      cardAlternateGreetings: ''
+   129→    });
+   130→    setEditingView(true);
+   131→    setImportedCard(null);
+   132→  };
+   133→
+   134→  const handleEdit = async (npc: NPC) => {
+   135→    setEditingNpc(npc);
+   136→    setImportedCard(npc.card);
+   137→    setImportOpen(false);
+   138→    // Limpiar importedCard para que al cerrar el diálogo de importación
+   139→    setImportedCard(null);
+   140→    setFormData({
+   141→      id: npc.id,
+   142→      worldId: npc.location.worldId,
+   143→      puebloId: npc.location.puebloId || 'none',
+   144→      edificioId: npc.location.edificioId || 'none',
+   145→      cardName: getCardField(npc.card, 'name', ''),
+   146→      cardDescription: getCardField(npc.card, 'description', ''),
+   147→      cardPersonality: getCardField(npc.card, 'personality', ''),
+   148→      cardScenario: getCardField(npc.card, 'scenario', ''),
+   149→      cardFirstMes: getCardField(npc.card, 'first_mes', ''),
+   150→      cardMesExample: getCardField(npc.card, 'mes_example', ''),
+   151→      cardSystemPrompt: getCardField(npc.card, 'system_prompt', ''),
+   152→      cardPostHistoryInstructions: getCardField(npc.card, 'post_history_instructions', ''),
+   153→      cardCreatorNotes: getCardField(npc.card, 'creator_notes', ''),
+   154→      cardAlternateGreetings: (getCardField(npc.card, 'alternate_greetings', []) || []).join('\n')
+   155→    });
+   156→    
+   157→    // Cargar configuración JSON del NPC
+   158→    await loadJsonConfig(npc.id);
+   159→    
+   160→    setEditingView(true);
+   161→  };
+   162→
+   163→  const loadJsonConfig = async (npcId: string) => {
+   164→    try {
+   165→      setJsonConfigLoading(true);
+   166→      const response = await fetch(`/api/npcs/${npcId}/json-config`);
+   167→      const result = await response.json();
+   168→      if (result.success) {
+   169→        setJsonConfig(result.data);
+   170→      }
+   171→    } catch (error) {
+   172→      console.error('Error loading JSON config:', error);
+   173→    } finally {
+   174→      setJsonConfigLoading(false);
+   175→    }
+   176→  };
+   177→
+   178→  const handleSaveJsonConfig = async () => {
+   179→    if (!editingNpc) return;
+   180→    
+   181→    try {
+   182→      const response = await fetch(`/api/npcs/${editingNpc.id}/json-config`, {
+   183→        method: 'POST',
+   184→        headers: { 'Content-Type': 'application/json' },
+   185→        body: JSON.stringify(jsonConfig)
+   186→      });
+   187→      const result = await response.json();
+   188→      
+   189→      if (result.success) {
+   190→        toast({
+   191→          title: 'Éxito',
+   192→          description: 'Configuración JSON guardada correctamente'
+   193→        });
+   194→      } else {
+   195→        throw new Error(result.error);
+   196→      }
+   197→    } catch (error) {
+   198→      console.error('Error saving JSON config:', error);
+   199→      toast({
+   200→        title: 'Error',
+   201→        description: 'No se pudo guardar la configuración JSON',
+   202→        variant: 'destructive'
+   203→      });
+   204→    }
+   205→  };
+   206→
+   207→  const handleDelete = async (id: string) => {
+   208→    if (!confirm('¿Estás seguro de que deseas eliminar este NPC?')) return;
+   209→
+   210→    try {
+   211→      const response = await fetch(`/api/npcs/${id}`, {
+   212→        method: 'DELETE'
+   213→      });
+   214→      const result = await response.json();
+   215→
+   216→      if (result.success) {
+   217→        toast({
+   218→          title: 'Éxito',
+   219→          description: 'NPC eliminado correctamente'
+   220→        });
+   221→        fetchData();
+   222→      }
+   223→    } catch (error) {
+   224→      console.error('Error deleting NPC:', error);
+   225→      toast({
+   226→        title: 'Error',
+   227→        description: 'No se pudo eliminar el NPC',
+   228→        variant: 'destructive'
+   229→      });
+   230→    }
+   231→  };
+   232→
+   233→  const handleExport = (npc: NPC) => {
+   234→    const dataStr = JSON.stringify(npc.card, null, 2);
+   235→    const blob = new Blob([dataStr], { type: 'application/json' });
+   236→    const url = URL.createObjectURL(blob);
+   237→    const link = document.createElement('a');
+   238→    link.href = url;
+   239→    const cardName = getCardField(npc.card, 'name', 'unknown');
+   240→    link.download = `${cardName.replace(/\s+/g, '_')}_card.json`;
+   241→    link.click();
+   242→    URL.revokeObjectURL(url);
+   243→    toast({
+   244→      title: 'Éxito',
+   245→      description: 'Tarjeta exportada correctamente'
+   246→    });
+   247→  };
+   248→
+   249→  const handleImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
+   250→    const file = event.target.files?.[0];
+   251→    if (!file) return;
+   252→
+   253→    try {
+   254→      const text = await file.text();
+   255→      const card = JSON.parse(text) as SillyTavernCard;
+   256→
+   257→      // Get name from either data or top level
+   258→      const cardName = getCardField(card, 'name', '');
+   259→
+   260→      if (!cardName) {
+   261→        throw new Error('La tarjeta no tiene un nombre válido');
+   262→      }
+   263→
+   264→      // Importar la card y limpiar el formulario para crear un NUEVO NPC
+   265→      setImportedCard(card);
+   266→      setFormData({
+   267→        id: '',
+   268→        worldId: '',
+   269→        puebloId: 'none',
+   270→        edificioId: 'none',
+   271→        cardName: cardName,
+   272→        cardDescription: getCardField(card, 'description', ''),
+   273→        cardPersonality: getCardField(card, 'personality', ''),
+   274→        cardScenario: getCardField(card, 'scenario', ''),
+   275→        cardFirstMes: getCardField(card, 'first_mes', ''),
+   276→        cardMesExample: getCardField(card, 'mes_example', ''),
+   277→        cardSystemPrompt: getCardField(card, 'system_prompt', ''),
+   278→        cardPostHistoryInstructions: getCardField(card, 'post_history_instructions', ''),
+   279→        cardCreatorNotes: getCardField(card, 'creator_notes', ''),
+   280→        cardAlternateGreetings: (getCardField(card, 'alternate_greetings', []) || []).join('\n')
+   281→      });
+   282→      setEditingView(true);
+   283→      setImportOpen(false);
+   284→      toast({
+   285→        title: 'Tarjeta importada',
+   286→        description: `Tarjeta de ${cardName} importada. Lista para crear un nuevo NPC`
+   287→      });
+   288→    } catch (error) {
+   289→      console.error('Error importing card:', error);
+   290→      toast({
+   291→        title: 'Error',
+   292→        description: error instanceof Error ? error.message : 'No se pudo importar la tarjeta',
+   293→        variant: 'destructive'
+   294→      });
+   295→    }
+   296→  };
+   297→
+   298→  const handleSubmit = async () => {
+   299→    if (!formData.cardName) {
+   300→      toast({
+   301→        title: 'Error',
+   302→        description: 'El nombre del personaje es obligatorio',
+   303→        variant: 'destructive'
+   304→      });
+   305→      return;
+   306→    }
+   307→
+   308→    try {
+   309→      // Build the card, preserving existing fields if editing
+   310→      const existingCard = editingNpc?.card || {};
+   311→      const alternateGreetings = formData.cardAlternateGreetings
+   312→        .split('\n')
+   313→        .filter(g => g.trim())
+   314→        .map(g => g.trim());
+   315→
+   316→      const card: SillyTavernCard = {
+   317→        ...existingCard,
+   318→        spec: existingCard.spec || 'chara_card_v3',
+   319→        spec_version: existingCard.spec_version || '3.0',
+   320→        data: {
+   321→          ...(existingCard.data || {}),
+   322→          name: formData.cardName,
+   323→          description: formData.cardDescription,
+   324→          personality: formData.cardPersonality,
+   325→          scenario: formData.cardScenario,
+   326→          first_mes: formData.cardFirstMes,
+   327→          mes_example: formData.cardMesExample,
+   328→          system_prompt: formData.cardSystemPrompt,
+   329→          post_history_instructions: formData.cardPostHistoryInstructions,
+   330→          creator_notes: formData.cardCreatorNotes,
+   331→          alternate_greetings: alternateGreetings.length > 0 ? alternateGreetings : undefined
+   332→        },
+   333→        // Top level fields for compatibility
+   334→        name: formData.cardName,
+   335→        description: formData.cardDescription,
+   336→        personality: formData.cardPersonality,
+   337→        scenario: formData.cardScenario,
+   338→        first_mes: formData.cardFirstMes,
+   339→        mes_example: formData.cardMesExample,
+   340→        system_prompt: formData.cardSystemPrompt,
+   341→        post_history_instructions: formData.cardPostHistoryInstructions,
+   342→        creator_notes: formData.cardCreatorNotes,
+   343→        alternate_greetings: alternateGreetings.length > 0 ? alternateGreetings : undefined,
+   344→        create_date: existingCard.create_date || new Date().toISOString()
+   345→      };
+   346→
+   347→      const payload = {
+   348→        id: formData.id || undefined,
+   349→        location: {
+   350→          scope: formData.edificioId && formData.edificioId !== 'none' ? 'edificio' as const : formData.puebloId && formData.puebloId !== 'none' ? 'pueblo' as const : 'mundo' as const,
+   351→          worldId: formData.worldId,
+   352→          puebloId: formData.puebloId && formData.puebloId !== 'none' ? formData.puebloId : undefined,
+   353→          edificioId: formData.edificioId && formData.edificioId !== 'none' ? formData.edificioId : undefined
+   354→        },
+   355→        card
+   356→      };
+   357→
+   358→      const url = editingNpc ? `/api/npcs/${editingNpc.id}` : '/api/npcs';
+   359→      const method = editingNpc ? 'PUT' : 'POST';
+   360→
+   361→      const response = await fetch(url, {
+   362→        method,
+   363→        headers: { 'Content-Type': 'application/json' },
+   364→        body: JSON.stringify(payload)
+   365→      });
+   366→
+   367→      const result = await response.json();
+   368→
+   369→      if (result.success) {
+   370→        toast({
+   371→          title: 'Éxito',
+   372→          description: editingNpc ? 'NPC actualizado' : 'NPC creado'
+   373→        });
+   374→        setEditingView(false);
+   375→        fetchData();
+   376→      } else {
+   377→        throw new Error(result.error || 'No se pudo guardar el NPC');
+   378→      }
+   379→    } catch (error) {
+   380→      console.error('Error saving NPC:', error);
+   381→      toast({
+   382→        title: 'Error',
+   383→        description: error instanceof Error ? error.message : 'No se pudo guardar el NPC',
+   384→        variant: 'destructive'
+   385→      });
+   386→    }
+   387→  };
+   388→
+   389→  const filteredPueblos = pueblos.filter(p => p.worldId === formData.worldId);
+   390→  const filteredEdificios = edificios.filter(e => e.puebloId === formData.puebloId);
+   391→
+   392→  if (loading) {
+   393→    return (
+   394→      <div className="flex items-center justify-center h-96">
+   395→        <p className="text-muted-foreground">Cargando NPCs...</p>
+   396→      </div>
+   397→    );
+   398→  }
+   399→
+   400→  // ====== Vista de edición full-screen con panel lateral ======
+   401→  if (editingView) {
+   402→    return (
+   403→      <div className="flex flex-col h-[calc(100vh-200px)]">
+   404→        {/* Header de la vista de edición */}
+   405→        <div className="flex items-center justify-between mb-4 flex-shrink-0">
+   406→          <div className="flex items-center gap-3">
+   407→            <Button
+   408→              variant="ghost"
+   409→              size="sm"
+   410→              onClick={() => setEditingView(false)}
+   411→            >
+   412→              ← Volver
+   413→            </Button>
+   414→            <div>
+   415→              <h2 className="text-xl font-bold">
+   416→                {editingNpc && !importedCard ? 'Editar NPC' : 'Crear Nuevo NPC'}
+   417→              </h2>
+   418→              <p className="text-sm text-muted-foreground">
+   419→                {editingNpc ? 'Actualiza la información del NPC' : 'Completa la información del nuevo NPC'}
+   420→              </p>
+   421→            </div>
+   422→          </div>
+   423→          <div className="flex gap-2">
+   424→            <Button variant="outline" onClick={() => setEditingView(false)}>
+   425→              Cancelar
+   426→            </Button>
+   427→            <Button onClick={handleSubmit}>
+   428→              {editingNpc ? 'Actualizar NPC' : 'Crear NPC'}
+   429→            </Button>
+   430→          </div>
+   431→        </div>
+   432→
+   433→        {/* Contenido: panel lateral + formulario (una sola Tabs con layout flex horizontal) */}
+   434→        <Tabs defaultValue="basic" className="flex flex-row gap-4 flex-1 min-h-0 w-full">
+   435→          {/* Panel lateral con tabs verticales */}
+   436→          <div className="w-52 flex-shrink-0 border-r pr-1">
+   437→            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground px-3 pt-3 pb-2">
+   438→              Secciones
+   439→            </p>
+   440→            <TabsList className="flex flex-col h-auto gap-1 bg-transparent p-2 w-full">
+   441→              <TabsTrigger value="basic" className="justify-start w-full data-[state=active]:bg-accent">Básico</TabsTrigger>
+   442→              <TabsTrigger value="advanced" className="justify-start w-full data-[state=active]:bg-accent">Avanzado</TabsTrigger>
+   443→              <TabsTrigger value="location" className="justify-start w-full data-[state=active]:bg-accent">Ubicación</TabsTrigger>
+   444→              <TabsTrigger value="attributes" className="justify-start w-full flex items-center gap-1.5 data-[state=active]:bg-accent">
+   445→                <Hash className="h-3 w-3" />
+   446→                Atributos
+   447→              </TabsTrigger>
+   448→              <TabsTrigger value="contextos" className="justify-start w-full flex items-center gap-1.5 data-[state=active]:bg-accent">
+   449→                <MapPin className="h-3 w-3" />
+   450→                Contextos
+   451→              </TabsTrigger>
+   452→              <TabsTrigger value="actions" className="justify-start w-full flex items-center gap-1.5 data-[state=active]:bg-accent">
+   453→                <Zap className="h-3 w-3" />
+   454→                Acciones
+   455→              </TabsTrigger>
+   456→            </TabsList>
+   457→          </div>
+   458→
+   459→          {/* Contenido del formulario (scroll independiente) */}
+   460→          <div className="flex-1 min-h-0 overflow-y-auto pr-2">
+   461→            <TabsContent value="basic" className="mt-0 p-6 space-y-4">
+   462→              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+   463→                <div>
+   464→                  <Label htmlFor="npcId">ID del NPC (UUID de Minecraft)</Label>
+   465→                  <Input
+   466→                    id="npcId"
+   467→                    value={formData.id}
+   468→                    onChange={(e) => setFormData({ ...formData, id: e.target.value })}
+   469→                    placeholder="Ej: 550e8400-e29b-41d4-a716-446655440000 (opcional)"
+   470→                  />
+   471→                  <p className="text-xs text-muted-foreground mt-1">
+   472→                    Si se deja vacío, se generará un ID automáticamente
+   473→                  </p>
+   474→                </div>
+   475→                <div>
+   476→                  <Label htmlFor="cardName">Nombre del Personaje *</Label>
+   477→                  <Input
+   478→                    id="cardName"
+   479→                    value={formData.cardName}
+   480→                    onChange={(e) => setFormData({ ...formData, cardName: e.target.value })}
+   481→                    placeholder="Ej: Sharam Hrafnmyrk"
+   482→                  />
+   483→                </div>
+   484→              </div>
+   485→              <div>
+   486→                <Label htmlFor="cardDescription">Descripción</Label>
+   487→                <Textarea
+   488→                  id="cardDescription"
+   489→                  value={formData.cardDescription}
+   490→                  onChange={(e) => setFormData({ ...formData, cardDescription: e.target.value })}
+   491→                  placeholder="Describe al personaje"
+   492→                  rows={6}
+   493→                  className="w-full"
+   494→                />
+   495→              </div>
+   496→              <div>
+   497→                <Label htmlFor="cardPersonality">Personalidad</Label>
+   498→                <Textarea
+   499→                  id="cardPersonality"
+   500→                  value={formData.cardPersonality}
+   501→                  onChange={(e) => setFormData({ ...formData, cardPersonality: e.target.value })}
+   502→                  placeholder="Describe la personalidad del personaje"
+   503→                  rows={6}
+   504→                  className="w-full"
+   505→                />
+   506→              </div>
+   507→              <div>
+   508→                <Label htmlFor="cardScenario">Escenario</Label>
+   509→                <Textarea
+   510→                  id="cardScenario"
+   511→                  value={formData.cardScenario}
+   512→                  onChange={(e) => setFormData({ ...formData, cardScenario: e.target.value })}
+   513→                  placeholder="Describe el escenario o contexto del personaje"
+   514→                  rows={5}
+   515→                  className="w-full"
+   516→                />
+   517→              </div>
+   518→            </TabsContent>
+   519→
+   520→            <TabsContent value="advanced" className="mt-0 p-6 space-y-4">
+   521→              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+   522→                <div>
+   523→                  <Label htmlFor="cardFirstMes">Primer Mensaje</Label>
+   524→                  <Textarea
+   525→                    id="cardFirstMes"
+   526→                    value={formData.cardFirstMes}
+   527→                    onChange={(e) => setFormData({ ...formData, cardFirstMes: e.target.value })}
+   528→                    placeholder="El primer mensaje que enviará el personaje"
+   529→                    rows={5}
+   530→                    className="w-full"
+   531→                  />
+   532→                </div>
+   533→                <div>
+   534→                  <Label htmlFor="cardMesExample">Ejemplo de Mensaje</Label>
+   535→                  <Textarea
+   536→                    id="cardMesExample"
+   537→                    value={formData.cardMesExample}
+   538→                    onChange={(e) => setFormData({ ...formData, cardMesExample: e.target.value })}
+   539→                    placeholder="Ejemplo de cómo responde el personaje"
+   540→                    rows={5}
+   541→                    className="w-full"
+   542→                  />
+   543→                </div>
+   544→              </div>
+   545→              <div>
+   546→                <Label htmlFor="cardSystemPrompt">System Prompt</Label>
+   547→                <Textarea
+   548→                  id="cardSystemPrompt"
+   549→                  value={formData.cardSystemPrompt}
+   550→                  onChange={(e) => setFormData({ ...formData, cardSystemPrompt: e.target.value })}
+   551→                  placeholder="Instrucciones específicas para el sistema"
+   552→                  rows={10}
+   553→                  className="w-full"
+   554→                />
+   555→              </div>
+   556→              <div>
+   557→                <Label htmlFor="cardPostHistoryInstructions">Instrucciones Post-Historial</Label>
+   558→                <Textarea
+   559→                  id="cardPostHistoryInstructions"
+   560→                  value={formData.cardPostHistoryInstructions}
+   561→                  onChange={(e) => setFormData({ ...formData, cardPostHistoryInstructions: e.target.value })}
+   562→                  placeholder="Instrucciones después de historial de chat"
+   563→                  rows={5}
+   564→                  className="w-full"
+   565→                />
+   566→              </div>
+   567→              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+   568→                <div>
+   569→                  <Label htmlFor="cardCreatorNotes">Notas del Creador</Label>
+   570→                  <Textarea
+   571→                    id="cardCreatorNotes"
+   572→                    value={formData.cardCreatorNotes}
+   573→                    onChange={(e) => setFormData({ ...formData, cardCreatorNotes: e.target.value })}
+   574→                    placeholder="Notas sobre el personaje (no visibles en el rol)"
+   575→                    rows={4}
+   576→                    className="w-full"
+   577→                  />
+   578→                </div>
+   579→                <div>
+   580→                  <Label htmlFor="cardAlternateGreetings">Saludos Alternativos (uno por línea)</Label>
+   581→                  <Textarea
+   582→                    id="cardAlternateGreetings"
+   583→                    value={formData.cardAlternateGreetings}
+   584→                    onChange={(e) => setFormData({ ...formData, cardAlternateGreetings: e.target.value })}
+   585→                    placeholder="Cada saludo en una línea nueva"
+   586→                    rows={4}
+   587→                    className="w-full"
+   588→                  />
+   589→                </div>
+   590→              </div>
+   591→            </TabsContent>
+   592→
+   593→            <TabsContent value="location" className="mt-0 p-6 space-y-4">
+   594→              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+   595→                <div>
+   596→                  <Label htmlFor="worldId">Mundo *</Label>
+   597→                  <Select
+   598→                    value={formData.worldId}
+   599→                    onValueChange={(value) => setFormData({ ...formData, worldId: value, puebloId: 'none', edificioId: 'none' })}
+   600→                  >
+   601→                    <SelectTrigger>
+   602→                      <SelectValue placeholder="Selecciona un mundo" />
+   603→                    </SelectTrigger>
+   604→                    <SelectContent>
+   605→                      {worlds.map((world) => (
+   606→                        <SelectItem key={world.id} value={world.id}>
+   607→                          {world.name}
+   608→                        </SelectItem>
+   609→                      ))}
+   610→                    </SelectContent>
+   611→                  </Select>
+   612→                </div>
+   613→                <div>
+   614→                  <Label htmlFor="puebloId">Pueblo (opcional)</Label>
+   615→                  <Select
+   616→                    value={formData.puebloId}
+   617→                    onValueChange={(value) => setFormData({ ...formData, puebloId: value, edificioId: 'none' })}
+   618→                    disabled={!formData.worldId}
+   619→                  >
+   620→                    <SelectTrigger>
+   621→                      <SelectValue placeholder="Selecciona un pueblo" />
+   622→                    </SelectTrigger>
+   623→                    <SelectContent>
+   624→                      <SelectItem value="none">Ninguno</SelectItem>
+   625→                      {filteredPueblos.map((pueblo) => (
+   626→                        <SelectItem key={pueblo.id} value={pueblo.id}>
+   627→                          {pueblo.name}
+   628→                        </SelectItem>
+   629→                      ))}
+   630→                    </SelectContent>
+   631→                  </Select>
+   632→                </div>
+   633→                <div>
+   634→                  <Label htmlFor="edificioId">Edificio (opcional)</Label>
+   635→                  <Select
+   636→                    value={formData.edificioId}
+   637→                    onValueChange={(value) => setFormData({ ...formData, edificioId: value })}
+   638→                    disabled={!formData.puebloId || formData.puebloId === 'none'}
+   639→                  >
+   640→                    <SelectTrigger>
+   641→                      <SelectValue placeholder="Selecciona un edificio" />
+   642→                    </SelectTrigger>
+   643→                    <SelectContent>
+   644→                      <SelectItem value="none">Ninguno</SelectItem>
+   645→                      {filteredEdificios.map((edificio) => (
+   646→                        <SelectItem key={edificio.id} value={edificio.id}>
+   647→                          {edificio.name}
+   648→                        </SelectItem>
+   649→                      ))}
+   650→                    </SelectContent>
+   651→                  </Select>
+   652→                </div>
+   653→              </div>
+   654→            </TabsContent>
+   655→
+   656→            <TabsContent value="attributes" className="mt-0 p-6 space-y-4">
+   657→              <NPCAttributesPanel
+   658→                npcId={editingNpc?.id ?? null}
+   659→                disabled={!editingNpc}
+   660→              />
+   661→            </TabsContent>
+   662→
+   663→            <TabsContent value="contextos" className="mt-0 p-6 space-y-4">
+   664→              <ContextoAdicionalPanel
+   665→                entityType="npc"
+   666→                entityId={editingNpc?.id ?? null}
+   667→                disabled={!editingNpc}
+   668→              />
+   669→            </TabsContent>
+   670→
+   671→            <TabsContent value="actions" className="mt-0 p-6 space-y-4">
+   672→              <NPCActionsPanel
+   673→                npcId={editingNpc?.id ?? null}
+   674→                disabled={!editingNpc}
+   675→              />
+   676→            </TabsContent>
+   677→          </div>
+   678→        </Tabs>
+   679→      </div>
+   680→    );
+   681→  }
+   682→
+   683→  // ====== Vista normal (lista de NPCs) ======
+   684→  return (
+   685→    <div className="space-y-4">
+   686→      <div className="flex items-center justify-between">
+   687→        <div>
+   688→          <h2 className="text-2xl font-bold">NPCs</h2>
+   689→          <p className="text-muted-foreground">Gestiona los personajes (SillyTavern compatible)</p>
+   690→        </div>
+   691→        <div className="flex gap-2">
+   692→          <Button variant="outline" onClick={() => setImportOpen(true)}>
+   693→            <FileUp className="h-4 w-4 mr-2" />
+   694→            Importar
+   695→          </Button>
+   696→          <Button onClick={handleCreate}>
+   697→            <Plus className="h-4 w-4 mr-2" />
+   698→            Crear NPC
+   699→          </Button>
+   700→        </div>
+   701→      </div>
+   702→
+   703→      <ScrollArea className="h-[calc(100vh-300px)]">
+   704→        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 pr-4">
+   705→          {npcs.map((npc) => {
+   706→            const world = worlds.find(w => w.id === npc.location.worldId);
+   707→            const pueblo = pueblos.find(p => p.id === npc.location.puebloId);
+   708→            const edificio = edificios.find(e => e.id === npc.location.edificioId);
+   709→            const cardName = getCardField(npc.card, 'name', 'Unknown');
+   710→            const cardPersonality = getCardField(npc.card, 'personality', '');
+   711→            const cardDescription = getCardField(npc.card, 'description', '');
+   712→            const cardAvatar = getCardField(npc.card, 'avatar', null);
+   713→            const jsonEnabled = npc.card?.data?.extensions?.jsonResponse?.enabled || npc.card?.extensions?.jsonResponse?.enabled || false;
+   714→
+   715→            return (
+   716→              <Card key={npc.id} className="overflow-hidden">
+   717→                <CardHeader className="pb-2">
+   718→                  <CardTitle className="flex items-center justify-between text-lg">
+   719→                    <div className="flex items-center gap-2 min-w-0">
+   720→                      {cardAvatar ? (
+   721→                        <img 
+   722→                          src={cardAvatar} 
+   723→                          alt={cardName}
+   724→                          className="w-8 h-8 rounded-full object-cover border-2 border-muted"
+   725→                        />
+   726→                      ) : (
+   727→                        <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center border-2 border-muted">
+   728→                          <User className="h-4 w-4 text-muted-foreground" />
+   729→                        </div>
+   730→                      )}
+   731→                      <span className="truncate">{cardName}</span>
+   732→                    </div>
+   733→                    <div className="flex gap-1 flex-shrink-0">
+   734→                      {jsonEnabled && (
+   735→                        <Badge variant="default" className="bg-green-600 text-xs px-1.5">
+   736→                          JSON
+   737→                        </Badge>
+   738→                      )}
+   739→                      <Button
+   740→                        variant="ghost"
+   741→                        size="sm"
+   742→                        onClick={() => handleExport(npc)}
+   743→                        title="Exportar tarjeta"
+   744→                        className="h-7 w-7 p-0"
+   745→                      >
+   746→                        <FileDown className="h-3.5 w-3.5" />
+   747→                      </Button>
+   748→                      <Button
+   749→                        variant="ghost"
+   750→                        size="sm"
+   751→                        onClick={() => handleEdit(npc)}
+   752→                        className="h-7 w-7 p-0"
+   753→                      >
+   754→                        <Edit2 className="h-3.5 w-3.5" />
+   755→                      </Button>
+   756→                      <Button
+   757→                        variant="ghost"
+   758→                        size="sm"
+   759→                        onClick={() => handleDelete(npc.id)}
+   760→                        className="h-7 w-7 p-0"
+   761→                      >
+   762→                        <Trash2 className="h-3.5 w-3.5 text-destructive" />
+   763→                      </Button>
+   764→                    </div>
+   765→                  </CardTitle>
+   766→                </CardHeader>
+   767→                <CardContent className="overflow-hidden">
+   768→                  <div className="max-h-80 overflow-y-auto space-y-3 pr-1 custom-scrollbar">
+   769→                    {/* Ubicación jerárquica */}
+   770→                    <div className="space-y-1.5">
+   771→                      {/* Mundo */}
+   772→                      <div className="flex items-center gap-2 text-sm">
+   773→                        <Globe className="h-3.5 w-3.5 text-indigo-500 flex-shrink-0" />
+   774→                        <span className="text-muted-foreground truncate">{world?.name || 'Mundo desconocido'}</span>
+   775→                      </div>
+   776→                      
+   777→                      {/* Región (si existe) */}
+   778→                      {pueblo && (
+   779→                        <div className="flex items-center gap-2 text-sm ml-4">
+   780→                          <MapPin className="h-3.5 w-3.5 text-green-500 flex-shrink-0" />
+   781→                          <span className="text-muted-foreground truncate">{pueblo.name}</span>
+   782→                          <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4">
+   783→                            {pueblo.type === 'nacion' ? 'Nación' : 'Pueblo'}
+   784→                          </Badge>
+   785→                        </div>
+   786→                      )}
+   787→                      
+   788→                      {/* Edificio (si existe) */}
+   789→                      {edificio && (
+   790→                        <div className="flex items-center gap-2 text-sm ml-8">
+   791→                          <Building className="h-3.5 w-3.5 text-orange-500 flex-shrink-0" />
+   792→                          <span className="text-muted-foreground truncate">{edificio.name}</span>
+   793→                        </div>
+   794→                      )}
+   795→                    </div>
+   796→
+   797→                    {/* ID y Scope */}
+   798→                    <div className="flex items-center gap-2 text-xs">
+   799→                      <span className="font-mono bg-muted/50 px-2 py-0.5 rounded border-2 border-[#2C2923] text-[#83673D]">
+   800→                        {npc.id}
+   801→                      </span>
+   802→                      <span className="text-muted-foreground">•</span>
+   803→                      <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">
+   804→                        {npc.location.scope}
+   805→                      </Badge>
+   806→                    </div>
+   807→
+   808→                    {/* Personalidad */}
+   809→                    {cardPersonality && (
+   810→                      <div>
+   811→                        <p className="text-sm font-medium mb-1 flex items-center gap-1.5">
+   812→                          <User className="h-3.5 w-3.5 text-muted-foreground" />
+   813→                          Personalidad
+   814→                        </p>
+   815→                        <p className="text-sm text-muted-foreground line-clamp-3">{cardPersonality}</p>
+   816→                      </div>
+   817→                    )}
+   818→
+   819→                    {/* Descripción */}
+   820→                    {cardDescription && (
+   821→                      <div>
+   822→                        <p className="text-sm font-medium mb-1">Descripción</p>
+   823→                        <p className="text-sm text-muted-foreground line-clamp-2">{cardDescription}</p>
+   824→                      </div>
+   825→                    )}
+   826→
+   827→                    {/* Resumen consolidado */}
+   828→                    {npcMemories[npc.id]?.consolidatedSummary && (
+   829→                      <div className="mt-2 p-3 rounded-lg bg-indigo-50 dark:bg-indigo-950 border border-indigo-200 dark:border-indigo-800">
+   830→                        <p className="text-xs font-semibold text-indigo-900 dark:text-indigo-100 mb-1 flex items-center gap-1.5">
+   831→                          <ScrollText className="h-3 w-3" />
+   832→                          Último Resumen
+   833→                        </p>
+   834→                        <p className="text-sm text-indigo-800 dark:text-indigo-200 line-clamp-3">
+   835→                          {npcMemories[npc.id].consolidatedSummary}
+   836→                        </p>
+   837→                      </div>
+   838→                    )}
+   839→                  </div>
+   840→                </CardContent>
+   841→              </Card>
+   842→            );
+   843→          })}
+   844→        </div>
+   845→      </ScrollArea>
+   846→
+   847→      <Dialog open={importOpen} onOpenChange={setImportOpen}>
+   848→        <DialogContent>
+   849→          <DialogHeader>
+   850→            <DialogTitle>Importar Tarjeta SillyTavern</DialogTitle>
+   851→            <DialogDescription>
+   852→              Importa una tarjeta de personaje en formato JSON de SillyTavern (v3 compatible)
+   853→            </DialogDescription>
+   854→          </DialogHeader>
+   855→          <div>
+   856→            <Input
+   857→              type="file"
+   858→              accept=".json"
+   859→              onChange={handleImport}
+   860→            />
+   861→          </div>
+   862→        </DialogContent>
+   863→      </Dialog>
+   864→
+   865→
+   866→      <NPCBackupSection />
+   867→    </div>
+   868→  );
+   869→}
+   870→

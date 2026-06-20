@@ -1,0 +1,59 @@
+{
+  "key": "test_list_cond_1781926453",
+  "nombre": "Test Condicional Lista",
+  "plantilla": "",
+  "categoria": "npc",
+  "tipo": "plantilla",
+  "templateType": "condicional",
+  "conditionalConfig": {
+    "npcId": "NPC_1768826192806",
+    "branches": [
+      {
+        "id": "branch_mercado",
+        "name": "Le gusta el mercado (no deberia coincidir)",
+        "combinator": "AND",
+        "conditions": [
+          {
+            "id": "c0",
+            "attributeKey": "ubicaciones_fav",
+            "operator": "in_list",
+            "value": "mercado"
+          }
+        ],
+        "template": "Al NPC le gusta el mercado. (no deberia aparecer)"
+      },
+      {
+        "id": "branch_templo",
+        "name": "Le gusta el templo",
+        "combinator": "AND",
+        "conditions": [
+          {
+            "id": "c2",
+            "attributeKey": "ubicaciones_fav",
+            "operator": "in_list",
+            "value": "templo"
+          }
+        ],
+        "template": "Al NPC le gusta el templo. Es devoto."
+      },
+      {
+        "id": "branch_no_mercado",
+        "name": "No le gusta el mercado",
+        "combinator": "AND",
+        "conditions": [
+          {
+            "id": "c3",
+            "attributeKey": "ubicaciones_fav",
+            "operator": "not_in_list",
+            "value": "mercado"
+          }
+        ],
+        "template": "Al NPC NO le gusta el mercado (deberia aparecer si templo no coincide antes, pero templo si coincide)."
+      }
+    ],
+    "defaultTemplate": "Estado de ubicaciones desconocido."
+  },
+  "descripcion": "test condicional con listas",
+  "id": "GRIMORIO_1781926453688",
+  "timestamp": "2026-06-20T03:34:13.688Z"
+}

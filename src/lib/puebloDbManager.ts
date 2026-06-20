@@ -9,11 +9,6 @@ function toDomainPueblo(dbPueblo: any): Pueblo {
     name: dbPueblo.name,
     type: dbPueblo.type as 'pueblo' | 'nacion',
     description: dbPueblo.description,
-    lore: dbPueblo.lore ? JSON.parse(dbPueblo.lore) : {
-      estado_pueblo: '',
-      rumores: [],
-      eventos: []
-    },
     area: dbPueblo.area ? JSON.parse(dbPueblo.area) : undefined,
   };
 }
@@ -25,7 +20,6 @@ function toDBPueblo(pueblo: Pueblo): any {
     name: pueblo.name,
     type: pueblo.type,
     description: pueblo.description,
-    lore: JSON.stringify(pueblo.lore),
     area: pueblo.area ? JSON.stringify(pueblo.area) : null,
   };
 }
@@ -202,11 +196,20 @@ export const puebloDbManager = {
   },
 
   /**
-   * Elimina un pueblo
+   * Elimina un pueblo (y su namespace)
    */
   async delete(id: string): Promise<boolean> {
     try {
       console.log('puebloDbManager.delete - ID recibido:', id);
+      // Eliminar namespace del pueblo
+      try {
+        const { namespaceManager } = await import('./namespaceManager');
+        await namespaceManager.deleteEntityNamespace('pueblo', id);
+        console.log(`[puebloDbManager.delete] Namespace pueblo:${id} eliminado`);
+      } catch (nsErr: any) {
+        console.warn(`[puebloDbManager.delete] No se pudo eliminar namespace:`, nsErr?.message);
+      }
+
       await db.pueblo.delete({
         where: { id }
       });

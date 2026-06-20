@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, FileUp, FileDown, Code, AlertCircle, CheckCircle, Globe, MapPin, Building, User, ScrollText } from 'lucide-react';
+import { Plus, Edit2, Trash2, FileUp, FileDown, Code, AlertCircle, CheckCircle, Globe, MapPin, Building, User, ScrollText, Hash, Zap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -15,6 +15,9 @@ import { Badge } from '@/components/ui/badge';
 import { NPC, World, Pueblo, Edificio, SillyTavernCard, getCardField, JsonResponseConfig } from '@/lib/types';
 import { toast } from '@/hooks/use-toast';
 import NPCBackupSection from './NPCBackupSection';
+import NPCAttributesPanel from './NPCAttributesPanel';
+import ContextoAdicionalPanel from './ContextoAdicionalPanel';
+import NPCActionsPanel from './NPCActionsPanel';
 
 export default function NpcsTab() {
   const [npcs, setNpcs] = useState<NPC[]>([]);
@@ -23,7 +26,7 @@ export default function NpcsTab() {
   const [edificios, setEdificios] = useState<Edificio[]>([]);
   const [npcMemories, setNpcMemories] = useState<Record<string, any>>({});
   const [loading, setLoading] = useState(true);
-  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingView, setEditingView] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [editingNpc, setEditingNpc] = useState<NPC | null>(null);
   const [importedCard, setImportedCard] = useState<SillyTavernCard | null>(null);
@@ -124,7 +127,7 @@ export default function NpcsTab() {
       cardCreatorNotes: '',
       cardAlternateGreetings: ''
     });
-    setDialogOpen(true);
+    setEditingView(true);
     setImportedCard(null);
   };
 
@@ -154,7 +157,7 @@ export default function NpcsTab() {
     // Cargar configuración JSON del NPC
     await loadJsonConfig(npc.id);
     
-    setDialogOpen(true);
+    setEditingView(true);
   };
 
   const loadJsonConfig = async (npcId: string) => {
@@ -276,7 +279,7 @@ export default function NpcsTab() {
         cardCreatorNotes: getCardField(card, 'creator_notes', ''),
         cardAlternateGreetings: (getCardField(card, 'alternate_greetings', []) || []).join('\n')
       });
-      setDialogOpen(true);
+      setEditingView(true);
       setImportOpen(false);
       toast({
         title: 'Tarjeta importada',
@@ -368,7 +371,7 @@ export default function NpcsTab() {
           title: 'Éxito',
           description: editingNpc ? 'NPC actualizado' : 'NPC creado'
         });
-        setDialogOpen(false);
+        setEditingView(false);
         fetchData();
       } else {
         throw new Error(result.error || 'No se pudo guardar el NPC');
@@ -394,6 +397,290 @@ export default function NpcsTab() {
     );
   }
 
+  // ====== Vista de edición full-screen con panel lateral ======
+  if (editingView) {
+    return (
+      <div className="flex flex-col h-[calc(100vh-200px)]">
+        {/* Header de la vista de edición */}
+        <div className="flex items-center justify-between mb-4 flex-shrink-0">
+          <div className="flex items-center gap-3">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setEditingView(false)}
+            >
+              ← Volver
+            </Button>
+            <div>
+              <h2 className="text-xl font-bold">
+                {editingNpc && !importedCard ? 'Editar NPC' : 'Crear Nuevo NPC'}
+              </h2>
+              <p className="text-sm text-muted-foreground">
+                {editingNpc ? 'Actualiza la información del NPC' : 'Completa la información del nuevo NPC'}
+              </p>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => setEditingView(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={handleSubmit}>
+              {editingNpc ? 'Actualizar NPC' : 'Crear NPC'}
+            </Button>
+          </div>
+        </div>
+
+        {/* Contenido: panel lateral + formulario (una sola Tabs con layout flex horizontal) */}
+        <Tabs defaultValue="basic" className="flex flex-row gap-4 flex-1 min-h-0 w-full">
+          {/* Panel lateral con tabs verticales */}
+          <div className="w-52 flex-shrink-0 border-r pr-1">
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground px-3 pt-3 pb-2">
+              Secciones
+            </p>
+            <TabsList className="flex flex-col h-auto gap-1 bg-transparent p-2 w-full">
+              <TabsTrigger value="basic" className="justify-start w-full data-[state=active]:bg-accent">Básico</TabsTrigger>
+              <TabsTrigger value="advanced" className="justify-start w-full data-[state=active]:bg-accent">Avanzado</TabsTrigger>
+              <TabsTrigger value="location" className="justify-start w-full data-[state=active]:bg-accent">Ubicación</TabsTrigger>
+              <TabsTrigger value="attributes" className="justify-start w-full flex items-center gap-1.5 data-[state=active]:bg-accent">
+                <Hash className="h-3 w-3" />
+                Atributos
+              </TabsTrigger>
+              <TabsTrigger value="contextos" className="justify-start w-full flex items-center gap-1.5 data-[state=active]:bg-accent">
+                <MapPin className="h-3 w-3" />
+                Contextos
+              </TabsTrigger>
+              <TabsTrigger value="actions" className="justify-start w-full flex items-center gap-1.5 data-[state=active]:bg-accent">
+                <Zap className="h-3 w-3" />
+                Acciones
+              </TabsTrigger>
+            </TabsList>
+          </div>
+
+          {/* Contenido del formulario (scroll independiente) */}
+          <div className="flex-1 min-h-0 overflow-y-auto pr-2">
+            <TabsContent value="basic" className="mt-0 p-6 space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="npcId">ID del NPC (UUID de Minecraft)</Label>
+                  <Input
+                    id="npcId"
+                    value={formData.id}
+                    onChange={(e) => setFormData({ ...formData, id: e.target.value })}
+                    placeholder="Ej: 550e8400-e29b-41d4-a716-446655440000 (opcional)"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Si se deja vacío, se generará un ID automáticamente
+                  </p>
+                </div>
+                <div>
+                  <Label htmlFor="cardName">Nombre del Personaje *</Label>
+                  <Input
+                    id="cardName"
+                    value={formData.cardName}
+                    onChange={(e) => setFormData({ ...formData, cardName: e.target.value })}
+                    placeholder="Ej: Sharam Hrafnmyrk"
+                  />
+                </div>
+              </div>
+              <div>
+                <Label htmlFor="cardDescription">Descripción</Label>
+                <Textarea
+                  id="cardDescription"
+                  value={formData.cardDescription}
+                  onChange={(e) => setFormData({ ...formData, cardDescription: e.target.value })}
+                  placeholder="Describe al personaje"
+                  rows={6}
+                  className="w-full"
+                />
+              </div>
+              <div>
+                <Label htmlFor="cardPersonality">Personalidad</Label>
+                <Textarea
+                  id="cardPersonality"
+                  value={formData.cardPersonality}
+                  onChange={(e) => setFormData({ ...formData, cardPersonality: e.target.value })}
+                  placeholder="Describe la personalidad del personaje"
+                  rows={6}
+                  className="w-full"
+                />
+              </div>
+              <div>
+                <Label htmlFor="cardScenario">Escenario</Label>
+                <Textarea
+                  id="cardScenario"
+                  value={formData.cardScenario}
+                  onChange={(e) => setFormData({ ...formData, cardScenario: e.target.value })}
+                  placeholder="Describe el escenario o contexto del personaje"
+                  rows={5}
+                  className="w-full"
+                />
+              </div>
+            </TabsContent>
+
+            <TabsContent value="advanced" className="mt-0 p-6 space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="cardFirstMes">Primer Mensaje</Label>
+                  <Textarea
+                    id="cardFirstMes"
+                    value={formData.cardFirstMes}
+                    onChange={(e) => setFormData({ ...formData, cardFirstMes: e.target.value })}
+                    placeholder="El primer mensaje que enviará el personaje"
+                    rows={5}
+                    className="w-full"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="cardMesExample">Ejemplo de Mensaje</Label>
+                  <Textarea
+                    id="cardMesExample"
+                    value={formData.cardMesExample}
+                    onChange={(e) => setFormData({ ...formData, cardMesExample: e.target.value })}
+                    placeholder="Ejemplo de cómo responde el personaje"
+                    rows={5}
+                    className="w-full"
+                  />
+                </div>
+              </div>
+              <div>
+                <Label htmlFor="cardSystemPrompt">System Prompt</Label>
+                <Textarea
+                  id="cardSystemPrompt"
+                  value={formData.cardSystemPrompt}
+                  onChange={(e) => setFormData({ ...formData, cardSystemPrompt: e.target.value })}
+                  placeholder="Instrucciones específicas para el sistema"
+                  rows={10}
+                  className="w-full"
+                />
+              </div>
+              <div>
+                <Label htmlFor="cardPostHistoryInstructions">Instrucciones Post-Historial</Label>
+                <Textarea
+                  id="cardPostHistoryInstructions"
+                  value={formData.cardPostHistoryInstructions}
+                  onChange={(e) => setFormData({ ...formData, cardPostHistoryInstructions: e.target.value })}
+                  placeholder="Instrucciones después de historial de chat"
+                  rows={5}
+                  className="w-full"
+                />
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="cardCreatorNotes">Notas del Creador</Label>
+                  <Textarea
+                    id="cardCreatorNotes"
+                    value={formData.cardCreatorNotes}
+                    onChange={(e) => setFormData({ ...formData, cardCreatorNotes: e.target.value })}
+                    placeholder="Notas sobre el personaje (no visibles en el rol)"
+                    rows={4}
+                    className="w-full"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="cardAlternateGreetings">Saludos Alternativos (uno por línea)</Label>
+                  <Textarea
+                    id="cardAlternateGreetings"
+                    value={formData.cardAlternateGreetings}
+                    onChange={(e) => setFormData({ ...formData, cardAlternateGreetings: e.target.value })}
+                    placeholder="Cada saludo en una línea nueva"
+                    rows={4}
+                    className="w-full"
+                  />
+                </div>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="location" className="mt-0 p-6 space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <Label htmlFor="worldId">Mundo *</Label>
+                  <Select
+                    value={formData.worldId}
+                    onValueChange={(value) => setFormData({ ...formData, worldId: value, puebloId: 'none', edificioId: 'none' })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecciona un mundo" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {worlds.map((world) => (
+                        <SelectItem key={world.id} value={world.id}>
+                          {world.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label htmlFor="puebloId">Pueblo (opcional)</Label>
+                  <Select
+                    value={formData.puebloId}
+                    onValueChange={(value) => setFormData({ ...formData, puebloId: value, edificioId: 'none' })}
+                    disabled={!formData.worldId}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecciona un pueblo" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Ninguno</SelectItem>
+                      {filteredPueblos.map((pueblo) => (
+                        <SelectItem key={pueblo.id} value={pueblo.id}>
+                          {pueblo.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label htmlFor="edificioId">Edificio (opcional)</Label>
+                  <Select
+                    value={formData.edificioId}
+                    onValueChange={(value) => setFormData({ ...formData, edificioId: value })}
+                    disabled={!formData.puebloId || formData.puebloId === 'none'}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecciona un edificio" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Ninguno</SelectItem>
+                      {filteredEdificios.map((edificio) => (
+                        <SelectItem key={edificio.id} value={edificio.id}>
+                          {edificio.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="attributes" className="mt-0 p-6 space-y-4">
+              <NPCAttributesPanel
+                npcId={editingNpc?.id ?? null}
+                disabled={!editingNpc}
+              />
+            </TabsContent>
+
+            <TabsContent value="contextos" className="mt-0 p-6 space-y-4">
+              <ContextoAdicionalPanel
+                entityType="npc"
+                entityId={editingNpc?.id ?? null}
+                disabled={!editingNpc}
+              />
+            </TabsContent>
+
+            <TabsContent value="actions" className="mt-0 p-6 space-y-4">
+              <NPCActionsPanel
+                npcId={editingNpc?.id ?? null}
+                disabled={!editingNpc}
+              />
+            </TabsContent>
+          </div>
+        </Tabs>
+      </div>
+    );
+  }
+
+  // ====== Vista normal (lista de NPCs) ======
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -575,403 +862,6 @@ export default function NpcsTab() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-[95vw] max-h-[95vh]">
-          <DialogHeader>
-            <DialogTitle className="flex items-center justify-between">
-              <span>
-                {editingNpc && !importedCard ? 'Editar NPC' : 'Crear Nuevo NPC'}
-              </span>
-              {editingNpc && (
-                <span className="text-xs text-muted-foreground px-2 py-1 bg-muted rounded-md">
-                  Editando
-                </span>
-              )}
-            </DialogTitle>
-            <DialogDescription>
-              {editingNpc ? 'Actualiza la información del NPC' : 'Completa la información del nuevo NPC'}
-            </DialogDescription>
-          </DialogHeader>
-          <ScrollArea className="max-h-[calc(95vh-140px)]">
-            <Tabs defaultValue="basic" className="w-full">
-              <TabsList className="grid w-full grid-cols-4">
-                <TabsTrigger value="basic">Básico</TabsTrigger>
-                <TabsTrigger value="advanced">Avanzado</TabsTrigger>
-                <TabsTrigger value="location">Ubicación</TabsTrigger>
-                <TabsTrigger value="json" className="flex items-center gap-1">
-                  <Code className="h-3 w-3" />
-                  JSON
-                </TabsTrigger>
-              </TabsList>
-
-              <TabsContent value="basic" className="space-y-4">
-              <ScrollArea className="max-h-[70vh] pr-4">
-                <div className="space-y-4">
-                  <div>
-                    <Label htmlFor="npcId">ID del NPC (UUID de Minecraft)</Label>
-                    <Input
-                      id="npcId"
-                      value={formData.id}
-                      onChange={(e) => setFormData({ ...formData, id: e.target.value })}
-                      placeholder="Ej: 550e8400-e29b-41d4-a716-446655440000 (opcional)"
-                    />
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Si se deja vacío, se generará un ID automáticamente
-                    </p>
-                  </div>
-                  <div>
-                    <Label htmlFor="cardName">Nombre del Personaje *</Label>
-                    <Input
-                      id="cardName"
-                      value={formData.cardName}
-                      onChange={(e) => setFormData({ ...formData, cardName: e.target.value })}
-                      placeholder="Ej: Sharam Hrafnmyrk"
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="cardDescription">Descripción</Label>
-                    <Textarea
-                      id="cardDescription"
-                      value={formData.cardDescription}
-                      onChange={(e) => setFormData({ ...formData, cardDescription: e.target.value })}
-                      placeholder="Describe al personaje"
-                      rows={4}
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="cardPersonality">Personalidad</Label>
-                    <Textarea
-                      id="cardPersonality"
-                      value={formData.cardPersonality}
-                      onChange={(e) => setFormData({ ...formData, cardPersonality: e.target.value })}
-                      placeholder="Describe la personalidad del personaje"
-                      rows={4}
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="cardScenario">Escenario</Label>
-                    <Textarea
-                      id="cardScenario"
-                      value={formData.cardScenario}
-                      onChange={(e) => setFormData({ ...formData, cardScenario: e.target.value })}
-                      placeholder="Describe el escenario o contexto del personaje"
-                      rows={3}
-                    />
-                  </div>
-                </div>
-              </ScrollArea>
-            </TabsContent>
-
-            <TabsContent value="advanced" className="space-y-4">
-              <ScrollArea className="max-h-[70vh] pr-4">
-                <div className="space-y-4">
-                  <div>
-                    <Label htmlFor="cardFirstMes">Primer Mensaje</Label>
-                    <Textarea
-                      id="cardFirstMes"
-                      value={formData.cardFirstMes}
-                      onChange={(e) => setFormData({ ...formData, cardFirstMes: e.target.value })}
-                      placeholder="El primer mensaje que enviará el personaje"
-                      rows={3}
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="cardMesExample">Ejemplo de Mensaje</Label>
-                    <Textarea
-                      id="cardMesExample"
-                      value={formData.cardMesExample}
-                      onChange={(e) => setFormData({ ...formData, cardMesExample: e.target.value })}
-                      placeholder="Ejemplo de cómo responde el personaje"
-                      rows={3}
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="cardSystemPrompt">System Prompt</Label>
-                    <Textarea
-                      id="cardSystemPrompt"
-                      value={formData.cardSystemPrompt}
-                      onChange={(e) => setFormData({ ...formData, cardSystemPrompt: e.target.value })}
-                      placeholder="Instrucciones específicas para el sistema"
-                      rows={4}
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="cardPostHistoryInstructions">Instrucciones Post-Historial</Label>
-                    <Textarea
-                      id="cardPostHistoryInstructions"
-                      value={formData.cardPostHistoryInstructions}
-                      onChange={(e) => setFormData({ ...formData, cardPostHistoryInstructions: e.target.value })}
-                      placeholder="Instrucciones después de historial de chat"
-                      rows={3}
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="cardCreatorNotes">Notas del Creador</Label>
-                    <Textarea
-                      id="cardCreatorNotes"
-                      value={formData.cardCreatorNotes}
-                      onChange={(e) => setFormData({ ...formData, cardCreatorNotes: e.target.value })}
-                      placeholder="Notas sobre el personaje (no visibles en el rol)"
-                      rows={3}
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="cardAlternateGreetings">Saludos Alternativos (uno por línea)</Label>
-                    <Textarea
-                      id="cardAlternateGreetings"
-                      value={formData.cardAlternateGreetings}
-                      onChange={(e) => setFormData({ ...formData, cardAlternateGreetings: e.target.value })}
-                      placeholder="Cada saludo en una línea nueva"
-                      rows={4}
-                    />
-                  </div>
-                </div>
-              </ScrollArea>
-            </TabsContent>
-
-            <TabsContent value="location" className="space-y-4">
-              <div className="space-y-4">
-                <div>
-                  <Label htmlFor="worldId">Mundo *</Label>
-                  <Select
-                    value={formData.worldId}
-                    onValueChange={(value) => setFormData({ ...formData, worldId: value, puebloId: 'none', edificioId: 'none' })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecciona un mundo" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {worlds.map((world) => (
-                        <SelectItem key={world.id} value={world.id}>
-                          {world.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label htmlFor="puebloId">Pueblo (opcional)</Label>
-                  <Select
-                    value={formData.puebloId}
-                    onValueChange={(value) => setFormData({ ...formData, puebloId: value, edificioId: 'none' })}
-                    disabled={!formData.worldId}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecciona un pueblo" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">Ninguno</SelectItem>
-                      {filteredPueblos.map((pueblo) => (
-                        <SelectItem key={pueblo.id} value={pueblo.id}>
-                          {pueblo.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label htmlFor="edificioId">Edificio (opcional)</Label>
-                  <Select
-                    value={formData.edificioId}
-                    onValueChange={(value) => setFormData({ ...formData, edificioId: value })}
-                    disabled={!formData.puebloId || formData.puebloId === 'none'}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecciona un edificio" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">Ninguno</SelectItem>
-                      {filteredEdificios.map((edificio) => (
-                        <SelectItem key={edificio.id} value={edificio.id}>
-                          {edificio.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            </TabsContent>
-
-            {/* JSON Config Tab */}
-            <TabsContent value="json" className="space-y-4">
-              <ScrollArea className="max-h-[70vh] pr-4">
-                <div className="space-y-4">
-                  {/* JSON Mode Toggle */}
-                  <div className="flex items-center justify-between p-4 rounded-lg border bg-muted/50">
-                    <div className="flex items-center gap-2">
-                      <Code className="h-5 w-5" />
-                      <div>
-                        <p className="font-medium">Modo JSON</p>
-                        <p className="text-xs text-muted-foreground">
-                          El LLM responderá en formato JSON estructurado
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {jsonConfig.enabled && (
-                        <Badge variant="default" className="bg-green-600">
-                          Activado
-                        </Badge>
-                      )}
-                      <Button
-                        variant={jsonConfig.enabled ? "destructive" : "default"}
-                        size="sm"
-                        onClick={() => setJsonConfig({ ...jsonConfig, enabled: !jsonConfig.enabled })}
-                      >
-                        {jsonConfig.enabled ? 'Desactivar' : 'Activar'}
-                      </Button>
-                    </div>
-                  </div>
-
-                  {jsonConfig.enabled && (
-                    <>
-                      {/* JSON Schema */}
-                      <div>
-                        <Label>Esquema JSON Esperado</Label>
-                        <p className="text-xs text-muted-foreground mb-2">
-                          Define la estructura del JSON que el LLM debe retornar
-                        </p>
-                        <Textarea
-                          value={jsonConfig.schema ? JSON.stringify(jsonConfig.schema, null, 2) : ''}
-                          onChange={(e) => {
-                            try {
-                              const parsed = e.target.value ? JSON.parse(e.target.value) : null;
-                              setJsonConfig({ ...jsonConfig, schema: parsed });
-                            } catch {
-                              // Invalid JSON, keep as string for now
-                            }
-                          }}
-                          placeholder={`{
-  "dialogo": {
-    "texto": "..."
-  },
-  "estado": {
-    "tono": "...",
-    "emocion": "...",
-    "humor_delta": 0
-  },
-  "intencion": "..."
-}`}
-                          rows={12}
-                          className="font-mono text-sm"
-                        />
-                      </div>
-
-                      {/* Example Response */}
-                      <div>
-                        <Label>Ejemplo de Respuesta Válida</Label>
-                        <p className="text-xs text-muted-foreground mb-2">
-                          Un ejemplo que el LLM puede usar como referencia
-                        </p>
-                        <Textarea
-                          value={jsonConfig.exampleResponse ? JSON.stringify(jsonConfig.exampleResponse, null, 2) : ''}
-                          onChange={(e) => {
-                            try {
-                              const parsed = e.target.value ? JSON.parse(e.target.value) : null;
-                              setJsonConfig({ ...jsonConfig, exampleResponse: parsed });
-                            } catch {
-                              // Invalid JSON
-                            }
-                          }}
-                          placeholder={`{
-  "dialogo": {
-    "texto": "Cien Almakos la jarra..."
-  },
-  "estado": {
-    "tono": "CORTANTE",
-    "emocion": "DESPRECIO",
-    "humor_delta": -1
-  },
-  "intencion": "COBRAR_DEUDA"
-}`}
-                          rows={10}
-                          className="font-mono text-sm"
-                        />
-                      </div>
-
-                      {/* Fallback Response */}
-                      <div>
-                        <Label>Respuesta de Seguridad (Fallback)</Label>
-                        <p className="text-xs text-muted-foreground mb-2">
-                          Se usa si el LLM no puede generar un JSON válido después de los reintentos
-                        </p>
-                        <Textarea
-                          value={jsonConfig.fallbackResponse ? JSON.stringify(jsonConfig.fallbackResponse, null, 2) : ''}
-                          onChange={(e) => {
-                            try {
-                              const parsed = e.target.value ? JSON.parse(e.target.value) : null;
-                              setJsonConfig({ ...jsonConfig, fallbackResponse: parsed });
-                            } catch {
-                              // Invalid JSON
-                            }
-                          }}
-                          placeholder={`{
-  "dialogo": {
-    "texto": "No tengo nada que decir."
-  },
-  "estado": {
-    "tono": "NEUTRAL",
-    "emocion": "INDIFERENTE",
-    "humor_delta": 0
-  },
-  "intencion": "SILENCIO"
-}`}
-                          rows={10}
-                          className="font-mono text-sm"
-                        />
-                      </div>
-
-                      {/* Correction Prompt */}
-                      <div>
-                        <Label>Prompt de Corrección (Opcional)</Label>
-                        <p className="text-xs text-muted-foreground mb-2">
-                          Instrucciones personalizadas para corregir respuestas inválidas. Dejar vacío para usar el default.
-                        </p>
-                        <Textarea
-                          value={jsonConfig.correctionPrompt || ''}
-                          onChange={(e) => setJsonConfig({ ...jsonConfig, correctionPrompt: e.target.value || null })}
-                          placeholder="Si dejas esto vacío, se usará un prompt de corrección automático..."
-                          rows={4}
-                        />
-                      </div>
-
-                      {/* Max Retries */}
-                      <div>
-                        <Label>Reintentos Máximos</Label>
-                        <Input
-                          type="number"
-                          min={1}
-                          max={5}
-                          value={jsonConfig.maxRetries}
-                          onChange={(e) => setJsonConfig({ ...jsonConfig, maxRetries: parseInt(e.target.value) || 2 })}
-                          className="w-24"
-                        />
-                      </div>
-
-                      {/* Save Button */}
-                      <div className="flex justify-end pt-4 border-t">
-                        <Button onClick={handleSaveJsonConfig} className="flex items-center gap-2">
-                          <CheckCircle className="h-4 w-4" />
-                          Guardar Configuración JSON
-                        </Button>
-                      </div>
-                    </>
-                  )}
-                </div>
-              </ScrollArea>
-            </TabsContent>
-          </Tabs>
-        </ScrollArea>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => setDialogOpen(false)}>
-            Cancelar
-          </Button>
-          <Button onClick={handleSubmit}>
-            {editingNpc ? 'Actualizar NPC' : 'Crear NPC'}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
 
       <NPCBackupSection />
     </div>

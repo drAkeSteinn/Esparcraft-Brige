@@ -46,13 +46,13 @@ const MAX_RESULTS_OPTIONS = [
   { value: 20, label: '20 resultados' },
 ];
 
+// Nota: los namespaces por entidad (mundo:{id}, pueblo:{id}, npc:{id}, etc.)
+// se gestionan automáticamente vía namespaceManager y no se ofrecen aquí como
+// "namespace por defecto global", porque no tienen sentido en ese contexto.
+// El namespace por defecto se usa solo para embeddings subidos manualmente
+// sin un namespace específico.
 const COMMON_NAMESPACES = [
-  { value: 'default', label: 'Default (general)', description: 'Namespace principal para todo el contenido' },
-  { value: 'worlds', label: 'Worlds (mundos)', description: 'Documentos sobre mundos y universos' },
-  { value: 'npcs', label: 'NPCs', description: 'Personajes y NPCs' },
-  { value: 'pueblos', label: 'Pueblos (poblaciones)', description: 'Información de pueblos y ciudades' },
-  { value: 'edificios', label: 'Edificios', description: 'Lugares y estructuras' },
-  { value: 'sessions', label: 'Sessions (sesiones)', description: 'Historial de sesiones' },
+  { value: 'default', label: 'Default (general)', description: 'Namespace principal para contenido suelto' },
   { value: 'custom', label: 'Personalizado', description: 'Especificar nombre personalizado' },
 ];
 

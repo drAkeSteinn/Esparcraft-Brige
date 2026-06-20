@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Edificio, PointOfInterest, PlaceType, NPC, World, Pueblo } from '@/lib/types';
 import { toast } from '@/hooks/use-toast';
 import { Badge } from '@/components/ui/badge';
+import ContextoAdicionalPanel from '../ContextoAdicionalPanel';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import GenericBackupSection from '../GenericBackupSection';
 
@@ -23,7 +24,7 @@ export default function EdificiosSection() {
   const [placeTypes, setPlaceTypes] = useState<PlaceType[]>([]);
   const [npcs, setNpcs] = useState<NPC[]>([]);
   const [loading, setLoading] = useState(true);
-  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingView, setEditingView] = useState(false);
   const [poiDialogOpen, setPoiDialogOpen] = useState(false);
   const [editingEdificio, setEditingEdificio] = useState<Edificio | null>(null);
   const [editingPoi, setEditingPoi] = useState<PointOfInterest | null>(null);
@@ -32,8 +33,6 @@ export default function EdificiosSection() {
   const [formData, setFormData] = useState({
     name: '',
     lore: '',
-    rumores: '',
-    eventos_recientes: '',
     worldId: '',
     puebloId: '',
     startX: '',
@@ -114,8 +113,6 @@ export default function EdificiosSection() {
     setFormData({
       name: '',
       lore: '',
-      rumores: '',
-      eventos_recientes: '',
       worldId: worlds[0]?.id || '',
       puebloId: '',
       startX: '0',
@@ -125,7 +122,7 @@ export default function EdificiosSection() {
       endY: '10',
       endZ: '10'
     });
-    setDialogOpen(true);
+    setEditingView(true);
   };
 
   const handleCreatePoi = () => {
@@ -208,8 +205,6 @@ export default function EdificiosSection() {
     setFormData({
       name: edificio.name,
       lore: edificio.lore,
-      rumores: (edificio.rumores || []).join('\n'),
-      eventos_recientes: edificio.eventos_recientes.join('\n'),
       worldId: edificio.worldId,
       puebloId: edificio.puebloId,
       startX: edificio.area.start.x.toString(),
@@ -219,7 +214,7 @@ export default function EdificiosSection() {
       endY: edificio.area.end.y.toString(),
       endZ: edificio.area.end.z.toString()
     });
-    setDialogOpen(true);
+    setEditingView(true);
   };
 
   const handleDelete = async (id: string) => {
@@ -253,8 +248,6 @@ export default function EdificiosSection() {
       const payload: any = {
         name: formData.name,
         lore: formData.lore,
-        rumores: formData.rumores.split('\n').filter(r => r.trim()),
-        eventos_recientes: formData.eventos_recientes.split('\n').filter(e => e.trim()),
         worldId: formData.worldId,
         puebloId: formData.puebloId,
         area: {
@@ -292,7 +285,7 @@ export default function EdificiosSection() {
           title: 'Éxito',
           description: editingEdificio ? 'Edificio actualizado' : 'Edificio creado'
         });
-        setDialogOpen(false);
+        setEditingView(false);
         fetchData();
       } else {
         toast({
@@ -315,6 +308,242 @@ export default function EdificiosSection() {
     return (
       <div className="flex items-center justify-center h-96">
         <p className="text-muted-foreground">Cargando edificios...</p>
+      </div>
+    );
+  }
+
+  // ====== Vista de edición full-screen ======
+  if (editingView) {
+    return (
+      <div className="flex flex-col h-[calc(100vh-200px)]">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-4 flex-shrink-0">
+          <div className="flex items-center gap-3">
+            <Button variant="ghost" size="sm" onClick={() => setEditingView(false)}>
+              ← Volver
+            </Button>
+            <div>
+              <h2 className="text-xl font-bold">
+                {editingEdificio ? 'Editar Edificio' : 'Crear Nuevo Edificio'}
+              </h2>
+              <p className="text-sm text-muted-foreground">
+                {editingEdificio ? 'Actualiza la información del edificio' : 'Completa la información del nuevo edificio'}
+              </p>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => setEditingView(false)}>Cancelar</Button>
+            <Button onClick={handleSubmit}>{editingEdificio ? 'Actualizar' : 'Crear'}</Button>
+          </div>
+        </div>
+
+        {/* Contenido del formulario con scroll */}
+        <div className="flex-1 min-h-0 overflow-y-auto p-6">
+          <div className="space-y-6 max-w-4xl">
+            {/* === Sección: Datos básicos === */}
+            <div>
+              <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-3 border-b pb-2">Datos básicos</h3>
+              <div className="space-y-4">
+                <div>
+                  <Label htmlFor="name">Nombre del Edificio</Label>
+                  <Input
+                    id="name"
+                    value={formData.name}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    placeholder="Ej: Torre del Reloj"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="lore">Estado del Edificio</Label>
+                  <Textarea
+                    id="lore"
+                    value={formData.lore}
+                    onChange={(e) => setFormData({ ...formData, lore: e.target.value })}
+                    placeholder="Describe el edificio, su historia, características especiales..."
+                    rows={5}
+                    className="w-full"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* === Sección: Ubicación === */}
+            <div>
+              <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-3 border-b pb-2">Ubicación</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="worldId">Mundo</Label>
+                  <Select
+                    value={formData.worldId}
+                    onValueChange={(value) => setFormData({ ...formData, worldId: value, puebloId: '' })}
+                  >
+                    <SelectTrigger id="worldId">
+                      <SelectValue placeholder="Selecciona un mundo" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {worlds.map(world => (
+                        <SelectItem key={world.id} value={world.id}>
+                          {world.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label htmlFor="puebloId">Región/Pueblo</Label>
+                  <Select
+                    value={formData.puebloId}
+                    onValueChange={(value) => setFormData({ ...formData, puebloId: value })}
+                  >
+                    <SelectTrigger id="puebloId">
+                      <SelectValue placeholder="Selecciona una región" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {pueblos.filter(p => p.worldId === formData.worldId).map(pueblo => (
+                        <SelectItem key={pueblo.id} value={pueblo.id}>
+                          {pueblo.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </div>
+
+            {/* === Sección: Área === */}
+            <div>
+              <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-3 border-b pb-2">Coordenadas del Área</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <Label>Inicio (start)</Label>
+                  <div className="grid grid-cols-3 gap-2 mt-1">
+                    <div>
+                      <Label htmlFor="startX" className="text-xs">X</Label>
+                      <Input
+                        id="startX"
+                        type="number"
+                        value={formData.startX}
+                        onChange={(e) => setFormData({ ...formData, startX: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="startY" className="text-xs">Y</Label>
+                      <Input
+                        id="startY"
+                        type="number"
+                        value={formData.startY}
+                        onChange={(e) => setFormData({ ...formData, startY: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="startZ" className="text-xs">Z</Label>
+                      <Input
+                        id="startZ"
+                        type="number"
+                        value={formData.startZ}
+                        onChange={(e) => setFormData({ ...formData, startZ: e.target.value })}
+                      />
+                    </div>
+                  </div>
+                </div>
+                <div>
+                  <Label>Fin (end)</Label>
+                  <div className="grid grid-cols-3 gap-2 mt-1">
+                    <div>
+                      <Label htmlFor="endX" className="text-xs">X</Label>
+                      <Input
+                        id="endX"
+                        type="number"
+                        value={formData.endX}
+                        onChange={(e) => setFormData({ ...formData, endX: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="endY" className="text-xs">Y</Label>
+                      <Input
+                        id="endY"
+                        type="number"
+                        value={formData.endY}
+                        onChange={(e) => setFormData({ ...formData, endY: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="endZ" className="text-xs">Z</Label>
+                      <Input
+                        id="endZ"
+                        type="number"
+                        value={formData.endZ}
+                        onChange={(e) => setFormData({ ...formData, endZ: e.target.value })}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* === Sección: Tipos de lugar (POIs) === */}
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground border-b pb-2 flex-1">Tipos de lugar ({editingEdificio?.puntosDeInteres?.length || 0})</h3>
+                <Button size="sm" onClick={handleCreatePoi} className="ml-3">
+                  <Plus className="h-4 w-4 mr-2" />
+                  Agregar Tipo de lugar
+                </Button>
+              </div>
+              {editingEdificio && editingEdificio.puntosDeInteres && editingEdificio.puntosDeInteres.length > 0 ? (
+                <div className="space-y-2">
+                  {editingEdificio.puntosDeInteres.map((poi) => {
+                    const placeType = placeTypes.find(pt => pt.id === poi.tipo);
+                    return (
+                      <div key={poi.id} className="flex items-center justify-between p-3 border rounded-lg">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <Badge variant="outline">{placeType?.name || poi.tipo}</Badge>
+                            <span className="font-medium">{poi.name}</span>
+                          </div>
+                          <p className="text-sm text-muted-foreground mt-1">{poi.descripcion}</p>
+                          <p className="text-xs text-muted-foreground">
+                            Coordenadas: X:{poi.coordenadas.x}, Y:{poi.coordenadas.y}, Z:{poi.coordenadas.z}
+                          </p>
+                        </div>
+                        <div className="flex gap-2">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleEditPoi(poi)}
+                          >
+                            <Edit2 className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleDeletePoi(poi.id)}
+                          >
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground text-center py-4">
+                  No hay tipos de lugar agregados. Haz clic en "Agregar Tipo de lugar" para comenzar.
+                </p>
+              )}
+            </div>
+
+            {/* === Sección: Contextos Adicionales === */}
+            <div>
+              <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-3 border-b pb-2">Contextos Adicionales</h3>
+              <ContextoAdicionalPanel
+                entityType="edificio"
+                entityId={editingEdificio?.id ?? null}
+                disabled={!editingEdificio}
+              />
+            </div>
+          </div>
+        </div>
       </div>
     );
   }
@@ -509,61 +738,9 @@ export default function EdificiosSection() {
                   <div>
                     <p className="text-sm font-medium">Descripción:</p>
                     <p className="text-sm text-muted-foreground line-clamp-2">
-                      {edificio.lore || 'Sin descripción'}
+                      {edificio.lore || 'Sin estado'}
                     </p>
                   </div>
-
-                  {edificio.rumores && edificio.rumores.length > 0 && (
-                    <div>
-                      <div className="flex items-center justify-between mb-2">
-                        <p className="text-sm font-medium flex items-center gap-2">
-                          <ScrollText className="h-3.5 w-3.5 text-[#83673D]" />
-                          Rumores:
-                        </p>
-                        <span className="text-xs text-muted-foreground">
-                          {edificio.rumores.length} {edificio.rumores.length === 1 ? 'rumor' : 'rumores'}
-                        </span>
-                      </div>
-                      <div className="max-h-32 overflow-y-auto border-2 border-[#2C2923] bg-[#100F11] p-3 rounded">
-                        <ul className="space-y-1.5">
-                          {edificio.rumores.map((rumor, i) => (
-                            <li key={i} className="text-sm text-[#B8B8B8] flex items-start gap-2">
-                              <span className="flex-shrink-0 w-5 h-5 flex items-center justify-center bg-[#2C2923] text-[#83673D] text-xs font-mono rounded">
-                                {i + 1}
-                              </span>
-                              <span className="break-words">{rumor}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    </div>
-                  )}
-
-                  {edificio.eventos_recientes.length > 0 && (
-                    <div>
-                      <div className="flex items-center justify-between mb-2">
-                        <p className="text-sm font-medium flex items-center gap-2">
-                          <ScrollText className="h-3.5 w-3.5 text-[#83673D]" />
-                          Eventos Recientes:
-                        </p>
-                        <span className="text-xs text-muted-foreground">
-                          {edificio.eventos_recientes.length} {edificio.eventos_recientes.length === 1 ? 'evento' : 'eventos'}
-                        </span>
-                      </div>
-                      <div className="max-h-32 overflow-y-auto border-2 border-[#2C2923] bg-[#100F11] p-3 rounded">
-                        <ul className="space-y-1.5">
-                          {edificio.eventos_recientes.map((evento, i) => (
-                            <li key={i} className="text-sm text-[#B8B8B8] flex items-start gap-2">
-                              <span className="flex-shrink-0 w-5 h-5 flex items-center justify-center bg-[#2C2923] text-[#83673D] text-xs font-mono rounded">
-                                {i + 1}
-                              </span>
-                              <span className="break-words">{evento}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    </div>
-                  )}
 
                   <div className="mt-4">
                     <p className="text-xs text-muted-foreground">Coordenadas del Área:</p>
@@ -639,225 +816,6 @@ export default function EdificiosSection() {
           );
         })}
       </div>
-
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>
-              {editingEdificio ? 'Editar Edificio' : 'Crear Nuevo Edificio'}
-            </DialogTitle>
-            <DialogDescription>
-              {editingEdificio ? 'Actualiza la información del edificio' : 'Completa la información del nuevo edificio'}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div>
-              <Label htmlFor="name">Nombre del Edificio</Label>
-              <Input
-                id="name"
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                placeholder="Ej: Torre del Reloj"
-              />
-            </div>
-
-            <div>
-              <Label htmlFor="worldId">Mundo</Label>
-              <Select
-                value={formData.worldId}
-                onValueChange={(value) => setFormData({ ...formData, worldId: value, puebloId: '' })}
-              >
-                <SelectTrigger id="worldId">
-                  <SelectValue placeholder="Selecciona un mundo" />
-                </SelectTrigger>
-                <SelectContent>
-                  {worlds.map(world => (
-                    <SelectItem key={world.id} value={world.id}>
-                      {world.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div>
-              <Label htmlFor="puebloId">Región/Pueblo</Label>
-              <Select
-                value={formData.puebloId}
-                onValueChange={(value) => setFormData({ ...formData, puebloId: value })}
-              >
-                <SelectTrigger id="puebloId">
-                  <SelectValue placeholder="Selecciona una región" />
-                </SelectTrigger>
-                <SelectContent>
-                  {pueblos.filter(p => p.worldId === formData.worldId).map(pueblo => (
-                    <SelectItem key={pueblo.id} value={pueblo.id}>
-                      {pueblo.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div>
-              <Label htmlFor="lore">Descripción/Lore</Label>
-              <Textarea
-                id="lore"
-                value={formData.lore}
-                onChange={(e) => setFormData({ ...formData, lore: e.target.value })}
-                placeholder="Describe el edificio, su historia, características especiales..."
-                rows={4}
-              />
-            </div>
-
-            <div>
-              <Label htmlFor="rumores">Rumores (uno por línea)</Label>
-              <Textarea
-                id="rumores"
-                value={formData.rumores}
-                onChange={(e) => setFormData({ ...formData, rumores: e.target.value })}
-                placeholder="Cada rumor en una línea nueva"
-                rows={3}
-              />
-            </div>
-
-            <div>
-              <Label htmlFor="eventos_recientes">Eventos Recientes (uno por línea)</Label>
-              <Textarea
-                id="eventos_recientes"
-                value={formData.eventos_recientes}
-                onChange={(e) => setFormData({ ...formData, eventos_recientes: e.target.value })}
-                placeholder="Cada evento en una línea nueva"
-                rows={3}
-              />
-            </div>
-
-            <div>
-              <Label>Coordenadas del Área (Inicio)</Label>
-              <div className="grid grid-cols-3 gap-2">
-                <div>
-                  <Label htmlFor="startX" className="text-xs">X</Label>
-                  <Input
-                    id="startX"
-                    type="number"
-                    value={formData.startX}
-                    onChange={(e) => setFormData({ ...formData, startX: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="startY" className="text-xs">Y</Label>
-                  <Input
-                    id="startY"
-                    type="number"
-                    value={formData.startY}
-                    onChange={(e) => setFormData({ ...formData, startY: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="startZ" className="text-xs">Z</Label>
-                  <Input
-                    id="startZ"
-                    type="number"
-                    value={formData.startZ}
-                    onChange={(e) => setFormData({ ...formData, startZ: e.target.value })}
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div>
-              <Label>Coordenadas del Área (Fin)</Label>
-              <div className="grid grid-cols-3 gap-2">
-                <div>
-                  <Label htmlFor="endX" className="text-xs">X</Label>
-                  <Input
-                    id="endX"
-                    type="number"
-                    value={formData.endX}
-                    onChange={(e) => setFormData({ ...formData, endX: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="endY" className="text-xs">Y</Label>
-                  <Input
-                    id="endY"
-                    type="number"
-                    value={formData.endY}
-                    onChange={(e) => setFormData({ ...formData, endY: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="endZ" className="text-xs">Z</Label>
-                  <Input
-                    id="endZ"
-                    type="number"
-                    value={formData.endZ}
-                    onChange={(e) => setFormData({ ...formData, endZ: e.target.value })}
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Sección de Tipos de lugar (Puntos de interés) */}
-            <div className="border-t pt-4">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-lg font-semibold">Tipos de lugar</h3>
-                <Button size="sm" onClick={handleCreatePoi}>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Agregar Tipo de lugar
-                </Button>
-              </div>
-
-              {editingEdificio && editingEdificio.puntosDeInteres && editingEdificio.puntosDeInteres.length > 0 ? (
-                <div className="space-y-2 max-h-64 overflow-y-auto">
-                  {editingEdificio.puntosDeInteres.map((poi) => {
-                    const placeType = placeTypes.find(pt => pt.id === poi.tipo);
-                    return (
-                      <div key={poi.id} className="flex items-center justify-between p-3 border rounded-lg">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2">
-                            <Badge variant="outline">{placeType?.name || poi.tipo}</Badge>
-                            <span className="font-medium">{poi.name}</span>
-                          </div>
-                          <p className="text-sm text-muted-foreground mt-1">{poi.descripcion}</p>
-                          <p className="text-xs text-muted-foreground">
-                            Coordenadas: X:{poi.coordenadas.x}, Y:{poi.coordenadas.y}, Z:{poi.coordenadas.z}
-                          </p>
-                        </div>
-                        <div className="flex gap-2">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleEditPoi(poi)}
-                          >
-                            <Edit2 className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleDeletePoi(poi.id)}
-                          >
-                            <Trash2 className="h-4 w-4 text-destructive" />
-                          </Button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <p className="text-sm text-muted-foreground text-center py-4">
-                  No hay tipos de lugar agregados. Haz clic en "Agregar Tipo de lugar" para comenzar.
-                </p>
-              )}
-            </div>
-          </div>
-          <DialogFooter>
-            <Button onClick={handleSubmit}>
-              {editingEdificio ? 'Actualizar' : 'Crear'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {/* Dialog para agregar/editar Puntos de Interés */}
       <Dialog open={poiDialogOpen} onOpenChange={setPoiDialogOpen}>

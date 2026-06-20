@@ -81,12 +81,13 @@ export async function POST(request: NextRequest) {
         break;
 
       case 'all':
-        // Generar embeddings para todos los recursos
+        // Generar embeddings para todos los recursos (incluye sessions)
         await EmbeddingTriggers.embedAllResources('worlds');
         await EmbeddingTriggers.embedAllResources('pueblos');
         await EmbeddingTriggers.embedAllResources('edificios');
         await EmbeddingTriggers.embedAllResources('npcs');
-        result = { type: 'all', message: 'Embeddings generados para todos los recursos' };
+        await EmbeddingTriggers.embedAllResources('sessions');
+        result = { type: 'all', message: 'Embeddings generados para todos los recursos (worlds, pueblos, edificios, npcs, sessions)' };
         break;
 
       default:

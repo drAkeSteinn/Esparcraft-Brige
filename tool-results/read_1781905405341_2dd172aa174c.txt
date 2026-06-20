@@ -1,0 +1,641 @@
+     1→'use client';
+     2→
+     3→import { useState, useEffect } from 'react';
+     4→import { Plus, Edit2, Trash2, MapPin, ScrollText, Building, Users, ChevronDown, ChevronRight, Globe, Filter } from 'lucide-react';
+     5→import { Button } from '@/components/ui/button';
+     6→import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+     7→import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+     8→import { Label } from '@/components/ui/label';
+     9→import { Input } from '@/components/ui/input';
+    10→import { Textarea } from '@/components/ui/textarea';
+    11→import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
+    12→import { Badge } from '@/components/ui/badge';
+    13→import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+    14→import { Pueblo, World, Edificio, NPC, getCardField } from '@/lib/types';
+    15→import { toast } from '@/hooks/use-toast';
+    16→import GenericBackupSection from '../GenericBackupSection';
+    17→
+    18→interface FormData {
+    19→  worldId: string;
+    20→  name: string;
+    21→  type: 'pueblo' | 'nacion';
+    22→  description: string;
+    23→  estado_pueblo: string;
+    24→  rumores: string;
+    25→  eventos: string;
+    26→}
+    27→
+    28→export default function PueblosSection() {
+    29→  const [pueblos, setPueblos] = useState<Pueblo[]>([]);
+    30→  const [worlds, setWorlds] = useState<World[]>([]);
+    31→  const [edificios, setEdificios] = useState<Edificio[]>([]);
+    32→  const [npcs, setNpcs] = useState<NPC[]>([]);
+    33→  const [puebloMemories, setPuebloMemories] = useState<Record<string, any>>({});
+    34→  const [loading, setLoading] = useState(true);
+    35→  const [dialogOpen, setDialogOpen] = useState(false);
+    36→  const [editingPueblo, setEditingPueblo] = useState<Pueblo | null>(null);
+    37→  const [expandedEdificios, setExpandedEdificios] = useState<Record<string, boolean>>({});
+    38→  const [filterWorldId, setFilterWorldId] = useState<string>('all');
+    39→  const [formData, setFormData] = useState<FormData>({
+    40→    worldId: '',
+    41→    name: '',
+    42→    type: 'pueblo',
+    43→    description: '',
+    44→    estado_pueblo: '',
+    45→    rumores: '',
+    46→    eventos: ''
+    47→  });
+    48→
+    49→  useEffect(() => {
+    50→    fetchData();
+    51→  }, []);
+    52→
+    53→  const fetchData = async () => {
+    54→    try {
+    55→      setLoading(true);
+    56→      const [pueblosRes, worldsRes, edificiosRes, npcsRes] = await Promise.all([
+    57→        fetch('/api/pueblos'),
+    58→        fetch('/api/worlds'),
+    59→        fetch('/api/edificios'),
+    60→        fetch('/api/npcs')
+    61→      ]);
+    62→
+    63→      const pueblosResult = await pueblosRes.json();
+    64→      const worldsResult = await worldsRes.json();
+    65→      const edificiosResult = await edificiosRes.json();
+    66→      const npcsResult = await npcsRes.json();
+    67→
+    68→      if (pueblosResult.success) setPueblos(pueblosResult.data);
+    69→      if (worldsResult.success) setWorlds(worldsResult.data);
+    70→      if (edificiosResult.success) setEdificios(edificiosResult.data);
+    71→      if (npcsResult.success) setNpcs(npcsResult.data);
+    72→
+    73→      // Cargar memorias de pueblos en paralelo
+    74→      const memoriaPromises = pueblosResult.data.map(pueblo => 
+    75→        fetch(`/api/pueblos/${pueblo.id}/memory`)
+    76→      );
+    77→
+    78→      const memoriaResponses = await Promise.all(memoriaPromises);
+    79→      const memories: Record<string, any> = {};
+    80→      memoriaResponses.forEach((response, index) => {
+    81→        if (response.ok) {
+    82→          const result = response.json();
+    83→          if (result.success && result.data.memory) {
+    84→            memories[pueblosResult.data[index].id] = result.data.memory;
+    85→          }
+    86→        }
+    87→      });
+    88→
+    89→      setPuebloMemories(memories);
+    90→
+    91→    } catch (error) {
+    92→      console.error('Error fetching data:', error);
+    93→      toast({
+    94→        title: 'Error',
+    95→        description: 'No se pudieron cargar los datos',
+    96→        variant: 'destructive'
+    97→      });
+    98→    } finally {
+    99→      setLoading(false);
+   100→    }
+   101→  };
+   102→
+   103→  const handleCreate = () => {
+   104→    setEditingPueblo(null);
+   105→    setFormData({
+   106→      worldId: '',
+   107→      name: '',
+   108→      type: 'pueblo' as 'pueblo',
+   109→      description: '',
+   110→      estado_pueblo: '',
+   111→      rumores: '',
+   112→      eventos: ''
+   113→    });
+   114→    setDialogOpen(true);
+   115→  };
+   116→
+   117→  const handleEdit = (pueblo: Pueblo) => {
+   118→    setEditingPueblo(pueblo);
+   119→    setFormData({
+   120→      worldId: pueblo.worldId,
+   121→      name: pueblo.name,
+   122→      type: pueblo.type,
+   123→      description: pueblo.description,
+   124→      estado_pueblo: pueblo.lore.estado_pueblo,
+   125→      rumores: pueblo.lore.rumores.join('\n'),
+   126→      eventos: pueblo.lore.eventos?.join('\n') || ''
+   127→    });
+   128→    setDialogOpen(true);
+   129→  };
+   130→
+   131→  const handleDelete = async (id: string) => {
+   132→    if (!confirm('¿Estás seguro de que deseas eliminar esta región?')) return;
+   133→
+   134→    try {
+   135→      const response = await fetch(`/api/pueblos/${id}`, {
+   136→        method: 'DELETE'
+   137→      });
+   138→      const result = await response.json();
+   139→
+   140→      if (result.success) {
+   141→        toast({
+   142→          title: 'Éxito',
+   143→          description: 'Región eliminada correctamente'
+   144→        });
+   145→        fetchData();
+   146→      }
+   147→    } catch (error) {
+   148→      console.error('Error deleting pueblo:', error);
+   149→      toast({
+   150→        title: 'Error',
+   151→        description: 'No se pudo eliminar la región',
+   152→        variant: 'destructive'
+   153→      });
+   154→    }
+   155→  };
+   156→
+   157→  const handleSubmit = async () => {
+   158→    try {
+   159→      const payload = {
+   160→        worldId: formData.worldId,
+   161→        name: formData.name,
+   162→        type: formData.type,
+   163→        description: formData.description,
+   164→        lore: {
+   165→          estado_pueblo: formData.estado_pueblo,
+   166→          rumores: formData.rumores.split('\n').filter(r => r.trim()),
+   167→          eventos: formData.eventos.split('\n').filter(e => e.trim())
+   168→        }
+   169→      };
+   170→
+   171→      const url = editingPueblo ? `/api/pueblos/${editingPueblo.id}` : '/api/pueblos';
+   172→      const method = editingPueblo ? 'PUT' : 'POST';
+   173→
+   174→      const response = await fetch(url, {
+   175→        method,
+   176→        headers: { 'Content-Type': 'application/json' },
+   177→        body: JSON.stringify(payload)
+   178→      });
+   179→
+   180→      const result = await response.json();
+   181→
+   182→      if (result.success) {
+   183→        toast({
+   184→          title: 'Éxito',
+   185→          description: editingPueblo ? 'Región actualizada' : 'Región creada'
+   186→        });
+   187→        setDialogOpen(false);
+   188→        setEditingPueblo(null);
+   189→        fetchData();
+   190→      }
+   191→    } catch (error) {
+   192→      console.error('Error saving pueblo:', error);
+   193→      toast({
+   194→        title: 'Error',
+   195→        description: 'No se pudo guardar la región',
+   196→        variant: 'destructive'
+   197→      });
+   198→    }
+   199→  };
+   200→
+   201→  if (loading) {
+   202→    return (
+   203→      <div className="flex items-center justify-center h-96">
+   204→        <p className="text-muted-foreground">Cargando regiones...</p>
+   205→      </div>
+   206→    );
+   207→  }
+   208→
+   209→  return (
+   210→    <div>
+   211→      <div className="space-y-4">
+   212→        <div className="flex items-center justify-between">
+   213→          <div>
+   214→            <h2 className="text-2xl font-bold">Pueblos/Naciones</h2>
+   215→            <p className="text-sm text-muted-foreground">Gestiona las regiones del mundo, sus edificios y resúmenes consolidados</p>
+   216→          </div>
+   217→          <Button onClick={handleCreate}>
+   218→            <Plus className="h-4 w-4 mr-2" />
+   219→            Crear Región
+   220→          </Button>
+   221→        </div>
+   222→
+   223→        {/* Filtros y Estadísticas */}
+   224→        <div className="flex flex-wrap items-center gap-4 p-4 rounded-lg bg-muted/30 border">
+   225→          <div className="flex items-center gap-2">
+   226→            <Filter className="h-4 w-4 text-muted-foreground" />
+   227→            <Label htmlFor="filterWorld" className="text-sm font-medium">Filtrar por mundo:</Label>
+   228→            <Select value={filterWorldId} onValueChange={setFilterWorldId}>
+   229→              <SelectTrigger id="filterWorld" className="w-48">
+   230→                <SelectValue placeholder="Todos los mundos" />
+   231→              </SelectTrigger>
+   232→              <SelectContent>
+   233→                <SelectItem value="all">Todos los mundos</SelectItem>
+   234→                {worlds.map((world) => (
+   235→                  <SelectItem key={world.id} value={world.id}>
+   236→                    {world.name}
+   237→                  </SelectItem>
+   238→                ))}
+   239→              </SelectContent>
+   240→            </Select>
+   241→          </div>
+   242→          
+   243→          <div className="flex-1" />
+   244→          
+   245→          {/* Estadísticas totales */}
+   246→          <div className="flex flex-wrap gap-2">
+   247→            {(() => {
+   248→              const filteredPueblos = filterWorldId === 'all' 
+   249→                ? pueblos 
+   250→                : pueblos.filter(p => p.worldId === filterWorldId);
+   251→              const filteredEdificios = filterWorldId === 'all'
+   252→                ? edificios
+   253→                : edificios.filter(e => {
+   254→                    const pueblo = pueblos.find(p => p.id === e.puebloId);
+   255→                    return pueblo?.worldId === filterWorldId;
+   256→                  });
+   257→              const filteredNpcs = filterWorldId === 'all'
+   258→                ? npcs
+   259→                : npcs.filter(n => n.location.worldId === filterWorldId);
+   260→              
+   261→              return (
+   262→                <>
+   263→                  <Badge variant="secondary" className="flex items-center gap-1">
+   264→                    <Globe className="h-3 w-3" />
+   265→                    {filteredPueblos.length} {filteredPueblos.length === 1 ? 'región' : 'regiones'}
+   266→                  </Badge>
+   267→                  <Badge variant="secondary" className="flex items-center gap-1">
+   268→                    <Building className="h-3 w-3" />
+   269→                    {filteredEdificios.length} {filteredEdificios.length === 1 ? 'edificio' : 'edificios'}
+   270→                  </Badge>
+   271→                  <Badge variant="default" className="flex items-center gap-1 bg-primary/80">
+   272→                    <Users className="h-3 w-3" />
+   273→                    {filteredNpcs.length} {filteredNpcs.length === 1 ? 'NPC' : 'NPCs'}
+   274→                  </Badge>
+   275→                </>
+   276→              );
+   277→            })()}
+   278→          </div>
+   279→        </div>
+   280→
+   281→        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+   282→          {(filterWorldId === 'all' 
+   283→            ? pueblos 
+   284→            : pueblos.filter(p => p.worldId === filterWorldId)
+   285→          ).map((pueblo) => {
+   286→            const world = worlds.find(w => w.id === pueblo.worldId);
+   287→            const edificiosEnPueblo = edificios.filter(e => e.puebloId === pueblo.id);
+   288→            const npcsEnPueblo = npcs.filter(n => n.location.puebloId === pueblo.id);
+   289→
+   290→            return (
+   291→              <Card key={pueblo.id}>
+   292→                <CardHeader>
+   293→                  <CardTitle className="flex items-center justify-between">
+   294→                    <div className="flex items-center gap-2">
+   295→                      {pueblo.name}
+   296→                      <Badge variant="outline" className={pueblo.type === 'nacion' ? 'border-purple-500 text-purple-500' : 'border-green-500 text-green-500'}>
+   297→                        {pueblo.type === 'nacion' ? 'Nación' : 'Pueblo'}
+   298→                      </Badge>
+   299→                    </div>
+   300→                    <div className="flex gap-2">
+   301→                      <Button
+   302→                        variant="ghost"
+   303→                        size="sm"
+   304→                        onClick={() => handleEdit(pueblo)}
+   305→                      >
+   306→                        <Edit2 className="h-4 w-4" />
+   307→                      </Button>
+   308→                      <Button
+   309→                        variant="ghost"
+   310→                        size="sm"
+   311→                        onClick={() => handleDelete(pueblo.id)}
+   312→                      >
+   313→                        <Trash2 className="h-4 w-4 text-destructive" />
+   314→                      </Button>
+   315→                    </div>
+   316→                  </CardTitle>
+   317→                </CardHeader>
+   318→                <CardContent className="overflow-hidden">
+   319→                  <div className="max-h-96 overflow-y-auto space-y-3 pr-1 custom-scrollbar">
+   320→                    {/* Ubicación e ID */}
+   321→                    <div className="flex items-center gap-2 text-sm">
+   322→                      <span className="text-muted-foreground leading-tight">{world?.name || 'Mundo desconocido'}</span>
+   323→                      <span className="text-muted-foreground/60 mt-0.5">•</span>
+   324→                      <span className="font-mono text-xs bg-muted/50 px-2 py-0.5 rounded border-2 border-[#2C2923] text-[#83673D] leading-tight">
+   325→                        {pueblo.id}
+   326→                      </span>
+   327→                    </div>
+   328→                    {/* Estadísticas de la Región */}
+   329→                    <div className="flex flex-wrap gap-2">
+   330→                      <Badge variant="secondary" className="flex items-center gap-1">
+   331→                        <Building className="h-3 w-3" />
+   332→                        {edificiosEnPueblo.length} {edificiosEnPueblo.length === 1 ? 'edificio' : 'edificios'}
+   333→                      </Badge>
+   334→                      <Badge variant="default" className="flex items-center gap-1 bg-primary/80">
+   335→                        <Users className="h-3 w-3" />
+   336→                        {npcsEnPueblo.length} {npcsEnPueblo.length === 1 ? 'NPC' : 'NPCs'}
+   337→                      </Badge>
+   338→                    </div>
+   339→                    
+   340→                    <div className="text-sm font-medium">Descripción:</div>
+   341→                    <div className="text-sm text-muted-foreground line-clamp-2">
+   342→                      {pueblo.description || 'Sin descripción'}
+   343→                    </div>
+   344→
+   345→                    {pueblo.lore.rumores.length > 0 && (
+   346→                      <div>
+   347→                        <div className="flex items-center justify-between mb-2">
+   348→                          <p className="text-sm font-medium flex items-center gap-2">
+   349→                            <ScrollText className="h-3.5 w-3.5 text-[#83673D]" />
+   350→                            Rumores:
+   351→                          </p>
+   352→                          <span className="text-xs text-muted-foreground">
+   353→                            {pueblo.lore.rumores.length} {pueblo.lore.rumores.length === 1 ? 'rumor' : 'rumores'}
+   354→                          </span>
+   355→                        </div>
+   356→                        <div className="max-h-32 overflow-y-auto border-2 border-[#2C2923] bg-[#100F11] p-3 rounded">
+   357→                          <ul className="space-y-1.5">
+   358→                            {pueblo.lore.rumores.map((rumor, i) => (
+   359→                              <li key={i} className="text-sm text-[#B8B8B8] flex items-start gap-2">
+   360→                                <span className="flex-shrink-0 w-5 h-5 flex items-center justify-center bg-[#2C2923] text-[#83673D] text-xs font-mono rounded">
+   361→                                  {i + 1}
+   362→                                </span>
+   363→                                <span className="break-words">{rumor}</span>
+   364→                              </li>
+   365→                            ))}
+   366→                          </ul>
+   367→                        </div>
+   368→                      </div>
+   369→                    )}
+   370→                    {pueblo.lore.eventos && pueblo.lore.eventos.length > 0 && (
+   371→                      <div>
+   372→                        <div className="flex items-center justify-between mb-2">
+   373→                          <p className="text-sm font-medium flex items-center gap-2">
+   374→                            <ScrollText className="h-3.5 w-3.5 text-[#83673D]" />
+   375→                            Eventos:
+   376→                          </p>
+   377→                          <span className="text-xs text-muted-foreground">
+   378→                            {pueblo.lore.eventos.length} {pueblo.lore.eventos.length === 1 ? 'evento' : 'eventos'}
+   379→                          </span>
+   380→                        </div>
+   381→                        <div className="max-h-32 overflow-y-auto border-2 border-[#2C2923] bg-[#100F11] p-3 rounded">
+   382→                          <ul className="space-y-1.5">
+   383→                            {pueblo.lore.eventos.map((evento, i) => (
+   384→                              <li key={i} className="text-sm text-[#B8B8B8] flex items-start gap-2">
+   385→                                <span className="flex-shrink-0 w-5 h-5 flex items-center justify-center bg-[#2C2923] text-[#83673D] text-xs font-mono rounded">
+   386→                                  {i + 1}
+   387→                                </span>
+   388→                                <span className="break-words">{evento}</span>
+   389→                              </li>
+   390→                            ))}
+   391→                          </ul>
+   392→                        </div>
+   393→                      </div>
+   394→                    )}
+   395→
+   396→                    <div className="mt-3">
+   397→                      <p className="text-sm font-medium">Estado:</p>
+   398→                      <div className="text-sm text-muted-foreground">
+   399→                        {pueblo.lore.estado_pueblo || 'Sin estado'}
+   400→                      </div>
+   401→                    </div>
+   402→
+   403→                    {edificiosEnPueblo.length > 0 && (
+   404→                      <div className="border-t pt-3 mt-3">
+   405→                        <div className="flex items-center justify-between mb-3">
+   406→                          <p className="text-sm font-semibold flex items-center gap-2">
+   407→                            <Building className="h-4 w-4 text-blue-500" />
+   408→                            Edificaciones ({edificiosEnPueblo.length})
+   409→                          </p>
+   410→                        </div>
+   411→                        <div className="space-y-2">
+   412→                        {edificiosEnPueblo.map((edificio) => {
+   413→                          const npcsEnEdificio = npcs.filter(n => n.location.edificioId === edificio.id);
+   414→                          const isExpanded = expandedEdificios[edificio.id];
+   415→                          
+   416→                          return (
+   417→                            <Collapsible 
+   418→                              key={edificio.id} 
+   419→                              open={isExpanded}
+   420→                              onOpenChange={(open) => setExpandedEdificios(prev => ({ ...prev, [edificio.id]: open }))}
+   421→                            >
+   422→                              <div className="border rounded-lg bg-muted/30">
+   423→                                <CollapsibleTrigger asChild>
+   424→                                  <div className="flex items-center justify-between p-3 cursor-pointer hover:bg-muted/50 transition-colors">
+   425→                                    <div className="flex items-center gap-2">
+   426→                                      {isExpanded ? (
+   427→                                        <ChevronDown className="h-4 w-4 text-muted-foreground" />
+   428→                                      ) : (
+   429→                                        <ChevronRight className="h-4 w-4 text-muted-foreground" />
+   430→                                      )}
+   431→                                      <MapPin className="h-4 w-4 text-blue-500" />
+   432→                                      <span className="text-sm font-medium">{edificio.name}</span>
+   433→                                    </div>
+   434→                                    <div className="flex items-center gap-2">
+   435→                                      <Badge variant="secondary" className="text-xs">
+   436→                                        <Users className="h-3 w-3 mr-1" />
+   437→                                        {npcsEnEdificio.length} NPCs
+   438→                                      </Badge>
+   439→                                    </div>
+   440→                                  </div>
+   441→                                </CollapsibleTrigger>
+   442→                                <CollapsibleContent>
+   443→                                  <div className="px-3 pb-3 pt-0 border-t">
+   444→                                    {/* Info del edificio */}
+   445→                                    <div className="text-xs text-muted-foreground mb-2 mt-2">
+   446→                                      ID: {edificio.id}
+   447→                                    </div>
+   448→                                    {edificio.lore && (
+   449→                                      <p className="text-sm text-muted-foreground mb-3 line-clamp-2">
+   450→                                        {edificio.lore}
+   451→                                      </p>
+   452→                                    )}
+   453→                                    
+   454→                                    {/* Lista de NPCs */}
+   455→                                    {npcsEnEdificio.length > 0 ? (
+   456→                                      <div className="space-y-1.5">
+   457→                                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+   458→                                          Personajes en este edificio:
+   459→                                        </p>
+   460→                                        <div className="grid gap-1.5">
+   461→                                          {npcsEnEdificio.map((npc) => {
+   462→                                            const npcName = getCardField(npc.card, 'name', 'Sin nombre');
+   463→                                            const npcPersonality = getCardField(npc.card, 'personality', '');
+   464→                                            return (
+   465→                                              <div 
+   466→                                                key={npc.id} 
+   467→                                                className="flex items-center justify-between p-2 rounded bg-background/50 border"
+   468→                                              >
+   469→                                                <div className="flex-1 min-w-0">
+   470→                                                  <p className="text-sm font-medium truncate">{npcName}</p>
+   471→                                                  {npcPersonality && (
+   472→                                                    <p className="text-xs text-muted-foreground truncate">
+   473→                                                      {npcPersonality.substring(0, 60)}...
+   474→                                                    </p>
+   475→                                                  )}
+   476→                                                </div>
+   477→                                                <span className="text-xs text-muted-foreground font-mono ml-2">
+   478→                                                  {npc.id.substring(0, 12)}...
+   479→                                                </span>
+   480→                                              </div>
+   481→                                            );
+   482→                                          })}
+   483→                                        </div>
+   484→                                      </div>
+   485→                                    ) : (
+   486→                                      <p className="text-sm text-muted-foreground italic">
+   487→                                        Sin NPCs en este edificio
+   488→                                      </p>
+   489→                                    )}
+   490→                                  </div>
+   491→                                </CollapsibleContent>
+   492→                              </div>
+   493→                            </Collapsible>
+   494→                          );
+   495→                        })}
+   496→                        </div>
+   497→                      </div>
+   498→                    )}
+   499→
+   500→                    {puebloMemories[pueblo.id]?.consolidatedSummary && (
+   501→                      <div className="mt-3 p-3 rounded-lg bg-indigo-50 dark:bg-indigo-950 border border-indigo-200 dark:border-indigo-800">
+   502→                        <p className="text-xs font-semibold text-indigo-900 dark:text-indigo-100 mb-1">
+   503→                          Último Resumen General
+   504→                        </p>
+   505→                        <p className="text-sm text-indigo-800 dark:text-indigo-200 line-clamp-3">
+   506→                          {puebloMemories[pueblo.id].consolidatedSummary}
+   507→                        </p>
+   508→                      </div>
+   509→                    )}
+   510→                  </div>
+   511→                </CardContent>
+   512→              </Card>
+   513→            );
+   514→          })}
+   515→        </div>
+   516→      </div>
+   517→
+   518→    <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+   519→      <DialogContent>
+   520→        <DialogHeader>
+   521→          <DialogTitle>
+   522→            {editingPueblo
+   523→              ? `Editar ${formData.type === 'nacion' ? 'Nación' : 'Pueblo'}`
+   524→              : `Crear Nuevo ${formData.type === 'nacion' ? 'Nación' : 'Pueblo'}`
+   525→            }
+   526→          </DialogTitle>
+   527→          <DialogDescription>
+   528→            {editingPueblo ? 'Edita la información de la región' : 'Completa la información de la nueva región'}
+   529→          </DialogDescription>
+   530→        </DialogHeader>
+   531→        <div className="space-y-4">
+   532→            <div>
+   533→              <Label htmlFor="worldId">Mundo *</Label>
+   534→              <Select
+   535→                value={formData.worldId}
+   536→                onValueChange={(value) => setFormData({ ...formData, worldId: value, puebloId: '', type: 'pueblo' })}
+   537→                disabled={!!editingPueblo}
+   538→              >
+   539→                <SelectTrigger>
+   540→                  <SelectValue placeholder="Selecciona un mundo" />
+   541→                </SelectTrigger>
+   542→                <SelectContent>
+   543→                  {worlds.map((world) => (
+   544→                    <SelectItem key={world.id} value={world.id}>{world.name}</SelectItem>
+   545→                  ))}
+   546→                </SelectContent>
+   547→              </Select>
+   548→            </div>
+   549→
+   550→            <div>
+   551→              <Label htmlFor="name">Nombre *</Label>
+   552→              <Input
+   553→                id="name"
+   554→                value={formData.name}
+   555→                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+   556→                placeholder="Nombre de la región"
+   557→              />
+   558→            </div>
+   559→
+   560→            <div>
+   561→              <Label htmlFor="type">Tipo *</Label>
+   562→              <Select
+   563→                value={formData.type}
+   564→                onValueChange={(value) => setFormData({ ...formData, type: value })}
+   565→                disabled={!!editingPueblo}
+   566→              >
+   567→                <SelectTrigger>
+   568→                  <SelectValue placeholder="Selecciona el tipo" />
+   569→                </SelectTrigger>
+   570→                <SelectContent>
+   571→                  <SelectItem value="pueblo">Pueblo</SelectItem>
+   572→                  <SelectItem value="nacion">Nación</SelectItem>
+   573→                </SelectContent>
+   574→              </Select>
+   575→            </div>
+   576→
+   577→            <div>
+   578→              <Label htmlFor="description">Descripción</Label>
+   579→              <Textarea
+   580→                id="description"
+   581→                value={formData.description}
+   582→                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+   583→                placeholder="Descripción de la región"
+   584→                rows={3}
+   585→              />
+   586→            </div>
+   587→
+   588→            <div>
+   589→              <Label htmlFor="estado_pueblo">Estado</Label>
+   590→              <Textarea
+   591→                id="estado_pueblo"
+   592→                value={formData.estado_pueblo}
+   593→                onChange={(e) => setFormData({ ...formData, estado_pueblo: e.target.value })}
+   594→                placeholder="Estado de la región (ej: Prospero, En guerra, en desarrollo...)"
+   595→                rows={3}
+   596→              />
+   597→            </div>
+   598→
+   599→            <div>
+   600→              <Label htmlFor="rumores">Rumores (uno por línea)</Label>
+   601→              <Textarea
+   602→                id="rumores"
+   603→                value={formData.rumores}
+   604→                onChange={(e) => setFormData({ ...formData, rumores: e.target.value })}
+   605→                placeholder="Rumores de la región (uno por línea)"
+   606→                rows={5}
+   607→              />
+   608→            </div>
+   609→            <div>
+   610→              <Label htmlFor="eventos">Eventos (uno por línea)</Label>
+   611→              <Textarea
+   612→                id="eventos"
+   613→                value={formData.eventos}
+   614→                onChange={(e) => setFormData({ ...formData, eventos: e.target.value })}
+   615→                placeholder="Eventos de la región (uno por línea)"
+   616→                rows={5}
+   617→              />
+   618→            </div>
+   619→          </div>
+   620→
+   621→          <DialogFooter>
+   622→              <Button variant="outline" onClick={() => setDialogOpen(false)}>
+   623→                Cancelar
+   624→              </Button>
+   625→              <Button onClick={handleSubmit}>
+   626→                {editingPueblo ? 'Actualizar' : 'Crear'}
+   627→              </Button>
+   628→            </DialogFooter>
+   629→          </DialogContent>
+   630→        </Dialog>
+   631→      <GenericBackupSection
+   632→        entityType="pueblos"
+   633→        entityName="Pueblo"
+   634→        entityNamePlural="Pueblos/Naciones"
+   635→        apiPath="pueblos"
+   636→      />
+   637→
+   638→  </div>
+   639→  );
+   640→}
+   641→

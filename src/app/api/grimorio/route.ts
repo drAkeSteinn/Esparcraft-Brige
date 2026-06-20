@@ -55,10 +55,18 @@ export async function POST(request: NextRequest) {
     const body: CreateGrimorioCardRequest = await request.json();
     
     // Validar campos requeridos
-    if (!body.key || !body.nombre || !body.plantilla || !body.categoria || !body.tipo) {
+    // Para plantillas condicionales, plantilla puede estar vacío (se usa conditionalConfig)
+    const isConditional = body.templateType === 'condicional';
+    if (!body.key || !body.nombre || !body.categoria || !body.tipo) {
       return NextResponse.json({ 
         success: false, 
-        error: 'Faltan campos requeridos: key, nombre, plantilla, categoria, tipo' 
+        error: 'Faltan campos requeridos: key, nombre, categoria, tipo' 
+      }, { status: 400 });
+    }
+    if (!isConditional && !body.plantilla) {
+      return NextResponse.json({ 
+        success: false, 
+        error: 'Falta el campo requerido: plantilla' 
       }, { status: 400 });
     }
 
@@ -94,12 +102,14 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    // Validar estructura de plantilla si es tipo 'plantilla'
-    const validations = validateTemplateStructure(body.plantilla, body.tipo);
-    if (validations.nestedTemplates.length > 0) {
+    // Validar estructura de plantilla si es tipo 'plantilla' (no aplica a condicionales)
+    const validations = validateTemplateStructure(body.plantilla || '', body.tipo);
+    // ✅ Las plantillas anidadas SÍ están permitidas. Solo bloqueamos si hay
+    // errores estructurales reales (ninguno actualmente, pero dejamos el hook).
+    if (!validations.valid) {
       return NextResponse.json({ 
         success: false, 
-        error: 'Las plantillas no pueden contener otras plantillas',
+        error: 'Estructura de plantilla inválida',
         validations: {
           nestedTemplates: validations.nestedTemplates,
           missingVariables: validations.missingVariables,
@@ -108,23 +118,50 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
+    // ✅ Plantilla condicional: validar templateType y conditionalConfig
+    const templateType = body.templateType === 'condicional' ? 'condicional' : 'normal';
+    let conditionalConfig = null;
+    if (templateType === 'condicional') {
+      if (!body.conditionalConfig || !body.conditionalConfig.npcId) {
+        return NextResponse.json({
+          success: false,
+          error: 'Las plantillas condicionales requieren conditionalConfig.npcId'
+        }, { status: 400 });
+      }
+      // Validar estructura mínima de branches
+      if (!Array.isArray(body.conditionalConfig.branches)) {
+        return NextResponse.json({
+          success: false,
+          error: 'conditionalConfig.branches debe ser un array'
+        }, { status: 400 });
+      }
+      conditionalConfig = {
+        npcId: body.conditionalConfig.npcId,
+        branches: body.conditionalConfig.branches,
+        defaultTemplate: body.conditionalConfig.defaultTemplate || ''
+      };
+    }
+
     const keyClean = body.key.trim().toLowerCase().replace(/\s+/g, '_');
     const newCard = grimorioManager.create({ 
       key: keyClean, 
       nombre: body.nombre.trim(), 
-      plantilla: body.plantilla.trim(), 
+      plantilla: templateType === 'condicional' ? '' : body.plantilla.trim(), 
       categoria: body.categoria,
       tipo: body.tipo,
+      templateType,
+      conditionalConfig,
       descripcion: body.descripcion?.trim() 
     });
 
-    console.log(`Nueva card de grimorio creada: ${newCard.id} - ${newCard.nombre} (tipo: ${newCard.tipo})`);
+    console.log(`Nueva card de grimorio creada: ${newCard.id} - ${newCard.nombre} (tipo: ${newCard.tipo}/${templateType})`);
     return NextResponse.json({ 
       success: true, 
       data: newCard, 
       message: 'Card creada correctamente',
       validations: {
         variablesUsed: validations.variablesUsed,
+        nestedTemplates: validations.nestedTemplates,
         warnings: validations.warnings
       }
     });

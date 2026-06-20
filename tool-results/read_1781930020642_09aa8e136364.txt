@@ -1,0 +1,727 @@
+     1→'use client';
+     2→
+     3→import { useState, useEffect, useCallback } from 'react';
+     4→import { Button } from '@/components/ui/button';
+     5→import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+     6→import { Input } from '@/components/ui/input';
+     7→import { Label } from '@/components/ui/label';
+     8→import { Progress } from '@/components/ui/progress';
+     9→import { Badge } from '@/components/ui/badge';
+    10→import { ScrollArea } from '@/components/ui/scroll-area';
+    11→import { Play, RefreshCw, Loader2, CheckCircle, AlertCircle, Clock, Layers, Toggle, FileText, User, Building, Map, Globe } from 'lucide-react';
+    12→import { toast } from '@/hooks/use-toast';
+    13→
+    14→interface ResumenGeneralStatus {
+    15→  status: 'idle' | 'running' | 'completed' | 'error';
+    16→  currentPhase?: string;
+    17→  phaseProgress?: {
+    18→    phase: string;
+    19→    current: number;
+    20→    total: number;
+    21→    message: string;
+    22→  }[];
+    23→  overallProgress: number;
+    24→  startedAt?: string;
+    25→  completedAt?: string;
+    26→  error?: string;
+    27→  config?: {
+    28→    minMessages: number;
+    29→    phases: {
+    30→      sesiones: boolean;
+    31→      npcs: boolean;
+    32→      edificios: boolean;
+    33→      pueblos: boolean;
+    34→      mundos: boolean;
+    35→    };
+    36→  };
+    37→  stats?: {
+    38→    startedAt?: string;
+    39→    completedAt?: string;
+    40→    duration?: number;
+    41→    phases: {
+    42→      sesiones?: { completed: number; skipped: number };
+    43→      npcs?: { completed: number; skipped: number };
+    44→      edificios?: { completed: number; skipped: number };
+    45→      pueblos?: { completed: number; skipped: number };
+    46→      mundos?: { completed: number; skipped: number };
+    47→    };
+    48→  };
+    49→}
+    50→
+    51→export default function ResumenGeneralTab() {
+    52→  const [status, setStatus] = useState<ResumenGeneralStatus>({ status: 'idle', overallProgress: 0 });
+    53→  const [loading, setLoading] = useState(false);
+    54→  const [minMessages, setMinMessages] = useState(10);
+    55→  const [phases, setPhases] = useState({
+    56→    sesiones: true,
+    57→    npcs: true,
+    58→    edificios: true,
+    59→    pueblos: true,
+    60→    mundos: true
+    61→  });
+    62→
+    63→  // Poll status every 2 seconds when running
+    64→  const fetchStatus = useCallback(async () => {
+    65→    try {
+    66→      const response = await fetch('/api/resumen-general/status');
+    67→      const result = await response.json();
+    68→      setStatus(result);
+    69→    } catch (error) {
+    70→      console.error('Error fetching status:', error);
+    71→    }
+    72→  }, []);
+    73→
+    74→  useEffect(() => {
+    75→    fetchStatus();
+    76→    // Cargar minMessages desde la config unificada (vía /api/resumen-general/config)
+    77→    fetch('/api/resumen-general/config')
+    78→      .then((r) => r.json())
+    79→      .then((result) => {
+    80→        if (result.success && result.data?.minMessages) {
+    81→          setMinMessages(result.data.minMessages);
+    82→        }
+    83→      })
+    84→      .catch((err) => console.error('Error cargando config de resumen:', err));
+    85→
+    86→    const interval = setInterval(() => {
+    87→      if (status.status === 'running') {
+    88→        fetchStatus();
+    89→      }
+    90→    }, 2000);
+    91→
+    92→    return () => clearInterval(interval);
+    93→  }, [status.status, fetchStatus]);
+    94→
+    95→  const handleStart = async () => {
+    96→    setLoading(true);
+    97→    try {
+    98→      const response = await fetch('/api/resumen-general', {
+    99→        method: 'POST',
+   100→        headers: { 'Content-Type': 'application/json' },
+   101→        body: JSON.stringify({
+   102→          minMessages,
+   103→          phases
+   104→        })
+   105→      });
+   106→
+   107→      const result = await response.json();
+   108→
+   109→      if (result.success) {
+   110→        toast({
+   111→          title: 'Resumen General Iniciado',
+   112→          description: 'El proceso se está ejecutando en segundo plano'
+   113→        });
+   114→        await fetchStatus();
+   115→      } else {
+   116→        toast({
+   117→          title: 'Error',
+   118→          description: result.error || 'No se pudo iniciar el resumen general',
+   119→          variant: 'destructive'
+   120→        });
+   121→      }
+   122→    } catch (error) {
+   123→      console.error('Error starting resumen general:', error);
+   124→      toast({
+   125→        title: 'Error',
+   126→        description: 'Error de comunicación con el servidor',
+   127→        variant: 'destructive'
+   128→      });
+   129→    } finally {
+   130→      setLoading(false);
+   131→    }
+   132→  };
+   133→
+   134→  const formatDuration = (startedAt?: string, completedAt?: string) => {
+   135→    if (!startedAt) return '-';
+   136→    const start = new Date(startedAt).getTime();
+   137→    const end = completedAt ? new Date(completedAt).getTime() : Date.now();
+   138→    const duration = end - start;
+   139→    const seconds = Math.floor(duration / 1000);
+   140→    const minutes = Math.floor(seconds / 60);
+   141→    const hours = Math.floor(minutes / 60);
+   142→
+   143→    if (hours > 0) return `${hours}h ${minutes % 60}m`;
+   144→    if (minutes > 0) return `${minutes}m ${seconds % 60}s`;
+   145→    return `${seconds}s`;
+   146→  };
+   147→
+   148→  const getStatusBadge = () => {
+   149→    switch (status.status) {
+   150→      case 'running':
+   151→        return <Badge className="bg-blue-500"><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Ejecutando</Badge>;
+   152→      case 'completed':
+   153→        return <Badge className="bg-green-500"><CheckCircle className="h-3 w-3 mr-1" /> Completado</Badge>;
+   154→      case 'error':
+   155→        return <Badge variant="destructive"><AlertCircle className="h-3 w-3 mr-1" /> Error</Badge>;
+   156→      default:
+   157→        return <Badge variant="secondary"><Clock className="h-3 w-3 mr-1" /> Inactivo</Badge>;
+   158→    }
+   159→  };
+   160→
+   161→  const getCurrentPhaseName = () => {
+   162→    const phaseNames: Record<string, string> = {
+   163→      'sesiones': 'Resumen de Sesiones',
+   164→      'npcs': 'Resumen de NPCs',
+   165→      'edificios': 'Resumen de Edificios',
+   166→      'pueblos': 'Resumen de Pueblos',
+   167→      'mundos': 'Resumen de Mundos',
+   168→      'iniciando': 'Iniciando...'
+   169→    };
+   170→    return phaseNames[status.currentPhase || ''] || status.currentPhase || '-';
+   171→  };
+   172→
+   173→  const formatNumber = (num: number) => num.toLocaleString();
+   174→
+   175→  return (
+   176→    <div className="space-y-6">
+   177→      {/* Status Overview */}
+   178→      <Card>
+   179→        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+   180→          <div>
+   181→            <CardTitle>Resumen General</CardTitle>
+   182→            <CardDescription>
+   183→              Proceso de resumen jerárquico: Sesiones → NPCs → Edificios → Pueblos → Mundos
+   184→            </CardDescription>
+   185→          </div>
+   186→          <div className="flex items-center gap-2">
+   187→            <Toggle
+   188→              checked={status.status === 'running'}
+   189→              onCheckedChange={(checked) => {
+   190→                if (!checked) {
+   191→                  // TODO: Implementar lógica para detener el resumen general
+   192→                  toast({
+   193→                    title: 'Atención',
+   194→                    description: 'Esta funcionalidad no está implementada aún'
+   195→                  });
+   196→                }
+   197→              }}
+   198→              disabled={status.status === 'running' || loading}
+   199→            />
+   200→            {getStatusBadge()}
+   201→            <Button
+   202→              variant="outline"
+   203→              size="icon"
+   204→              onClick={fetchStatus}
+   205→              disabled={loading}
+   206→            >
+   207→              <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+   208→            </Button>
+   209→          </div>
+   210→        </CardHeader>
+   211→        <CardContent className="space-y-4">
+   212→          {status.status === 'running' && (
+   213→            <div className="space-y-2">
+   214→              <div className="flex items-center justify-between text-sm">
+   215→                <span>Progreso Total</span>
+   216→                <span className="font-medium">{status.overallProgress.toFixed(1)}%</span>
+   217→              </div>
+   218→              <Progress value={status.overallProgress} className="h-2" />
+   219→              <div className="text-sm text-muted-foreground">
+   220→                Fase actual: <span className="font-medium">{getCurrentPhaseName()}</span>
+   221→              </div>
+   222→            </div>
+   223→          )}
+   224→
+   225→          {status.startedAt && (
+   226→            <div className="text-sm text-muted-foreground">
+   227→              <Clock className="h-3 w-3 inline mr-1" />
+   228→              Tiempo transcurrido: {formatDuration(status.startedAt, status.completedAt)}
+   229→            </div>
+   230→          )}
+   231→
+   232→          {status.error && (
+   233→            <div className="p-4 bg-destructive/10 border border-destructive/20 rounded-md">
+   234→              <div className="flex items-start gap-2">
+   235→                <AlertCircle className="h-4 w-4 text-destructive mt-0.5" />
+   236→                <div className="text-sm">
+   237→                  <div className="font-medium text-destructive">Error</div>
+   238→                  <div className="mt-1 text-destructive/80">{status.error}</div>
+   239→                </div>
+   240→              </div>
+   241→            </div>
+   242→          )}
+   243→        </CardContent>
+   244→      </Card>
+   245→
+   246→      {/* Mini Dashboard */}
+   247→      <Card>
+   248→        <CardHeader>
+   249→          <CardTitle className="text-lg">Dashboard de Ejecución</CardTitle>
+   250→        </CardHeader>
+   251→        <CardContent>
+   252→          {!status.stats || !status.stats.startedAt ? (
+   253→            <div className="flex flex-col items-center justify-center py-12 text-center">
+   254→              <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mb-4">
+   255→                <Clock className="h-8 w-8 text-muted-foreground" />
+   256→              </div>
+   257→              <h3 className="text-lg font-semibold mb-2">Sin datos de ejecución</h3>
+   258→              <p className="text-sm text-muted-foreground max-w-md">
+   259→                No hay datos disponibles de ejecuciones anteriores. 
+   260→                Inicia el Resumen General para ver las estadísticas de la ejecución aquí.
+   261→              </p>
+   262→            </div>
+   263→          ) : (
+   264→            <div className="space-y-4">
+   265→              {/* Date and Duration */}
+   266→              <div className="grid grid-cols-2 gap-4">
+   267→                <div className="p-3 bg-muted/50 rounded-lg">
+   268→                  <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
+   269→                    <Clock className="h-3 w-3" />
+   270→                    Última Ejecución
+   271→                  </div>
+   272→                  <div className="text-sm font-medium">
+   273→                    {status.stats.startedAt ? new Date(status.stats.startedAt).toLocaleString() : '-'}
+   274→                  </div>
+   275→                </div>
+   276→                <div className="p-3 bg-muted/50 rounded-lg">
+   277→                  <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
+   278→                    <RefreshCw className="h-3 w-3" />
+   279→                    Duración Total
+   280→                  </div>
+   281→                  <div className="text-sm font-medium">
+   282→                    {status.stats.duration ? formatNumber(Math.round(status.stats.duration / 1000)) + 's' : '-'}
+   283→                  </div>
+   284→                </div>
+   285→              </div>
+   286→
+   287→              {/* Phase Stats Grid */}
+   288→              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+   289→                {/* Sesiones */}
+   290→                {status.stats.phases?.sesiones && (
+   291→                  <div className="p-3 border rounded-lg space-y-2">
+   292→                    <div className="flex items-center justify-between">
+   293→                      <div className="flex items-center gap-2">
+   294→                        <FileText className="h-4 w-4 text-blue-500" />
+   295→                        <span className="text-sm font-medium">Sesiones</span>
+   296→                      </div>
+   297→                    </div>
+   298→                    <div className="grid grid-cols-2 gap-2 text-xs">
+   299→                      <div>
+   300→                        <div className="text-muted-foreground">Realizados</div>
+   301→                        <div className="text-sm font-semibold text-green-600">
+   302→                          {formatNumber(status.stats.phases.sesiones.completed)}
+   303→                        </div>
+   304→                      </div>
+   305→                      <div>
+   306→                        <div className="text-muted-foreground">Ignorados</div>
+   307→                        <div className="text-sm font-semibold text-muted-500">
+   308→                          {formatNumber(status.stats.phases.sesiones.skipped)}
+   309→                        </div>
+   310→                      </div>
+   311→                    </div>
+   312→                  </div>
+   313→                )}
+   314→
+   315→                {/* NPCs */}
+   316→                {status.stats.phases?.npcs && (
+   317→                  <div className="p-3 border rounded-lg space-y-2">
+   318→                    <div className="flex items-center justify-between">
+   319→                      <div className="flex items-center gap-2">
+   320→                        <User className="h-4 w-4 text-purple-500" />
+   321→                        <span className="text-sm font-medium">NPCs</span>
+   322→                      </div>
+   323→                    </div>
+   324→                    <div className="grid grid-cols-2 gap-2 text-xs">
+   325→                      <div>
+   326→                        <div className="text-muted-foreground">Realizados</div>
+   327→                        <div className="text-sm font-semibold text-green-600">
+   328→                          {formatNumber(status.stats.phases.npcs.completed)}
+   329→                        </div>
+   330→                      </div>
+   331→                      <div>
+   332→                        <div className="text-muted-foreground">Ignorados</div>
+   333→                        <div className="text-sm font-semibold text-muted-500">
+   334→                          {formatNumber(status.stats.phases.npcs.skipped)}
+   335→                        </div>
+   336→                      </div>
+   337→                    </div>
+   338→                  </div>
+   339→                )}
+   340→
+   341→                {/* Edificios */}
+   342→                {status.stats.phases?.edificios && (
+   343→                  <div className="p-3 border rounded-lg space-y-2">
+   344→                    <div className="flex items-center justify-between">
+   345→                      <div className="flex items-center gap-2">
+   346→                        <Building className="h-4 w-4 text-orange-500" />
+   347→                        <span className="text-sm font-medium">Edificios</span>
+   348→                      </div>
+   349→                    </div>
+   350→                    <div className="grid grid-cols-2 gap-2 text-xs">
+   351→                      <div>
+   352→                        <div className="text-muted-foreground">Realizados</div>
+   353→                        <div className="text-sm font-semibold text-green-600">
+   354→                          {formatNumber(status.stats.phases.edificios.completed)}
+   355→                        </div>
+   356→                      </div>
+   357→                      <div>
+   358→                        <div className="text-muted-foreground">Ignorados</div>
+   359→                        <div className="text-sm font-semibold text-muted-500">
+   360→                          {formatNumber(status.stats.phases.edificios.skipped)}
+   361→                        </div>
+   362→                      </div>
+   363→                    </div>
+   364→                  </div>
+   365→                )}
+   366→
+   367→                {/* Pueblos */}
+   368→                {status.stats.phases?.pueblos && (
+   369→                  <div className="p-3 border rounded-lg space-y-2">
+   370→                    <div className="flex items-center justify-between">
+   371→                      <div className="flex items-center gap-2">
+   372→                        <Map className="h-4 w-4 text-green-500" />
+   373→                        <span className="text-sm font-medium">Pueblos</span>
+   374→                      </div>
+   375→                    </div>
+   376→                    <div className="grid grid-cols-2 gap-2 text-xs">
+   377→                      <div>
+   378→                        <div className="text-muted-foreground">Realizados</div>
+   379→                        <div className="text-sm font-semibold text-green-600">
+   380→                          {formatNumber(status.stats.phases.pueblos.completed)}
+   381→                        </div>
+   382→                      </div>
+   383→                      <div>
+   384→                        <div className="text-muted-foreground">Ignorados</div>
+   385→                        <div className="text-sm font-semibold text-muted-500">
+   386→                          {formatNumber(status.stats.phases.pueblos.skipped)}
+   387→                        </div>
+   388→                      </div>
+   389→                    </div>
+   390→                  </div>
+   391→                )}
+   392→
+   393→                {/* Mundos */}
+   394→                {status.stats.phases?.mundos && (
+   395→                  <div className="p-3 border rounded-lg space-y-2">
+   396→                    <div className="flex items-center justify-between">
+   397→                      <div className="flex items-center gap-2">
+   398→                        <Globe className="h-4 w-4 text-blue-600" />
+   399→                        <span className="text-sm font-medium">Mundos</span>
+   400→                      </div>
+   401→                    </div>
+   402→                    <div className="grid grid-cols-2 gap-2 text-xs">
+   403→                      <div>
+   404→                        <div className="text-muted-foreground">Realizados</div>
+   405→                        <div className="text-sm font-semibold text-green-600">
+   406→                          {formatNumber(status.stats.phases.mundos.completed)}
+   407→                        </div>
+   408→                      </div>
+   409→                      <div>
+   410→                        <div className="text-muted-foreground">Ignorados</div>
+   411→                        <div className="text-sm font-semibold text-muted-500">
+   412→                          {formatNumber(status.stats.phases.mundos.skipped)}
+   413→                        </div>
+   414→                      </div>
+   415→                    </div>
+   416→                  </div>
+   417→                )}
+   418→              </div>
+   419→            </div>
+   420→          )}
+   421→          </CardContent>
+   422→        </Card>
+   423→
+   424→      {/* Execution Stats - Detalles */}
+   425→      {status.stats && (
+   426→        <Card>
+   427→          <CardHeader>
+   428→            <CardTitle className="text-lg">Detalles de Ejecución</CardTitle>
+   429→          </CardHeader>
+   430→          <CardContent className="space-y-4">
+   431→            <div className="grid grid-cols-2 gap-4">
+   432→              <div>
+   433→                <span className="text-sm text-muted-foreground">Inicio:</span>
+   434→                <div className="text-sm font-medium">
+   435→                  {status.stats.startedAt ? new Date(status.stats.startedAt).toLocaleString() : '-'}
+   436→                </div>
+   437→              </div>
+   438→              <div>
+   439→                <span className="text-sm text-muted-foreground">Fin:</span>
+   440→                <div className="text-sm font-medium">
+   441→                  {status.stats.completedAt ? new Date(status.stats.completedAt).toLocaleString() : '-'}
+   442→                </div>
+   443→              </div>
+   444→            </div>
+   445→            <div className="grid grid-cols-2 gap-4 mt-2">
+   446→              <div>
+   447→                <span className="text-sm text-muted-foreground">Duración:</span>
+   448→                <div className="text-sm font-medium">
+   449→                  {status.stats.duration ? formatNumber(Math.round(status.stats.duration / 1000)) + 's' : '-'}
+   450→                </div>
+   451→              </div>
+   452→            </div>
+   453→
+   454→            {/* Phase Stats */}
+   455→            <div className="space-y-3 mt-4">
+   456→              {status.stats.phases?.sesiones && (
+   457→                <div className="p-4 border rounded-md">
+   458→                  <div className="flex items-center justify-between mb-2">
+   459→                    <Badge>Sesiones</Badge>
+   460→                  </div>
+   461→                  <div className="text-sm">
+   462→                    Completados: {formatNumber(status.stats.phases.sesiones.completed)}
+   463→                    {status.stats.phases.sesiones.skipped > 0 && (
+   464→                      <span className="text-muted-foreground">
+   465→                        ({formatNumber(status.stats.phases.sesiones.skipped)} ignorados)
+   466→                      </span>
+   467→                    )}
+   468→                  </div>
+   469→                </div>
+   470→              )}
+   471→
+   472→              {status.stats.phases?.npcs && (
+   473→                <div className="p-4 border rounded-md">
+   474→                  <div className="flex items-center justify-between mb-2">
+   475→                    <Badge>NPCs</Badge>
+   476→                  </div>
+   477→                  <div className="text-sm">
+   478→                    Completados: {formatNumber(status.stats.phases.npcs.completed)}
+   479→                    {status.stats.phases.npcs.skipped > 0 && (
+   480→                      <span className="text-muted-foreground">
+   481→                        ({formatNumber(status.stats.phases.npcs.skipped)} ignorados)
+   482→                      </span>
+   483→                    )}
+   484→                  </div>
+   485→                </div>
+   486→              )}
+   487→
+   488→              {status.stats.phases?.edificios && (
+   489→                <div className="p-4 border rounded-md">
+   490→                  <div className="flex items-center justify-between mb-2">
+   491→                    <Badge>Edificios</Badge>
+   492→                  </div>
+   493→                  <div className="text-sm">
+   494→                    Completados: {formatNumber(status.stats.phases.edificios.completed)}
+   495→                    {status.stats.phases.edificios.skipped > 0 && (
+   496→                      <span className="text-muted-foreground">
+   497→                        ({formatNumber(status.stats.phases.edificios.skipped)} ignorados)
+   498→                      </span>
+   499→                    )}
+   500→                  </div>
+   501→                </div>
+   502→              )}
+   503→
+   504→              {status.stats.phases?.pueblos && (
+   505→                <div className="p-4 border rounded-md">
+   506→                  <div className="flex items-center justify-between mb-2">
+   507→                    <Badge>Pueblos</Badge>
+   508→                  </div>
+   509→                  <div className="text-sm">
+   510→                    Completados: {formatNumber(status.stats.phases.pueblos.completed)}
+   511→                    {status.stats.phases.pueblos.skipped > 0 && (
+   512→                      <span className="text-muted-foreground">
+   513→                        ({formatNumber(status.stats.phases.pueblos.skipped)} ignorados
+   514→                      </span>
+   515→                    )}
+   516→                  </div>
+   517→                </div>
+   518→              )}
+   519→
+   520→              {status.stats.phases?.mundos && (
+   521→                <div className="p-4 border rounded-md">
+   522→                  <div className="flex items-center justify-between mb-2">
+   523→                    <Badge>Mundos</Badge>
+   524→                  </div>
+   525→                  <div className="text-sm">
+   526→                    Completados: {formatNumber(status.stats.phases.mundos.completed)}
+   527→                    {status.stats.phases.mundos.skipped > 0 && (
+   528→                      <span className="text-muted-foreground">
+   529→                        ({formatNumber(status.stats.phases.mundos.skipped)} ignorados)
+   530→                      </span>
+   531→                    )}
+   532→                  </div>
+   533→                </div>
+   534→              )}
+   535→            </div>
+   536→          </CardContent>
+   537→        </Card>
+   538→      )}
+   539→
+   540→      {/* Configuration */}
+   541→      <Card>
+   542→        <CardHeader>
+   543→          <CardTitle>Configuración</CardTitle>
+   544→          <CardDescription>Define los parámetros para el resumen general</CardDescription>
+   545→        </CardHeader>
+   546→        <CardContent className="space-y-6">
+   547→          {/* Min Messages — LEÍDO DE LA CONFIG UNIFICADA (no editable aquí) */}
+   548→          <div className="space-y-2 p-3 border rounded-md bg-muted/30">
+   549→            <Label>Mínimo de mensajes para resumir sesión</Label>
+   550→            <div className="flex items-center gap-2">
+   551→              <Badge variant="secondary" className="text-sm">{minMessages}</Badge>
+   552→              <span className="text-xs text-muted-foreground">
+   553→                Configurado en <strong>Sesiones → Configuración → Resumen de sesión</strong>
+   554→              </span>
+   555→            </div>
+   556→            <p className="text-xs text-muted-foreground">
+   557→              Solo se resumirán sesiones con al menos este número de mensajes.
+   558→              Para cambiarlo, ve a la pestaña Sesiones → Configuración.
+   559→            </p>
+   560→          </div>
+   561→
+   562→          {/* Phases */}
+   563→          <div className="space-y-3">
+   564→            <Label className="flex items-center gap-2">
+   565→              <Layers className="h-4 w-4" />
+   566→              Fases a ejecutar
+   567→            </Label>
+   568→            <div className="grid gap-3">
+   569→              {[
+   570→                { key: 'sesiones', label: 'Resumen de Sesiones', icon: '💬' },
+   571→                { key: 'npcs', label: 'Resumen de NPCs', icon: '👤' },
+   572→                { key: 'edificios', label: 'Resumen de Edificios', icon: '🏢' },
+   573→                { key: 'pueblos', label: 'Resumen de Pueblos', icon: '🏘️' },
+   574→                { key: 'mundos', label: 'Resumen de Mundos', icon: '🌍' }
+   575→              ].map(({ key, label, icon }) => (
+   576→                <div key={key} className="flex items-center justify-between p-3 border rounded-md">
+   577→                  <div className="flex items-center gap-2">
+   578→                    <span className="text-lg">{icon}</span>
+   579→                    <span className="text-sm font-medium">{label}</span>
+   580→                  </div>
+   581→                  <input
+   582→                    type="checkbox"
+   583→                    checked={phases[key as keyof typeof phases]}
+   584→                    onChange={(e) => setPhases({
+   585→                      ...phases,
+   586→                      [key]: e.target.checked
+   587→                    })}
+   588→                    disabled={status.status === 'running'}
+   589→                    className="w-4 h-4 accent-primary"
+   590→                  />
+   591→                </div>
+   592→              ))}
+   593→            </div>
+   594→          </div>
+   595→
+   596→          {/* Start Button */}
+   597→          <Button
+   598→            onClick={handleStart}
+   599→            disabled={status.status === 'running' || loading}
+   600→            className="w-full"
+   601→            size="lg"
+   602→          >
+   603→            {loading ? (
+   604→              <>
+   605→                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+   606→                Iniciando...
+   607→              </>
+   608→            ) : status.status === 'running' ? (
+   609→              <>
+   610→                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+   611→                Ejecutando...
+   612→              </>
+   613→            ) : (
+   614→              <>
+   615→                <Play className="h-4 w-4 mr-2" />
+   616→                Iniciar Resumen General
+   617→              </>
+   618→            )}
+   619→          </Button>
+   620→        </CardContent>
+   621→      </Card>
+   622→
+   623→      {/* Phase Progress Details */}
+   624→      {status.status === 'running' && status.phaseProgress && status.phaseProgress.length > 0 && (
+   625→        <Card>
+   626→          <CardHeader>
+   627→            <CardTitle>Detalle de Progreso</CardTitle>
+   628→            <CardDescription>Estado de cada fase del proceso</CardDescription>
+   629→          </CardHeader>
+   630→          <CardContent>
+   631→            <ScrollArea className="h-64">
+   632→              <div className="space-y-3">
+   633→                {status.phaseProgress.map((phase, index) => (
+   634→                  <div key={index} className="p-3 border rounded-md space-y-2">
+   635→                    <div className="flex items-center justify-between">
+   636→                      <div className="flex items-center gap-2">
+   637→                        <Badge variant="outline">{phase.phase}</Badge>
+   638→                        <span className="text-sm font-medium">{phase.message}</span>
+   639→                      </div>
+   640→                      {phase.total > 0 ? (
+   641→                        <span className="text-sm text-muted-foreground">
+   642→                          {phase.current} / {phase.total}
+   643→                        </span>
+   644→                      ) : null}
+   645→                    </div>
+   646→                    {phase.total > 0 && (
+   647→                      <Progress value={(phase.current / phase.total) * 100} className="h-1" />
+   648→                    )}
+   649→                  </div>
+   650→                ))}
+   651→              </div>
+   652→            </ScrollArea>
+   653→          </CardContent>
+   654→        </Card>
+   655→      )}
+   656→
+   657→      {/* Last Run Info */}
+   658→      {status.status === 'completed' && status.stats && (
+   659→        <Card>
+   660→          <CardHeader>
+   661→            <CardTitle>Última Ejecución</CardTitle>
+   662→          </CardHeader>
+   663→          <CardContent className="space-y-4">
+   664→            <div className="grid grid-cols-2 gap-4 text-sm">
+   665→              <div>
+   666→                <span className="text-muted-foreground">Inicio:</span>
+   667→                <div className="font-medium">{new Date(status.stats.startedAt).toLocaleString()}</div>
+   668→              </div>
+   669→              <div>
+   670→                <span className="text-muted-foreground">Fin:</span>
+   671→                <div className="font-medium">{new Date(status.stats.completedAt).toLocaleString()}</div>
+   672→              </div>
+   673→            </div>
+   674→            <div className="grid grid-cols-2 gap-4 text-sm mt-2">
+   675→              <div>
+   676→                <span className="text-muted-foreground">Duración:</span>
+   677→                <div className="font-medium">
+   678→                  {status.stats.duration ? formatNumber(Math.round(status.stats.duration / 1000)) + 's' : '-'}
+   679→                </div>
+   680→              </div>
+   681→              <div>
+   682→                <span className="text-muted-foreground">Fases ejecutadas:</span>
+   683→                <div className="font-medium">
+   684→                  {Object.entries(status.config.phases || {}).filter(([_, enabled]) => enabled).length}
+   685→                </div>
+   686→              </div>
+   687→            </div>
+   688→
+   689→            {status.stats && (
+   690→              <div className="mt-4 pt-4 border-t">
+   691→                <div className="text-sm text-muted-foreground mb-2">Estadísticas de Fases:</div>
+   692→                <div className="text-xs space-y-1">
+   693→                  {status.stats.phases?.sesiones && (
+   694→                    <div>
+   695→                      <strong>Sesiones:</strong> {formatNumber(status.stats.phases.sesiones.completed)} completados, {status.stats.phases.sesiones.skipped} ignorados
+   696→                    </div>
+   697→                  )}
+   698→                  {status.stats.phases?.npcs && (
+   699→                    <div>
+   700→                      <strong>NPCs:</strong> {formatNumber(status.stats.phases.npcs.completed)} completados, {status.stats.phases.npcs.skipped} ignorados
+   701→                    </div>
+   702→                  )}
+   703→                  {status.stats.phases?.edificios && (
+   704→                    <div>
+   705→                      <strong>Edificios:</strong> {formatNumber(status.stats.phases.edificios.completed)} completados, {status.stats.phases.edificios.skipped} ignorados
+   706→                    </div>
+   707→                  )}
+   708→                  {status.stats.phases?.pueblos && (
+   709→                    <div>
+   710→                      <strong>Pueblos:</strong> {formatNumber(status.stats.phases.pueblos.completed)} completados, {status.stats.phases.pueblos.skipped} ignorados
+   711→                    </div>
+   712→                  )}
+   713→                  {status.stats.phases?.mundos && (
+   714→                    <div>
+   715→                      <strong>Mundos:</strong> {formatNumber(status.stats.phases.mundos.completed)} completados, {status.stats.phases.mundos.skipped} ignorados
+   716→                    </div>
+   717→                  )}
+   718→                </div>
+   719→              </div>
+   720→            )}
+   721→          </CardContent>
+   722→        </Card>
+   723→      )}
+   724→    </div>
+   725→  );
+   726→}
+   727→

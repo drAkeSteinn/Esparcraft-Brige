@@ -84,12 +84,16 @@ export class OllamaEmbeddingClient {
         );
       }
 
-      // Validar dimensión
+      // Validar dimensión: si el modelo devuelve otra dimensión, es que se cambió de modelo
+      // sin actualizar la config. Lanzamos error para evitar vectores corruptos en LanceDB.
       if (data.embedding.length !== this.config.dimension) {
-        console.warn(
-          `⚠️  Advertencia: El vector tiene ${data.embedding.length} dimensiones, ` +
-          `pero se esperaban ${this.config.dimension}`
-        );
+        const errMsg = `DIMENSION_MISMATCH: El modelo "${this.config.model}" devolvió un vector de ${data.embedding.length} dimensiones, pero la configuración dice ${this.config.dimension}. ` +
+          `Esto significa que el modelo activo no coincide con la dimensión configurada. ` +
+          `Actualice la dimensión en Config → Embeddings para que coincida con el modelo (${data.embedding.length}), ` +
+          `o vuelva al modelo anterior. Si ya tiene vectores almacenados con dimensión ${this.config.dimension}, ` +
+          `debe Reiniciar la Base de Datos o Re-embed todos los datos.`;
+        console.error(`❌ ${errMsg}`);
+        throw new Error(errMsg);
       }
 
       return data.embedding;

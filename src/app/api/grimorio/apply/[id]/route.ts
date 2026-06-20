@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { grimorioManager, worldManager, puebloManager, edificioManager, sessionManager } from '@/lib/fileManager';
-import { ApplyGrimorioCardRequest } from '@/lib/types';
-import { resolveAllVariablesWithCache, VariableContext } from '@/lib/grimorioUtils';
+import { ApplyGrimorioCardRequest, formatAttributeValue } from '@/lib/types';
+import { resolveAllVariablesWithCache, resolveConditionalTemplate, VariableContext } from '@/lib/grimorioUtils';
 import { npcDbManager } from '@/lib/npcDbManager';
+import { npcAttributeManager } from '@/lib/attributeDbManager';
 
 export async function POST(
   request: NextRequest,
@@ -23,6 +24,8 @@ export async function POST(
     }
 
     let world, pueblo, edificio, npc, session;
+    let npcAttributesList: import('@/lib/types').NPCAttribute[] | undefined;
+    let npcAttributesMap: Record<string, string> | undefined;
 
     if (context.npc?.npcid) {
       npc = await npcDbManager.getById(context.npc.npcid);
@@ -30,6 +33,17 @@ export async function POST(
         world = worldManager.getById(npc.location.worldId);
         pueblo = npc.location.puebloId ? puebloManager.getById(npc.location.puebloId) : undefined;
         edificio = npc.location.edificioId ? edificioManager.getById(npc.location.edificioId) : undefined;
+
+        // Cargar atributos del NPC para plantillas condicionales y {{key}} de atributos
+        try {
+          npcAttributesList = await npcAttributeManager.getByNpcId(context.npc.npcid);
+          npcAttributesMap = {};
+          for (const attr of npcAttributesList) {
+            npcAttributesMap[attr.key] = formatAttributeValue(attr);
+          }
+        } catch (e) {
+          console.warn('[Grimorio apply] No se pudieron cargar atributos del NPC:', (e as Error).message);
+        }
       }
     }
 
@@ -43,24 +57,54 @@ export async function POST(
       char: npc?.card?.data?.name || npc?.card?.name || '',
       mensaje: context.mensaje,
       userMessage: context.mensaje,
-      lastSummary: undefined
+      lastSummary: undefined,
+      attributes: npcAttributesMap,
+      npcAttributes: npcAttributesList,
     };
 
     // Obtener todas las cards del Grimorio para resolución de plantillas
     const allGrimorioCards = grimorioManager.getAll();
 
-    // Resolver todas las variables (primarias y plantillas) con cache
     const startTime = Date.now();
-    const { result: templateReemplazado, stats } = resolveAllVariablesWithCache(
-      card.plantilla,
-      varContext,
-      allGrimorioCards,
-      card.id, // Usar el ID de la card como templateId
-      { verbose: false, useCache }
-    );
-    const executionTime = Date.now() - startTime;
 
-    console.log(`[Grimorio] Card "${card.nombre}" (${card.key}) aplicada (tipo: ${card.tipo})`);
+    // ✅ Plantilla condicional: resolver directamente con resolveConditionalTemplate
+    // (card.plantilla está vacío para condicionales, hay que evaluar branches)
+    let templateReemplazado: string;
+    let stats: { resolved: number; emptyReturned: number; errors: number; fromCache: boolean; executionTime?: number; matchedBranchId?: string | null };
+
+    if (card.templateType === 'condicional' && card.conditionalConfig) {
+      const condResult = resolveConditionalTemplate(
+        card.conditionalConfig,
+        npcAttributesList,
+        varContext,
+        allGrimorioCards
+      );
+      templateReemplazado = condResult.value;
+      stats = {
+        resolved: condResult.matchedBranchId ? 1 : 0,
+        emptyReturned: condResult.matchedBranchId ? 0 : 1,
+        errors: condResult.errors.length,
+        fromCache: false,
+        matchedBranchId: condResult.matchedBranchId,
+      };
+      console.log(`[Grimorio] Plantilla condicional "${card.nombre}": branch=${condResult.matchedBranchId ?? 'default'}, errores=${condResult.errors.length}`);
+    } else {
+      // Plantilla normal: resolver todas las variables con cache
+      const resolution = resolveAllVariablesWithCache(
+        card.plantilla,
+        varContext,
+        allGrimorioCards,
+        card.id,
+        { verbose: false, useCache }
+      );
+      templateReemplazado = resolution.result;
+      stats = { ...resolution.stats };
+    }
+
+    const executionTime = Date.now() - startTime;
+    stats.executionTime = executionTime;
+
+    console.log(`[Grimorio] Card "${card.nombre}" (${card.key}) aplicada (tipo: ${card.tipo}${card.templateType ? '/' + card.templateType : ''})`);
     console.log(`[Grimorio] Cache: ${stats.fromCache ? 'HIT' : 'MISS'}`);
     console.log(`[Grimorio] Stats: ${stats.resolved} resueltas, ${stats.emptyReturned} vacías, ${stats.errors} errores, ${executionTime}ms`);
 
@@ -70,11 +114,9 @@ export async function POST(
         template: templateReemplazado,
         cardId: id,
         cardType: card.tipo,
+        templateType: card.templateType || 'normal',
         fromCache: stats.fromCache,
-        stats: {
-          ...stats,
-          executionTime
-        }
+        stats,
       },
       message: 'Aplicada correctamente'
     });

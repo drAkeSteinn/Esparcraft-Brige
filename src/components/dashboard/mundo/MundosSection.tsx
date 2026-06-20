@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react';
 import { Plus, Edit2, Trash2, MapPin, Building2, RefreshCw, ScrollText, Users, Building, Globe } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -12,6 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { World, Pueblo, Edificio, NPC } from '@/lib/types';
 import { toast } from '@/hooks/use-toast';
 import GenericBackupSection from '../GenericBackupSection';
+import ContextoAdicionalPanel from '../ContextoAdicionalPanel';
 
 export default function MundosSection() {
   const [worlds, setWorlds] = useState<World[]>([]);
@@ -21,13 +21,11 @@ export default function MundosSection() {
   const [worldMemories, setWorldMemories] = useState<Record<string, any>>({});
   const [loading, setLoading] = useState(true);
   const [updatingAreas, setUpdatingAreas] = useState(false);
-  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingView, setEditingView] = useState(false);
   const [editingWorld, setEditingWorld] = useState<World | null>(null);
   const [formData, setFormData] = useState({
     name: '',
     estado_mundo: '',
-    rumores: '',
-    eventos: ''
   });
 
   useEffect(() => {
@@ -84,19 +82,16 @@ export default function MundosSection() {
 
   const handleCreate = () => {
     setEditingWorld(null);
-    setFormData({ name: '', estado_mundo: '', rumores: '', eventos: '' });
-    setDialogOpen(true);
+    setEditingView(true);
   };
 
   const handleEdit = (world: World) => {
     setEditingWorld(world);
     setFormData({
       name: world.name,
-      estado_mundo: world.lore.estado_mundo,
-      rumores: world.lore.rumores.join('\n'),
-      eventos: world.lore.eventos?.join('\n') || ''
+      estado_mundo: world.lore,
     });
-    setDialogOpen(true);
+    setEditingView(true);
   };
 
   const handleUpdateAreas = async () => {
@@ -164,11 +159,7 @@ export default function MundosSection() {
     try {
       const payload = {
         name: formData.name,
-        lore: {
-          estado_mundo: formData.estado_mundo,
-          rumores: formData.rumores.split('\n').filter(r => r.trim()),
-          eventos: formData.eventos.split('\n').filter(e => e.trim())
-        }
+        lore: formData.estado_mundo,
       };
 
       const url = editingWorld ? `/api/worlds/${editingWorld.id}` : '/api/worlds';
@@ -187,7 +178,7 @@ export default function MundosSection() {
           title: 'Éxito',
           description: editingWorld ? 'Mundo actualizado' : 'Mundo creado'
         });
-        setDialogOpen(false);
+        setEditingView(false);
         fetchData();
       }
     } catch (error) {
@@ -204,6 +195,70 @@ export default function MundosSection() {
     return (
       <div className="flex items-center justify-center h-96">
         <p className="text-muted-foreground">Cargando mundos...</p>
+      </div>
+    );
+  }
+
+  // ====== Vista de edición full-screen ======
+  if (editingView) {
+    return (
+      <div className="flex flex-col h-[calc(100vh-200px)]">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-4 flex-shrink-0">
+          <div className="flex items-center gap-3">
+            <Button variant="ghost" size="sm" onClick={() => setEditingView(false)}>
+              ← Volver
+            </Button>
+            <div>
+              <h2 className="text-xl font-bold">
+                {editingWorld ? 'Editar Mundo' : 'Crear Nuevo Mundo'}
+              </h2>
+              <p className="text-sm text-muted-foreground">
+                {editingWorld ? 'Actualiza la información del mundo' : 'Completa la información del nuevo mundo'}
+              </p>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => setEditingView(false)}>Cancelar</Button>
+            <Button onClick={handleSubmit}>{editingWorld ? 'Actualizar' : 'Crear'}</Button>
+          </div>
+        </div>
+
+        {/* Contenido del formulario con scroll */}
+        <div className="flex-1 min-h-0 overflow-y-auto p-6">
+          <div className="space-y-4 max-w-4xl">
+            <div>
+              <Label htmlFor="name">Nombre</Label>
+              <Input
+                id="name"
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                placeholder="Ej: Esparcraft"
+              />
+            </div>
+            <div>
+              <Label htmlFor="estado">Estado del Mundo</Label>
+              <Textarea
+                id="estado"
+                value={formData.estado_mundo}
+                onChange={(e) => setFormData({ ...formData, estado_mundo: e.target.value })}
+                placeholder="Describe el estado actual del mundo"
+                rows={5}
+                className="w-full"
+              />
+            </div>
+
+            {/* === Sección: Contextos Adicionales === */}
+            <div>
+              <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-3 border-b pb-2">Contextos Adicionales</h3>
+              <ContextoAdicionalPanel
+                entityType="mundo"
+                entityId={editingWorld?.id ?? null}
+                disabled={!editingWorld}
+              />
+            </div>
+          </div>
+        </div>
       </div>
     );
   }
@@ -283,58 +338,8 @@ export default function MundosSection() {
                 
                 <div>
                   <p className="text-sm font-medium">Estado del mundo:</p>
-                  <p className="text-sm text-muted-foreground">{world.lore.estado_mundo || 'Sin estado definido'}</p>
+                  <p className="text-sm text-muted-foreground">{world.lore || 'Sin estado definido'}</p>
                 </div>
-                {world.lore.rumores.length > 0 && (
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <p className="text-sm font-medium flex items-center gap-2">
-                        <ScrollText className="h-3.5 w-3.5 text-[#83673D]" />
-                        Rumores:
-                      </p>
-                      <span className="text-xs text-muted-foreground">
-                        {world.lore.rumores.length} {world.lore.rumores.length === 1 ? 'rumor' : 'rumores'}
-                      </span>
-                    </div>
-                    <div className="max-h-32 overflow-y-auto border-2 border-[#2C2923] bg-[#100F11] p-3 rounded">
-                      <ul className="space-y-1.5">
-                        {world.lore.rumores.map((rumor, i) => (
-                          <li key={i} className="text-sm text-[#B8B8B8] flex items-start gap-2">
-                            <span className="flex-shrink-0 w-5 h-5 flex items-center justify-center bg-[#2C2923] text-[#83673D] text-xs font-mono rounded">
-                              {i + 1}
-                            </span>
-                            <span className="break-words">{rumor}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  </div>
-                )}
-                {world.lore.eventos && world.lore.eventos.length > 0 && (
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <p className="text-sm font-medium flex items-center gap-2">
-                        <ScrollText className="h-3.5 w-3.5 text-[#83673D]" />
-                        Eventos:
-                      </p>
-                      <span className="text-xs text-muted-foreground">
-                        {world.lore.eventos.length} {world.lore.eventos.length === 1 ? 'evento' : 'eventos'}
-                      </span>
-                    </div>
-                    <div className="max-h-32 overflow-y-auto border-2 border-[#2C2923] bg-[#100F11] p-3 rounded">
-                      <ul className="space-y-1.5">
-                        {world.lore.eventos.map((evento, i) => (
-                          <li key={i} className="text-sm text-[#B8B8B8] flex items-start gap-2">
-                            <span className="flex-shrink-0 w-5 h-5 flex items-center justify-center bg-[#2C2923] text-[#83673D] text-xs font-mono rounded">
-                              {i + 1}
-                            </span>
-                            <span className="break-words">{evento}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  </div>
-                )}
                 {(() => {
                   const regionesEnMundo = pueblos.filter(p => p.worldId === world.id);
                   if (regionesEnMundo.length > 0) {
@@ -390,62 +395,6 @@ export default function MundosSection() {
           </Card>
         ))}
       </div>
-
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>
-              {editingWorld ? 'Editar Mundo' : 'Crear Nuevo Mundo'}
-            </DialogTitle>
-            <DialogDescription>
-              {editingWorld ? 'Actualiza la información del mundo' : 'Completa la información del nuevo mundo'}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div>
-              <Label htmlFor="name">Nombre</Label>
-              <Input
-                id="name"
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                placeholder="Ej: Esparcraft"
-              />
-            </div>
-            <div>
-              <Label htmlFor="estado">Estado del Mundo</Label>
-              <Textarea
-                id="estado"
-                value={formData.estado_mundo}
-                onChange={(e) => setFormData({ ...formData, estado_mundo: e.target.value })}
-                placeholder="Describe el estado actual del mundo"
-              />
-            </div>
-            <div>
-              <Label htmlFor="rumores">Rumores (uno por línea)</Label>
-              <Textarea
-                id="rumores"
-                value={formData.rumores}
-                onChange={(e) => setFormData({ ...formData, rumores: e.target.value })}
-                placeholder="Cada rumor en una línea nueva"
-              />
-            </div>
-            <div>
-              <Label htmlFor="eventos">Eventos (uno por línea)</Label>
-              <Textarea
-                id="eventos"
-                value={formData.eventos}
-                onChange={(e) => setFormData({ ...formData, eventos: e.target.value })}
-                placeholder="Cada evento en una línea nueva"
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button onClick={handleSubmit}>
-              {editingWorld ? 'Actualizar' : 'Crear'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       <GenericBackupSection
         entityType="worlds"

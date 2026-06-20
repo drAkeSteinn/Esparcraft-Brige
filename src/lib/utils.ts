@@ -9,6 +9,7 @@ export function cn(...inputs: ClassValue[]) {
 // Tipos para el contexto de reemplazo de variables
 export interface VariableContext {
   npc?: {
+    id?: string;
     card?: {
       data?: {
         name?: string;
@@ -24,26 +25,21 @@ export interface VariableContext {
     };
   };
   world?: {
+    id?: string;
     name: string;
-    lore?: {
-      estado_mundo?: string;
-      rumors?: string[];
-    };
+    lore?: string;
   };
   pueblo?: {
+    id?: string;
     name: string;
     type?: string;
     description?: string;
-    lore?: {
-      estado_pueblo?: string;
-      rumors?: string[];
-    };
   };
   edificio?: {
+    id?: string;
     name: string;
     type?: string;
     lore?: string;
-    eventos_recientes?: string[];
     puntosDeInteres?: Array<{
       name?: string;
       descripcion?: string;
@@ -72,6 +68,17 @@ export interface VariableContext {
   lastSummary?: string;
   templateUser?: string;
   char?: string; // Para {{char}}
+  /**
+   * Atributos del NPC: mapa { key -> valor formateado }.
+   * Se resuelven como {{key}} en cualquier parte del texto.
+   * Ej: attributes.fuerza = "5/10" => {{fuerza}} => "5/10"
+   */
+  attributes?: Record<string, string>;
+  /**
+   * Atributos completos del NPC (con type, valueNumber, valueText, etc.).
+   * Usado por las plantillas condicionales para evaluar condiciones.
+   */
+  npcAttributes?: import('./types').NPCAttribute[];
 }
 
 /**
@@ -89,6 +96,19 @@ export function replaceVariables(text: string, context: VariableContext): string
   // Función auxiliar para hacer una sola pasada de reemplazo
   const replaceSinglePass = (inputText: string): string => {
     return inputText.replace(/\{\{\s*([\w.]+)\s*\}\}/g, (match: string, key: string) => {
+      // ============================================
+      // ATRIBUTOS DE NPC (prioridad máxima)
+      // ============================================
+      // Los atributos definidos explícitamente en el NPC tienen prioridad
+      // sobre cualquier variable predefinida del sistema. Esto permite que
+      // el usuario use keys como {{salud}}, {{fuerza}} etc. sin colisionar
+      // con variables internas del jugador.
+      // Nota: solo se aplica a keys simples (sin punto), ya que los atributos
+      // no tienen namespace.
+      if (!key.includes('.') && context.attributes && Object.prototype.hasOwnProperty.call(context.attributes, key)) {
+        return context.attributes[key] ?? '';
+      }
+
       // Variables especiales
       if (key === 'char' || key === 'CHAR') {
         return context.char || context.npc?.card?.data?.name || context.npc?.card?.name || '';
@@ -218,16 +238,12 @@ export function replaceVariables(text: string, context: VariableContext): string
       if (key.startsWith('edificio.')) {
         const edificioKey = key.replace('edificio.', '');
         if (edificioKey === 'name' || edificioKey === 'nombre') return context.edificio?.name || '';
-        if (edificioKey === 'descripcion') return context.edificio?.lore || ''; // lore es un string directo en edificios
-        if (edificioKey === 'lore') return context.edificio?.lore || '';
-        if (edificioKey === 'eventos' || edificioKey === 'eventos_recientes') {
-          if (context.edificio?.eventos_recientes && context.edificio.eventos_recientes.length > 0) {
-            return context.edificio.eventos_recientes.map(e => `- ${e}`).join('\n');
-          }
-          return ''; // ✅ Dejar vacío si no hay eventos
-        }
-        if (edificioKey === 'type') return context.edificio?.type || '';
-        if (edificioKey === 'poislist' || edificioKey === 'puntos_de_interes_list') {
+        if (edificioKey === 'id') return context.edificio?.id || '';
+        if (edificioKey === 'descripcion') return context.edificio?.lore || '';
+        if (edificioKey === 'lore' || edificioKey === 'estado') return context.edificio?.lore || '';
+        if (edificioKey === 'type') return (context.edificio as any)?.type || ''; // No en schema, futuro use
+        if (edificioKey === 'eventos') return ''; // No existe en schema → vacío (no dejar {{...}} literal)
+        if (edificioKey === 'poislist' || edificioKey === 'puntos_de_interes_list' || edificioKey === 'puntos_de_interes') {
           if (context.edificio?.puntosDeInteres && context.edificio.puntosDeInteres.length > 0) {
             return context.edificio.puntosDeInteres.map((poi) => {
               const nombre = poi.name || 'Sin nombre';
@@ -238,34 +254,30 @@ export function replaceVariables(text: string, context: VariableContext): string
           }
           return ''; // ✅ Dejar vacío si no hay puntos de interés
         }
+        // Cualquier otra subkey de edificio desconocida → vacío (evita leak de {{edificio.xxx}})
+        return '';
       }
 
       // Pueblo object keys (pueblo.name, pueblo.type, etc.)
       if (key.startsWith('pueblo.')) {
         const puebloKey = key.replace('pueblo.', '');
         if (puebloKey === 'name' || puebloKey === 'nombre') return context.pueblo?.name || '';
-        if (puebloKey === 'tipo') return context.pueblo?.type || '';
-        if (puebloKey === 'descripcion') return context.pueblo?.description || ''; // Descripción general
-        if (puebloKey === 'estado') return context.pueblo?.lore?.estado_pueblo || '';
-        if (puebloKey === 'rumores') {
-          if (context.pueblo?.lore?.rumores && context.pueblo.lore.rumores.length > 0) {
-            return context.pueblo.lore.rumores.map(r => `- ${r}`).join('\n');
-          }
-          return ''; // ✅ Dejar vacío si no hay rumores
-        }
+        if (puebloKey === 'id') return context.pueblo?.id || '';
+        if (puebloKey === 'tipo' || puebloKey === 'type') return context.pueblo?.type || '';
+        if (puebloKey === 'descripcion' || puebloKey === 'description') return context.pueblo?.description || '';
+        // Cualquier otra subkey de pueblo desconocida → vacío
+        return '';
       }
 
       // Mundo object keys (mundo.name, mundo.lore, etc.)
       if (key.startsWith('mundo.')) {
         const mundoKey = key.replace('mundo.', '');
         if (mundoKey === 'name' || mundoKey === 'nombre') return context.world?.name || '';
-        if (mundoKey === 'estado' || mundoKey === 'estado_mundo') return context.world?.lore?.estado_mundo || '';
-        if (mundoKey === 'rumores') {
-          if (context.world?.lore?.rumors && context.world.lore.rumors.length > 0) {
-            return context.world.lore.rumors.map(r => `- ${r}`).join('\n');
-          }
-          return ''; // ✅ Dejar vacío si no hay rumores
-        }
+        if (mundoKey === 'id') return context.world?.id || '';
+        if (mundoKey === 'estado' || mundoKey === 'estado_mundo') return context.world?.lore || '';
+        if (mundoKey === 'lore') return context.world?.lore || '';
+        // Cualquier otra subkey de mundo desconocida → vacío
+        return '';
       }
 
       // Variable especial para el último resumen

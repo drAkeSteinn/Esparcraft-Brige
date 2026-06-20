@@ -1,0 +1,579 @@
+     1→# Worklog - Esparcraft Bridge
+     2→
+     3→---
+     4→Task ID: 1
+     5→Agent: Main Agent
+     6→Task: Instalación del repositorio y preparación del proyecto
+     7→
+     8→Work Log:
+     9→- Clonado repositorio https://github.com/drAkeSteinn/Esparcraft-Brige.git
+    10→- Copiado contenido del repositorio al directorio principal del proyecto
+    11→- Actualizado package.json con las dependencias del proyecto original
+    12→- Instaladas dependencias con bun install
+    13→- Generado cliente de Prisma con bun run db:generate
+    14→- Copiada base de datos desde prisma/prisma/dev.db a db/custom.db
+    15→
+    16→Stage Summary:
+    17→- Proyecto base instalado correctamente
+    18→- Dependencias instaladas: @lancedb/lancedb, konva, react-konva
+    19→- Base de datos copiada y cliente Prisma generado
+    20→
+    21→---
+    22→Task ID: 2
+    23→Agent: Main Agent
+    24→Task: FASE 1 - Limpieza y Preparación del Sistema de Embeddings
+    25→
+    26→Work Log:
+    27→- 1.1 Eliminado archivo embeddings-db.ts (código PostgreSQL obsoleto)
+    28→- 1.1 Eliminado directorio api-esparcraft-backup (rutas obsoletas)
+    29→- 1.1 Actualizados archivos de búsqueda para usar LanceDBWrapper:
+    30→  - src/app/api/search/vector/route.ts
+    31→  - src/app/api/search/similar/route.ts
+    32→  - src/app/api/search/hybrid/route.ts
+    33→- 1.1 Eliminada dependencia @types/pg del package.json
+    34→- 1.2 Verificado funcionamiento de LanceDB (conexión exitosa)
+    35→- 1.3 Consolidados tipos de embeddings en src/lib/embeddings/types.ts
+    36→- 1.3 Actualizado lancedb-db.ts para importar tipos centralizados
+    37→- 1.4 Actualizado archivo .env con variables de entorno para LanceDB y Ollama
+    38→- Eliminados archivos de backup problemáticos (ResumenFinal2-4, ResumenGeneralFinal)
+    39→
+    40→Stage Summary:
+    41→- Código PostgreSQL eliminado completamente
+    42→- LanceDB funcionando correctamente
+    43→- Tipos de embeddings centralizados en types.ts
+    44→- Variables de entorno configuradas:
+    45→  - DATABASE_URL=file:/home/z/my-project/db/custom.db
+    46→  - LANCEDB_URI=./data/lancedb
+    47→  - OLLAMA_URL=http://localhost:11434
+    48→  - EMBEDDING_MODEL=nomic-embed-text
+    49→  - EMBEDDING_DIMENSION=768
+    50→  - DEFAULT_SIMILARITY_THRESHOLD=0.7
+    51→
+    52→---
+    53→Task ID: 3
+    54→Agent: Main Agent
+    55→Task: Verificación del servidor de desarrollo
+    56→
+    57→Work Log:
+    58→- Identificado problema con el cliente de Prisma en el servidor de desarrollo
+    59→- El cliente funciona correctamente cuando se ejecuta directamente con bun
+    60→- Los modelos world, pueblo, edificio están disponibles en el cliente
+    61→- El servidor de desarrollo necesita reiniciarse para tomar los cambios
+    62→
+    63→Stage Summary:
+    64→- Fase 1 del plan de trabajo completada
+    65→- Problema pendiente: servidor de desarrollo necesita reinicio manual para reflejar cambios en el cliente de Prisma
+    66→- Próximos pasos: Continuar con Fase 2 (Configuración de Ollama) una vez que el servidor funcione
+    67→
+    68→---
+    69→Task ID: 4
+    70→Agent: Main Agent
+    71→Task: FASE 2 - Configuración de Ollama
+    72→
+    73→Work Log:
+    74→- 2.1 Modificado endpoint /api/settings/ollama-models/route.ts:
+    75→  - Ahora retorna TODOS los modelos instalados (no solo los de embeddings)
+    76→  - Agregado mapa de dimensiones conocidas para modelos populares (MODEL_DIMENSIONS)
+    77→  - Agregado función isEmbeddingModel() para detectar modelos de embeddings
+    78→  - Agregado función getKnownDimension() para auto-detectar dimensiones
+    79→  - Retorna modelos categorizados: allModels, embeddingModels, chatModels
+    80→  - Incluye estadísticas: total, embeddingCount, chatCount
+    81→  
+    82→- 2.2 Mejorado EmbeddingsConfig.tsx:
+    83→  - Muestra TODOS los modelos instalados en el dropdown
+    84→  - Agrupa modelos por categoría (Embeddings vs Chat)
+    85→  - Muestra información de cada modelo: nombre, tamaño, última modificación
+    86→  - Muestra badge con dimensión conocida si está disponible
+    87→  - Validación visual del modelo seleccionado
+    88→  - Auto-completa dimensión cuando se selecciona un modelo conocido
+    89→  
+    90→- 2.3 Creado mapa de dimensiones conocidas:
+    91→  - nomic-embed-text: 768
+    92→  - bge-m3: 1024
+    93→  - mxbai-embed-large: 1024
+    94→  - all-minilm: 384
+    95→  - snowflake-arctic-embed: 1024
+    96→  - jina-embeddings-v2: 768
+    97→  - e5-large-v2: 1024
+    98→  - multilingual-e5-large: 1024
+    99→  - Y más variantes...
+   100→  
+   101→- 2.4 Implementada validación de modelo:
+   102→  - validateModel() detecta si el modelo es de embeddings
+   103→  - Muestra alertas visuales para modelos no compatibles
+   104→  - Actualizado endpoint /api/settings/test-embeddings para probar con Ollama
+   105→  - Sugerencias automáticas cuando el modelo no funciona
+   106→
+   107→Stage Summary:
+   108→- Endpoint de modelos completamente renovado con soporte para todos los modelos
+   109→- Interfaz mejorada con agrupación y validación visual
+   110→- Detección automática de dimensiones para modelos populares
+   111→- Validación en tiempo real al seleccionar modelos
+   112→- Fase 2 completada exitosamente
+   113→
+   114→---
+   115→Task ID: 5
+   116→Agent: Main Agent
+   117→Task: FASE 3 - LanceDB Cross-Platform
+   118→
+   119→Work Log:
+   120→- 3.1 Verificadas dependencias nativas de LanceDB:
+   121→  - @lancedb/lancedb v0.26.2 funciona correctamente en Linux
+   122→  - Documentadas dependencias para Windows y macOS
+   123→  
+   124→- 3.2 Implementado manejo de rutas multiplataforma:
+   125→  - Creada función normalizePath() para normalizar separadores
+   126→  - Creada función getDefaultLanceDBPath() según el SO
+   127→  - Uso de path.join() y path.resolve() para compatibilidad
+   128→  - En Windows: rutas absolutas con backslashes
+   129→  - En Linux/macOS: rutas relativas o absolutas
+   130→  
+   131→- 3.3 Implementada configuración específica por SO:
+   132→  - Creada función getPlatform() para detectar el sistema
+   133→  - Funciones helper: isWindows(), isLinux(), isMacOS()
+   134→  - Creada función ensureLanceDBDirectory() para crear directorios
+   135→  - Creada función checkDirectoryPermissions() para verificar permisos
+   136→  
+   137→- 3.4 Implementado manejo de errores específicos:
+   138→  - Creada clase LanceDBError con códigos de error
+   139→  - Función classifyError() para categorizar errores
+   140→  - Sugerencias específicas según el SO y tipo de error
+   141→  - Errores: PERMISSION_DENIED, DIRECTORY_NOT_FOUND, NATIVE_MODULE_ERROR, CONNECTION_FAILED
+   142→  
+   143→- 3.5 Implementado backup y migración de datos:
+   144→  - Creada interfaz BackupData con metadatos completos
+   145→  - Función exportToJSON() para exportar todos los embeddings
+   146→  - Función importFromJSON() con soporte para merge
+   147→  - Funciones saveBackupToFile() y loadBackupFromFile()
+   148→  - Endpoint /api/settings/lancedb/backup para backup/migración
+   149→  - Endpoint /api/settings/test-lancedb renovado con información del sistema
+   150→  
+   151→- Componente LanceDBConfig.tsx mejorado:
+   152→  - Muestra información del sistema (plataforma, URI, estado)
+   153→  - Exportación/importación de backups
+   154→  - Estadísticas en tiempo real
+   155→  - Sugerencias de errores específicas por plataforma
+   156→
+   157→Stage Summary:
+   158→- Soporte cross-platform completo para Windows, Linux y macOS
+   159→- Manejo automático de rutas según el sistema operativo
+   160→- Sistema de errores con sugerencias específicas por plataforma
+   161→- Backup y migración de datos entre sistemas
+   162→- Componente de configuración renovado con todas las funcionalidades
+   163→- Fase 3 completada exitosamente
+   164→
+   165→---
+   166→Task ID: 6
+   167→Agent: Main Agent
+   168→Task: FASE 4 - Integración en Router Tab
+   169→
+   170→Work Log:
+   171→- 4.1 Creado componente EmbeddingSwitcher.tsx:
+   172→  - Switch para habilitar/deshabilitar embeddings
+   173→  - Configuración expandible (maxResults, threshold, includeRelated)
+   174→  - Preview de resultados encontrados
+   175→  - Indicadores visuales de similitud (colores)
+   176→  - Integración con estado del formulario padre
+   177→  
+   178→- 4.2 Creado hook useRouterEmbeddings.ts:
+   179→  - Manejo centralizado de configuraciones por trigger
+   180→  - Persistencia en localStorage
+   181→  - Namespaces dinámicos basados en entityId
+   182→  - Búsqueda con namespaces relacionados
+   183→  - Formateo de resultados para prompts
+   184→  - Hook manager para todas las configuraciones
+   185→  
+   186→- 4.3 Agregados tipos de embeddings a types.ts:
+   187→  - EmbeddingTriggerConfig
+   188→  - EmbeddingSearchResult
+   189→  - EmbeddingContext
+   190→  - Payloads extendidos con embeddings
+   191→  - EMBEDDING_NAMESPACES con configuración por defecto
+   192→  
+   193→- 4.4 Creada guía de integración EMBEDDINGS_INTEGRATION_GUIDE.ts:
+   194→  - Instrucciones paso a paso
+   195→  - Ejemplos de código para cada trigger
+   196→  - Namespaces recomendados
+   197→  - Funciones helper documentadas
+   198→  
+   199→- 4.5 Documentación de namespaces:
+   200→  - chat: chat-npc-{npcId}
+   201→  - resumen_sesion: session-summaries
+   202→  - resumen_npc: npc-{npcId}
+   203→  - resumen_edificio: edificio-{edificioId}
+   204→  - resumen_pueblo: pueblo-{puebloId}
+   205→  - resumen_mundo: mundo-{mundoId}
+   206→  - nuevo_lore: lore-{scope}-{id}
+   207→
+   208→Stage Summary:
+   209→- Componente EmbeddingSwitcher reutilizable creado
+   210→- Hook personalizado para manejo de embeddings
+   211→- Tipos extendidos para soporte de embeddings en payloads
+   212→- Guía completa de integración documentada
+   213→- Sistema de namespaces jerárquico diseñado
+   214→- Fase 4 completada exitosamente
+   215→
+   216→---
+   217→Task ID: 14
+   218→Agent: Main Agent
+   219→Task: FASE 5 - Persistencia en Base de Datos
+   220→
+   221→Work Log:
+   222→- 5.1 Creado servicio de configuración /lib/configService.ts:
+   223→  - Usa la tabla SystemConfig existente en Prisma
+   224→  - Funciones: getConfig(), setConfig(), deleteConfig()
+   225→  - Funciones específicas: getLLMConfig(), getLanceDBConfig(), getEmbeddingsConfig()
+   226→  - Persiste configuraciones como JSON en la columna value
+   227→  - Metadata opcional para información adicional
+   228→
+   229→- 5.2 Actualizado /api/settings/llm-config/route.ts:
+   230→  - Ahora persiste en base de datos
+   231→  - Carga desde BD al iniciar
+   232→  - Fallback a valores por defecto si no hay datos
+   233→  - Retorna source: 'database' | 'default' | 'local'
+   234→
+   235→- 5.3 Actualizado /api/settings/lancedb-config/route.ts:
+   236→  - Persiste configuración de LanceDB en BD
+   237→  - Carga desde BD con fallback
+   238→  - Incluye estadísticas y estado del directorio
+   239→
+   240→- 5.4 Actualizado /api/settings/embeddings-config/route.ts:
+   241→  - Persiste configuración de Ollama en BD
+   242→  - Verifica conexión al guardar
+   243→  - Cache de estado de conexión
+   244→
+   245→- 5.5 Actualizado /api/settings/embeddings-global/route.ts:
+   246→  - Persiste configuración global de embeddings
+   247→  - Validación completa de parámetros
+   248→
+   249→Stage Summary:
+   250→- Configuraciones ahora persisten entre reinicios
+   251→- Base de datos como fuente principal
+   252→- localStorage como cache local
+   253→- FASE 5 COMPLETADA
+   254→
+   255→---
+   256→Task ID: 16
+   257→Agent: Main Agent
+   258→Task: Corrección de Error de LanceDB - Módulo Nativo No Disponible
+   259→
+   260→Work Log:
+   261→- Diagnosticado error: "@lancedb/lancedb-linux-x64-gnu" no se podía resolver
+   262→- El módulo nativo de LanceDB para Linux x64 no se cargaba correctamente
+   263→- Error causaba que el endpoint /api/settings/test-lancedb devolviera HTML de error en lugar de JSON
+   264→
+   265→- Solución implementada:
+   266→  - Creado /lib/lancedb-safe.ts como wrapper seguro para LanceDB
+   267→  - Actualizado /lib/lancedb-db.ts para usar import() dinámico
+   268→  - Función loadLanceDBModule() carga el módulo de forma segura
+   269→  - Función isLanceDBAvailable() verifica disponibilidad sin causar crash
+   270→  - Manejo graceful cuando el módulo nativo no está disponible
+   271→
+   272→- Endpoints actualizados:
+   273→  - /api/settings/test-lancedb: maneja LanceDB no disponible
+   274→  - /api/settings/apply-lancedb: verifica disponibilidad antes de aplicar
+   275→  - /api/settings/lancedb/backup: retorna error 503 si no disponible
+   276→
+   277→- UI actualizada (LanceDBConfig.tsx):
+   278→  - Muestra alerta cuando LanceDB no está disponible
+   279→  - Indicador de disponibilidad en información del sistema
+   280→  - Mensaje de error más informativo con sistemas compatibles
+   281→  - Badge visual para estado de LanceDB
+   282→
+   283→Stage Summary:
+   284→- LanceDB ahora maneja gracefully cuando el módulo nativo no está disponible
+   285→- Endpoint /api/settings/test-lancedb funciona correctamente
+   286→- UI muestra información clara sobre disponibilidad de LanceDB
+   287→- Sistemas compatibles documentados: Linux x64 (glibc), macOS (ARM/x64), Windows x64
+   288→
+   289→---
+   290→Task ID: 15
+   291→Agent: Main Agent
+   292→Task: FASE 6 - UX Mejorada
+   293→
+   294→Work Log:
+   295→- 6.1 Mejorado ConnectionStatus.tsx:
+   296→  - Animaciones con framer-motion
+   297→  - Progress bar de salud del sistema
+   298→  - Indicadores visuales con pulso para servicios conectados
+   299→  - Toggle de auto-actualización
+   300→  - Mejor feedback visual por estado
+   301→  - Información expandida en tooltips
+   302→  - Indicador de latencia
+   303→  - Badge de modelo activo
+   304→
+   305→- 6.2 Creado hook useConfigSync.ts:
+   306→  - Sincronización automática cliente-servidor
+   307→  - Manejo de localStorage como cache
+   308→  - Estados de loading, saving, syncing
+   309→  - Indicador de source: local | database | default
+   310→  - Funciones: saveConfig, loadConfig, resetConfig, syncToServer
+   311→
+   312→- 6.3 Creado HealthIndicator.tsx:
+   313→  - Componente de salud del sistema compacto
+   314→  - Tres variantes: minimal, compact, full
+   315→  - Indicadores visuales por servicio
+   316→  - Tooltips informativos
+   317→  - Animaciones suaves
+   318→
+   319→Stage Summary:
+   320→- UX significativamente mejorada
+   321→- Animaciones y feedback visual profesional
+   322→- Componentes reutilizables para estado del sistema
+   323→- Indicadores de salud en tiempo real
+   324→- FASE 6 COMPLETADA
+   325→
+   326→---
+   327→
+   328→---
+   329→Task ID: install-001
+   330→Agent: Main Agent (Z.ai Code)
+   331→Task: Reinstalación del repositorio Esparcraft-Bridge en sandbox activo
+   332→
+   333→Work Log:
+   334→- Clonado repositorio https://github.com/drAkeSteinn/Esparcraft-Brige.git en download/Esparcraft-Brige/
+   335→- Detenido dev server anterior y limpiados archivos antiguos del sandbox (src, prisma, db, public, etc.)
+   336→- Copiados todos los archivos del proyecto clonado al sandbox activo (/home/z/my-project/):
+   337→  - src/ (código fuente: app, components, hooks, lib)
+   338→  - prisma/ (schema.prisma + dev.db)
+   339→  - db/ (custom.db con datos reales + configs de triggers)
+   340→  - data/ y data-esparcraft/ (datos LanceDB + JSON backups)
+   341→  - scripts/, docs/, examples/, upload/, public/
+   342→  - Config: package.json, tsconfig.json, next.config.ts, tailwind.config.ts, postcss.config.mjs, components.json, Caddyfile, eslint.config.mjs
+   343→- Actualizado .env con todas las variables necesarias:
+   344→  - DATABASE_URL=file:/home/z/my-project/db/custom.db
+   345→  - LANCEDB_URI=./data/lancedb
+   346→  - OLLAMA_URL=http://localhost:11434
+   347→  - EMBEDDING_MODEL=nomic-embed-text, EMBEDDING_DIMENSION=768
+   348→  - LLM_API_URL, LLM_MODEL, LLM_TEMPERATURE, LLM_MAX_TOKENS
+   349→  - NEXT_PUBLIC_API_URL=/api
+   350→- Instaladas dependencias con `bun install` (858 paquetes)
+   351→- Aceptados postinstall scripts con `bun pm trust --all` (4 scripts: @parcel/watcher, @swc/core, unrs-resolver, es5-ext)
+   352→- LanceDB instalado con binarios linux-x64-gnu y linux-x64-musl
+   353→- Generado cliente Prisma con `bun run db:generate`
+   354→- Verificada base de datos: schema sincronizado (`prisma db push` reporta "already in sync")
+   355→- Datos confirmados: 1 mundo, 4 NPCs, 14 tablas (World, Pueblo, Edificio, NPC, Session, Summary, SystemConfig, etc.)
+   356→- Iniciado dev server (Next.js 16.2.9 Turbopack) en puerto 3000
+   357→
+   358→Stage Summary:
+   359→- Proyecto Esparcraft-Bridge instalado y funcionando en el sandbox activo
+   360→- Dev server corre en http://localhost:3000 (puerto 3000)
+   361→- Verificación con Agent Browser exitosa:
+   362→  - Página / carga con HTTP 200 (4.5s primera compilación)
+   363→  - Dashboard "ESPARCRAFT IA" renderiza con 9 pestañas: Universo, NPCs, Mapa 2D, Sesiones, Router, Cola, Grimorio, Embeddings, Config
+   364→  - Tab "Universo" muestra sub-tabs: Mundos, Regiones, Edificaciones, Tipos de Lugares (2 backups locales)
+   365→  - Tab "NPCs" funcional: muestra 4 NPCs y 7 backups con datos reales
+   366→  - APIs responden 200: /api/worlds, /api/npcs, /api/pueblos, /api/edificios, /api/*/backups, /api/*/memory
+   367→  - Prisma ejecuta consultas correctamente contra SQLite
+   368→  - Sin errores de consola ni runtime
+   369→- Proyecto listo para edición
+   370→
+   371→---
+   372→Task ID: audit-001
+   373→Agent: Main Agent (Z.ai Code)
+   374→Task: Auditoría de almacenamiento de NPCs y verificación del sistema de backups
+   375→
+   376→Work Log:
+   377→- Revisado src/lib/npcDbManager.ts: confirmado que usa Prisma (db.nPC) como fuente de verdad
+   378→- Revisado src/lib/npcBackupManager.ts: backups se guardan en data/npcs-backups/*.json con checksum SHA-256
+   379→- Revisadas rutas API: /api/npcs (CRUD vía DB), /api/npcs/backups (GET/POST/DELETE/restore)
+   380→- Inspeccionado campo `card` en DB: se almacena como string JSON (formato SillyTavernCard v3) en columna SQLite
+   381→- Inspeccionado data-esparcraft/npcs/states/: archivos JSON de memoria/estado runtime (no son datos maestros)
+   382→- Probado flujo completo de backups end-to-end:
+   383→  - GET /api/npcs/backups → 7 backups listados (256 KB total)
+   384→  - POST /api/npcs/backups → backup creado (4 NPCs, 37KB, checksum OK)
+   385→  - Verificación checksum SHA-256: COINCIDE (integridad OK)
+   386→  - GET /api/npcs/backups/{file} → descarga HTTP 200, idéntico al original
+   387→  - POST /api/npcs/backups/{file} (restore) → éxito, 4 NPCs restaurados, auto-backup pre-restore creado
+   388→  - DELETE /api/npcs/backups/{file} → eliminado correctamente
+   389→
+   390→Stage Summary:
+   391→- ALMACENAMIENTO NPC (datos maestros): SQLite vía Prisma, tabla NPC con columnas id/locationScope/worldId/puebloId/edificioId/card(JSON string)/createdAt/updatedAt
+   392→- ALMACENAMIENTO NPC (runtime): data-esparcraft/npcs/states/npc_{id}_memory.json guarda memoria/estado conversacional
+   393→- BACKUPS: data/npcs-backups/*.json con checksum SHA-256, auto-backup antes de restore, rotación opcional (máx 10)
+   394→- Sistema de backups verificado funcionando 100%: create/list/download/restore/delete todos OK
+   395→
+   396→---
+   397→Task ID: attributes-001
+   398→Agent: Main Agent (Z.ai Code)
+   399→Task: Sistema de atributos para NPCs (numéricos y texto) con resolución {{key}} en cards
+   400→
+   401→Work Log:
+   402→- Diseñado modelo de datos en Prisma: AttributeTemplate (plantilla global) + NPCAttribute (instancia por NPC)
+   403→- Actualizado prisma/schema.prisma con 2 modelos nuevos y relación NPC.attributes
+   404→- Ejecutado `bun run db:push` (DB sincronizada, 2 tablas nuevas creadas)
+   405→- Añadidos tipos TS en src/lib/types.ts: AttributeType, AttributeTemplate, NPCAttribute, AttributeTemplateInput, NPCAttributeInput, formatAttributeValue()
+   406→- Creado src/lib/attributeDbManager.ts con 2 managers:
+   407→  - attributeTemplateManager: CRUD de plantillas + instantiateForNpc()
+   408→  - npcAttributeManager: CRUD por NPC + getAttributesMapForNpc() (mapa {key -> valor formateado})
+   409→- Validación de key: regex ^[a-zA-Z_][a-zA-Z0-9_]*$ (sin espacios, sin puntos)
+   410→- Validaciones numéricas: min <= max, min <= actual <= max
+   411→- Creadas APIs REST:
+   412→  - GET/POST /api/attributes (lista/crea plantillas)
+   413→  - GET/PUT/DELETE /api/attributes/[id]
+   414→  - GET/POST /api/npcs/[id]/attributes (lista/crea atributos; POST soporta fromTemplate:true)
+   415→  - PUT/DELETE /api/npcs/[id]/attributes/[attrId]
+   416→- Integrado resolvedor {{key}} en src/lib/utils.ts replaceVariables():
+   417→  - Añadido campo `attributes` a VariableContext
+   418→  - Atributos tienen PRIORIDAD MÁXIMA sobre variables predefinidas (permite keys como {{salud}}, {{fuerza}} sin colisión con vars internas)
+   419→  - Solo aplica a keys simples (sin punto), respetando namespaces {{jugador.x}}, {{npc.x}}, etc.
+   420→- Modificado src/lib/promptBuilder.ts: buildCompleteChatPrompt() ahora es async, carga atributos del NPC de la DB y los inyecta en varContext
+   421→- Actualizados callers en src/lib/triggerHandlers.ts (handleChatTrigger y previewTriggerPrompt) con await
+   422→- Creado src/components/dashboard/NPCAttributesPanel.tsx (UI completa):
+   423→  - Lista atributos del NPC con badges de tipo (num/txt)
+   424→  - Botón "Nuevo" para crear atributo custom (form con min/actual/max o texto)
+   425→  - Botón "Plantillas" para aplicar plantillas globales con 1 click
+   426→  - Vista expandible por atributo (muestra min/actual/max, formato de resolución)
+   427→  - Vista previa de variables disponibles: {{key}} = valor
+   428→  - Dialog de edición y confirmación de borrado
+   429→  - Deshabilitado en modo creación (NPC no guardado aún)
+   430→- Integrado panel en NpcsTab.tsx: nuevo tab "Atributos" (grid de 5 columnas)
+   431→- Verificación end-to-end con curl:
+   432→  - 3 plantillas creadas (Fuerza 0-10, Salud 0-100, Clase texto)
+   433→  - 3 atributos creados en NPC Alvar Braudsson vía API
+   434→  - Resolución {{fuerza}} => "5/10", {{salud}} => "100/100", {{carisma}} => "Alto" verificada
+   435→  - Variable inexistente se mantiene literal {{inexistente}}
+   436→  - Variables con namespace siguen funcionando {{jugador.nombre}}
+   437→- Verificación con Agent Browser:
+   438→  - Tab "Atributos" aparece en dialog de edición de NPC
+   439→  - Creado atributo "Intimidación" (intimidacion, 0-10, actual 7) vía UI -> muestra "7/10"
+   440→  - Aplicada plantilla "Fuerza" vía UI -> muestra "5/10" con defaultValue
+   441→  - Vista previa de variables se actualiza correctamente
+   442→  - Sin errores de consola ni runtime
+   443→- Lint limpio en todos los archivos nuevos/modificados
+   444→
+   445→Stage Summary:
+   446→- Sistema de atributos NPC completamente funcional end-to-end
+   447→- Arquitectura: plantillas globales reutilizables + instancias por NPC (relación FK con cascade delete)
+   448→- Resolución {{key}} integrada en el prompt de chat con prioridad sobre variables predefinidas
+   449→- UI integrada en el dialog de edición del NPC como 5to tab "Atributos"
+   450→- Formato numérico: "actual/max" (ej: 5/10) | Formato texto: valor literal
+   451→- Listo para futuras mecánicas (afectar diálogos, reglas de combate, etc.) vía {{key}} en cualquier campo de la card
+   452→
+   453→---
+   454→Task ID: research-chat-flow
+   455→Agent: Research Subagent (Explore)
+   456→Task: Investigar flujo de ejecución del trigger de chat y estructura de respuesta del LLM
+   457→
+   458→Work Log:
+   459→- Leído /home/z/my-project/worklog.md para entender contexto previo del proyecto Esparcraft-Bridge
+   460→- Localizado el módulo de LLM: NO existe archivo `llmClient.ts`; la llamada HTTP al LLM está inline en dos archivos:
+   461→  - src/lib/triggerHandlers.ts (función `callLLM` líneas 258-283) — usado por el flujo de chat
+   462→  - src/lib/triggerExecutor.ts (función `callLLM` líneas 875-900) — duplicado idéntico, solo usado por resumenGeneralService y scripts (NO usado por API routes de chat)
+   463→- Leído src/lib/triggerHandlers.ts completo por secciones:
+   464→  - imports y config de LLM (líneas 1-59)
+   465→  - extractJsonFromResponse, tryParseJson, getJsonConfig, processJsonResponse, attemptCorrection (líneas 65-256)
+   466→  - callLLM con fetch nativo a endpoint OpenAI-compatible (líneas 258-283)
+   467→  - handleChatTrigger (líneas 329-540) — función central del flujo de chat
+   468→  - handleTrigger dispatcher (líneas 1446-1467)
+   469→  - previewTriggerPrompt (líneas 1470-1567) — modo preview sin llamar al LLM
+   470→- Leído src/lib/triggerExecutor.ts completo por secciones:
+   471→  - executeTrigger dispatcher (líneas 64-118) — NO usado por las rutas HTTP
+   472→  - executeChat delega a handleChatTrigger via import dinámico (líneas 852-857)
+   473→  - callLLM duplicado (líneas 870-900)
+   474→- Leído src/app/api/v1/route.ts — endpoint principal de Denizen (POST /api/v1), usa cola para modo chat
+   475→- Leído src/app/api/reroute/route.ts — endpoint alternativo (POST /api/reroute), soporta ?preview=true, ejecución directa sin cola
+   476→- Leído src/lib/chatQueue.ts — implementación de cola FIFO con persistencia, timeout 2min, maxRetries 2
+   477→- Leído src/app/api/queue/status/route.ts y src/app/api/queue/clear/route.ts y src/app/api/queue/items/[id]/route.ts
+   478→- Leído src/app/api/chat-trigger-config/route.ts — solo guarda/carga lista de grimorioTemplates habilitadas (relacionado con prompt building, no con LLM response)
+   479→- Leído src/app/api/settings/test-llm/route.ts — testing de conexión LLM, revela que se espera endpoint OpenAI-compatible con `choices[0].message.content` y `usage` con tokens
+   480→- Leído src/lib/types.ts secciones relevantes (líneas 100-360, 565+): JsonResponseConfig, JsonProcessResult, ChatTriggerPayload, LLMRequest, LLMResponse, ChatMessage
+   481→- Leído src/lib/promptBuilder.ts función buildCompleteChatPrompt (líneas 134-248)
+   482→- Verificado .env: LLM_API_URL=http://localhost:11434, LLM_MODEL=llama3.1, LLM_TEMPERATURE=0.7, LLM_MAX_TOKENS=2048
+   483→- Verificado con grep que LLM_API_URL solo se lee de process.env (no hay override runtime desde SystemConfig)
+   484→- Verificado que executeTrigger NO es usado por las rutas HTTP de chat (solo por resumenGeneralService y scripts)
+   485→
+   486→Stage Summary:
+   487→- Dos entrypoints HTTP para chat:
+   488→  1. POST /api/v1 (principal, usado por scripts Denizen) — encola request vía chatQueue, polling 500ms hasta 3 min
+   489→  2. POST /api/reroute (alternativo, usado por UI RouterTab) — ejecución directa sin cola, soporta ?preview=true
+   490→- Cliente LLM: fetch HTTP nativo (NO usa librería openai/ollama). Endpoint esperado: OpenAI-compatible /v1/chat/completions
+   491→- HALLAZGO: .env tiene LLM_API_URL=http://localhost:11434 (sin /v1/chat/completions) — probablemente incorrecto para Ollama. Default del código: http://127.0.0.1:5000/v1/chat/completions
+   492→- Estructura de respuesta al cliente SIEMPRE es JSON envolvente: { success: boolean, data: <resultado>, queueInfo?: {...} }
+   493→- Modo JSON habilitado (NPC con card.data.extensions.jsonResponse.enabled=true):
+   494→  * Intenta extraer JSON (3 estrategias: directo, ```json markdown, primer {...})
+   495→  * Si falla parseo: hasta maxRetries (default 2) intentos de corrección via LLM con correctionPrompt
+   496→  * Si agota reintentos: usa fallbackResponse si existe (metadata.usedFallback=true)
+   497→  * Si no hay fallback: retorna string crudo del LLM (success=false en metadata)
+   498→  * Metadata incluida en response.jsonMetadata: { jsonMode, attempts, corrected, usedFallback, error? }
+   499→- Modo texto plano (sin JSON config): response es string directo del LLM (data.choices[0].message.content)
+   500→- Persistencia: prompt final (con embeddings) se guarda en session.lastPrompt en DB (vía sessionDbManager.update). Mensajes user/assistant se guardan en session.messages
+   501→- NO se expone metadata de tokens/modelo/latencia al cliente en el response del chat (solo queueInfo con waitedMs y processingTimeMs)
+   502→- Timeout LLM: 120s por item en cola (chatQueue), 180s timeout espera cliente en /api/v1
+   503→
+   504→---
+   505→Task ID: llm-providers-001
+   506→Agent: Main Agent (Z.ai Code)
+   507→Task: Sistema multi-proveedor LLM con dropdown, reasoning mode y tool calling
+   508→
+   509→Work Log:
+   510→- Diseñado modelo de datos LLMProvider en Prisma (10 campos: name, type, apiUrl, apiKey, model, temperature, maxTokens, reasoning, toolCalling, isDefault)
+   511→- Ejecutado `bun run db:push` (tabla LLMProvider creada en SQLite)
+   512→- Creado src/lib/llm/types.ts con tipos LLMProviderConfig, LLMProviderInput, LLMMessage, ToolCall, ToolDefinition, ToolResult, TokenUsage, LLMCallResult, ProviderInfo, catálogo PROVIDERS con 5 tipos (ollama, openai, grok, anthropic, custom)
+   513→- Creado src/lib/llm/adapters/ con 5 adapters:
+   514→  - base.ts: clase abstracta BaseAdapter con fetchWithTimeout y buildHeaders
+   515→  - openai.ts: POST {apiUrl}/chat/completions, reasoning_effort para o1/o3, tool calling nativo, GET /models
+   516→  - ollama.ts: POST {apiUrl}/v1/chat/completions (OpenAI-compatible), GET /api/tags para listar modelos
+   517→  - anthropic.ts: POST {apiUrl}/messages con header x-api-key + anthropic-version, system como top-level, content como array de bloques, tools con formato propio
+   518→  - grok.ts: extiende OpenAI (xAI es OpenAI-compatible)
+   519→  - custom.ts: extiende OpenAI para LM Studio/vLLM/Text Gen WebUI
+   520→- Creado src/lib/llm/providerManager.ts con CRUD completo:
+   521→  - getAll, getById, getActive (default o primero), create, update, delete, setDefault
+   522→  - ensureDefaultFromEnv(): migración automática desde .env si no hay providers
+   523→  - Validaciones: nombre, tipo, URL, modelo, apiKey si required, temperatura 0-2, maxTokens > 0
+   524→- Creado src/lib/llm/callLLM.ts unificado:
+   525→  - callLLM(messages, options) → lee provider activo de DB, despacha al adapter correcto
+   526→  - callLLMWithProvider(provider, messages, options) → con provider específico
+   527→  - listModelsForProvider(provider) → lista modelos vía adapter
+   528→  - testProviderConnection(provider) → prueba conexión vía adapter
+   529→  - Retorna LLMCallResult con content, toolCalls, usage, model, latencyMs
+   530→- Migrado src/lib/triggerHandlers.ts: reemplazadas constantes LLM_API_URL/LLM_MODEL/LLM_TEMPERATURE/LLM_MAX_TOKENS y función callLLM local por import de llm/callLLM (wrapper que retorna solo content para compat)
+   531→- Migrado src/lib/triggerExecutor.ts: misma migración (eliminada duplicación de callLLM)
+   532→- Creadas APIs REST:
+   533→  - GET/POST /api/llm/providers (lista/crea proveedores)
+   534→  - GET/PUT/DELETE /api/llm/providers/[id]
+   535→  - POST /api/llm/providers/[id]/test (prueba conexión)
+   536→  - POST /api/llm/providers/[id]/set-default (marca como activo)
+   537→  - POST /api/llm/list-models (lista modelos de proveedor temporal, para wizard)
+   538→- Creado src/components/dashboard/settings/LLMProvidersConfig.tsx (~850 líneas):
+   539→  - Lista de proveedores con badges (Activo, Reasoning, Tools, tipo)
+   540→  - Proveedor activo destacado arriba con info completa (modelo, temperatura, tokens)
+   541→  - Botones por fila: Marcar activo, Probar conexión, Editar, Eliminar
+   542→  - Dialog wizard con campos dinámicos según tipo:
+   543→    * Dropdown tipo proveedor (5 opciones con colores)
+   544→    * URL (auto-rellena con default del tipo)
+   545→    * API Key (solo si required; con botón mostrar/ocultar; en edición deja vacío para mantener)
+   546→    * Modelo (input libre o dropdown con modelos cargados vía API)
+   547→    * Botón "Cargar modelos" que llama a /api/llm/list-models
+   548→    * Modelos sugeridos como chips clickables
+   549→    * Sliders temperatura (0-2) y maxTokens (256-8192)
+   550→    * Toggle Reasoning (deshabilita temperatura si activo)
+   551→    * Toggle Tool calling
+   552→    * Toggle "Usar como proveedor activo"
+   553→- Reemplazado LLMConfig.tsx por LLMProvidersConfig.tsx en SettingsTab.tsx
+   554→- Verificación end-to-end con curl:
+   555→  - 3 proveedores creados: Mi Ollama local (default), OpenAI o1 (reasoning+tools), Grok 3 reasoning
+   556→  - set-default cambia correctamente (desmarca los demás)
+   557→  - list-models funciona graceful: Ollama sin servicio devuelve knownModels, Anthropic no soporta listado
+   558→- Verificación con Agent Browser:
+   559→  - Tab "Config" → "LLM" muestra los 3 proveedores con badges correctos
+   560→  - Botón "Nuevo proveedor" abre wizard con Ollama preseleccionado, URL autocompletada, modelos sugeridos
+   561→  - Cambiar tipo a OpenAI hace aparecer campo API Key, cambia URL a api.openai.com, cambia modelos sugeridos
+   562→  - Toggle Reasoning funciona (checked=true)
+   563→  - Botón "Marcar como activo" cambia el proveedor default desde la UI
+   564→  - Sin errores de consola ni runtime
+   565→- Lint completamente limpio en todos los archivos nuevos/modificados
+   566→
+   567→Stage Summary:
+   568→- Sistema multi-proveedor LLM completamente funcional end-to-end
+   569→- 5 proveedores soportados: Ollama, OpenAI, Grok (xAI), Anthropic Claude, Custom (OpenAI-compatible)
+   570→- Dropdown de selección de proveedor con wizard dinámico (campos cambian según tipo)
+   571→- Reasoning mode: activa reasoning_effort para o1/o3, deepseek-r1, grok-3-reasoning (deshabilita temperatura)
+   572→- Tool calling: habilitado en OpenAI/Ollama/Grok/Anthropic/Custom con formato nativo de cada uno
+   573→- Selección de modelo: botón "Cargar" lista modelos del proveedor (Ollama /api/tags, OpenAI /models), fallback a modelos conocidos
+   574→- API key: campo seguro con mostrar/ocultar; en edición deja vacío para mantener la existente
+   575→- Proveedor activo: marcado con estrella, se usa en todos los triggers de chat (handleChatTrigger via callLLM unificado)
+   576→- Migración automática desde .env si no hay providers en DB (ensureDefaultFromEnv)
+   577→- Eliminada duplicación de callLLM entre triggerHandlers.ts y triggerExecutor.ts
+   578→- LLMConfig.tsx (legacy, localStorage) reemplazado por LLMProvidersConfig.tsx (DB-backed)
+   579→

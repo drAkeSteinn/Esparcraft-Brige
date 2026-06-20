@@ -158,10 +158,33 @@ export const npcDbManager = {
   },
 
   /**
-   * Elimina un NPC
+   * Elimina un NPC (y su namespace + los namespaces de sus sesiones)
    */
   async delete(id: string): Promise<boolean> {
     try {
+      // Eliminar namespaces de las sesiones del NPC + el namespace del NPC
+      try {
+        const { namespaceManager } = await import('./namespaceManager');
+        // 1. Eliminar namespaces de sesiones del NPC
+        try {
+          const sessions = await db.session.findMany({ where: { npcId: id }, select: { id: true } });
+          for (const s of sessions) {
+            try {
+              await namespaceManager.deleteEntityNamespace('sesion', s.id);
+            } catch (e: any) {
+              console.warn(`[npcDbManager.delete] Error eliminando namespace sesion:${s.id}:`, e?.message);
+            }
+          }
+        } catch (e: any) {
+          console.warn(`[npcDbManager.delete] Error buscando sesiones del NPC:`, e?.message);
+        }
+        // 2. Eliminar namespace del NPC
+        await namespaceManager.deleteEntityNamespace('npc', id);
+        console.log(`[npcDbManager.delete] Namespace npc:${id} eliminado`);
+      } catch (nsErr: any) {
+        console.warn(`[npcDbManager.delete] No se pudo eliminar namespace:`, nsErr?.message);
+      }
+
       await db.nPC.delete({
         where: { id }
       });

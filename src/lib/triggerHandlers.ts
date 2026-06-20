@@ -11,6 +11,7 @@ import {
   ResumenPuebloTriggerPayload,
   ResumenMundoTriggerPayload,
   NuevoLoreTriggerPayload,
+  NuevoContextoTriggerPayload,
   AnyTriggerPayload,
   ChatMessage,
   getCardField,
@@ -51,12 +52,12 @@ import { extractPromptSections } from './promptUtils';
 import { resolveAllVariables } from './grimorioUtils';
 import { generateSessionSummariesHash, generateNPCSummariesHash, generateEdificioSummariesHash, generatePuebloSummariesHash } from './hashUtils';
 import { getSimilarityThreshold, getMaxResults } from './config-persistence';
-
-// LLM Configuration
-const LLM_API_URL = process.env.LLM_API_URL || 'http://127.0.0.1:5000/v1/chat/completions';
-const LLM_MODEL = process.env.LLM_MODEL || 'local-model';
-const LLM_TEMPERATURE = parseFloat(process.env.LLM_TEMPERATURE || '0.7');
-const LLM_MAX_TOKENS = parseInt(process.env.LLM_MAX_TOKENS || '2000');
+import { callLLM as unifiedCallLLM } from './llm/callLLM';
+import { getSessionConfig } from './sessionConfig';
+import { namespaceManager, buildNamespace } from './namespaceManager';
+import { getEmbeddingClient } from './embeddings/client';
+import { contextoAdicionalManager, normalizeEntityType } from './contextoAdicionalManager';
+import { db } from './db';
 
 /**
  * Extrae JSON de una respuesta del LLM
@@ -255,27 +256,18 @@ ${JSON.stringify(jsonConfig.exampleResponse || jsonConfig.schema, null, 2)}`;
   };
 }
 
+/**
+ * Wrapper local que usa el callLLM unificado del sistema de proveedores.
+ * Devuelve solo el content (string) para mantener compatibilidad con los
+ * callers existentes que esperan un string.
+ *
+ * El proveedor activo se lee de la DB (tabla LLMProvider, isDefault=true).
+ * Si no hay proveedor, se auto-crea uno desde .env.
+ */
 async function callLLM(messages: ChatMessage[]): Promise<string> {
   try {
-    const response = await fetch(LLM_API_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        model: LLM_MODEL,
-        messages: messages.map(m => ({ role: m.role, content: m.content })),
-        temperature: LLM_TEMPERATURE,
-        max_tokens: LLM_MAX_TOKENS
-      })
-    });
-
-    if (!response.ok) {
-      throw new Error(`LLM API error: ${response.status} ${response.statusText}`);
-    }
-
-    const data = await response.json();
-    return data.choices[0]?.message?.content || '';
+    const result = await unifiedCallLLM(messages);
+    return result.content;
   } catch (error) {
     console.error('Error calling LLM:', error);
     throw error;
@@ -330,6 +322,10 @@ export async function handleChatTrigger(payload: ChatTriggerPayload): Promise<{
   response: string | Record<string, any>; 
   sessionId: string;
   jsonMetadata?: JsonProcessResult['metadata'];
+  /** Flag: true si la sesión fue auto-creada porque playersessionid no existía en la DB */
+  sessionRestored?: boolean;
+  /** Cambios de atributos aplicados al NPC (tool calling de atributos) */
+  attributeChanges?: Array<{ key: string; name: string; type: string; oldValue: string; newValue: string; reason: string; clamped?: boolean; rejected?: boolean; rejectionReason?: string }>;
 }> {
   const { message, npcid, playersessionid, jugador, lastSummary: payloadLastSummary } = payload;
 
@@ -354,28 +350,57 @@ export async function handleChatTrigger(payload: ChatTriggerPayload): Promise<{
   const edificio = npc.location.edificioId ? await edificioDbManager.getById(npc.location.edificioId) : undefined;
 
   // Get or create session con merge incremental de jugador
+  // ✅ AUTO-RECREACIÓN: si playersessionid no existe en la DB (fue eliminada o
+  // nunca creada), se crea una nueva sesión con ese mismo ID en lugar de fallar.
+  // También se asegura el namespace de la sesión (idempotente).
   let session;
+  let sessionRestored = false;
   if (playersessionid) {
-    // Sessión existente: hacer merge incremental de jugador
+    // Sesión existente: hacer merge incremental de jugador
     session = await sessionDbManager.getById(playersessionid);
     if (!session) {
-      throw new Error(`Session ${playersessionid} not found`);
+      // ⚠️ La sesión no existe: auto-crearla con el ID proporcionado por el cliente
+      console.warn(`[handleChatTrigger] Sesión ${playersessionid} no encontrada (¿eliminada?). Auto-creando...`);
+
+      const jugadorFiltrado = Object.entries(jugador || {})
+        .filter(([_, valor]) => valor !== undefined && valor !== '')
+        .reduce((obj, [key, valor]) => ({ ...obj, [key]: valor }), {});
+
+      // Crear con el ID custom (playersessionid) para mantener consistencia con el cliente
+      session = await sessionDbManager.create({
+        npcId: npcid,
+        playerId: jugador?.nombre || undefined,
+        jugador: Object.keys(jugadorFiltrado).length > 0 ? jugadorFiltrado : undefined,
+        messages: []
+      }, playersessionid);
+
+      sessionRestored = true;
+      console.log(`[handleChatTrigger] ✅ Sesión ${playersessionid} auto-creada (sessionRestored=true)`);
+
+      // ✅ Asegurar namespace de la sesión (idempotente: lo crea si no existe, no hace nada si ya existe)
+      try {
+        const { namespaceManager } = await import('./namespaceManager');
+        const nsResult = await namespaceManager.ensureSessionNamespace(playersessionid);
+        console.log(`[handleChatTrigger] Namespace sesion:${playersessionid} ${nsResult.created ? 'creado' : 'ya existía — se reutiliza'}`);
+      } catch (nsErr: any) {
+        console.warn(`[handleChatTrigger] No se pudo asegurar namespace de sesión restaurada:`, nsErr?.message);
+      }
+    } else {
+      // ✅ MERGE INCREMENTAL: mezclar datos nuevos con existentes
+      const jugadorMergeado = mergeJugadorData(session.jugador, jugador);
+
+      console.log('[handleChatTrigger] MERGE JUGADOR - Existente:', session.jugador);
+      console.log('[handleChatTrigger] MERGE JUGADOR - Nuevo:', jugador);
+      console.log('[handleChatTrigger] MERGE JUGADOR - Resultado:', jugadorMergeado);
+
+      // Actualizar sesión con datos mergeados
+      await sessionDbManager.update(session.id, {
+        jugador: jugadorMergeado
+      });
+
+      // Usar datos mergeados para el contexto
+      session.jugador = jugadorMergeado;
     }
-
-    // ✅ MERGE INCREMENTAL: mezclar datos nuevos con existentes
-    const jugadorMergeado = mergeJugadorData(session.jugador, jugador);
-
-    console.log('[handleChatTrigger] MERGE JUGADOR - Existente:', session.jugador);
-    console.log('[handleChatTrigger] MERGE JUGADOR - Nuevo:', jugador);
-    console.log('[handleChatTrigger] MERGE JUGADOR - Resultado:', jugadorMergeado);
-
-    // Actualizar sesión con datos mergeados
-    await sessionDbManager.update(session.id, {
-      jugador: jugadorMergeado
-    });
-
-    // Usar datos mergeados para el contexto
-    session.jugador = jugadorMergeado;
   } else {
     // Nueva sesión: usar datos del payload (filtrando vacíos)
     const jugadorFiltrado = Object.entries(jugador || {})
@@ -390,6 +415,14 @@ export async function handleChatTrigger(payload: ChatTriggerPayload): Promise<{
       jugador: Object.keys(jugadorFiltrado).length > 0 ? jugadorFiltrado : undefined,
       messages: []
     });
+
+    // ✅ Asegurar namespace de la sesión nueva (idempotente)
+    try {
+      const { namespaceManager } = await import('./namespaceManager');
+      await namespaceManager.ensureSessionNamespace(session.id);
+    } catch (nsErr: any) {
+      console.warn(`[handleChatTrigger] No se pudo asegurar namespace de sesión nueva:`, nsErr?.message);
+    }
   }
 
   // Obtener el último resumen
@@ -416,8 +449,68 @@ export async function handleChatTrigger(payload: ChatTriggerPayload): Promise<{
     lastSummary: lastSummary
   };
 
-  // Construir el prompt completo
-  const resolvedPrompt = buildCompleteChatPrompt(message, {
+  // Buscar contexto relevante de embeddings ANTES de construir el prompt.
+  // Busca en los namespaces de: sesión → NPC → edificio (jerarquía de chat).
+  // Además, busca en los namespaces adicionales de contextos adicionales temporales.
+  let embeddingContext = '';
+  try {
+    const threshold = getSimilarityThreshold();
+    const maxResults = getMaxResults();
+
+    // Determinar el punto de partida de la jerarquía de chat:
+    // - Si hay sesión activa, empezar por la sesión (más específico)
+    // - Si no, empezar por el NPC
+    let startType: 'sesion' | 'npc' = 'npc';
+    let startId = chatPayload.npcid;
+    if (chatPayload.playersessionid) {
+      startType = 'sesion';
+      startId = chatPayload.playersessionid;
+    }
+
+    embeddingContext = await EmbeddingTriggers.searchContextForChat(
+      startType,
+      startId,
+      message,
+      {
+        limit: Math.min(maxResults, 5), // Máximo 5 contextos relevantes para chat
+        threshold
+      }
+    );
+    console.log(`[handleChatTrigger] Búsqueda de embeddings (chat hierarchy) desde ${startType}:${startId}: threshold=${threshold}, limit=${maxResults}`);
+
+    // ✅ BUSCAR EN CONTEXTOS ADICIONALES TEMPORALES (si el NPC los tiene)
+    // Esto permite que el NPC acceda a namespaces de otras entidades que ha "visitado"
+    try {
+      const additionalNamespaces = await contextoAdicionalManager.getAdditionalNamespaces('npc', chatPayload.npcid);
+      if (additionalNamespaces.length > 0) {
+        console.log(`[handleChatTrigger] Contextos adicionales activos para NPC ${chatPayload.npcid}: ${additionalNamespaces.length} namespace(s)`);
+        const additionalContext = await EmbeddingTriggers.searchContext(message, {
+          namespaces: additionalNamespaces,
+          limit: Math.min(maxResults, 3), // Máximo 3 contextos adicionales
+          threshold,
+        });
+        if (additionalContext) {
+          embeddingContext = embeddingContext
+            ? `${embeddingContext}\n\n${additionalContext}`
+            : additionalContext;
+          console.log(`[handleChatTrigger] Contexto adicional encontrado (${additionalContext.length} chars)`);
+        }
+      }
+    } catch (ctxErr: any) {
+      console.warn(`[handleChatTrigger] Error buscando contextos adicionales:`, ctxErr?.message);
+    }
+    if (embeddingContext) {
+      console.log(`[handleChatTrigger] Contexto de embeddings encontrado (${embeddingContext.length} chars)`);
+    } else {
+      console.log(`[handleChatTrigger] Sin contexto de embeddings`);
+    }
+  } catch (error) {
+    console.error('Error buscando embeddings:', error);
+    // Continuar sin contexto de embeddings
+  }
+
+  // Construir el prompt completo (incluye embeddingContext ANTES del chat history)
+  const resolvedPrompt = await buildCompleteChatPrompt(message, {
     world,
     pueblo,
     edificio,
@@ -425,7 +518,8 @@ export async function handleChatTrigger(payload: ChatTriggerPayload): Promise<{
     session
   }, {
     jugador: session.jugador,  // ← DATOS DEL JUGADOR MERGEADOS
-    lastSummary
+    lastSummary,
+    embeddingContext,  // ← CONTEXTO DE EMBEDDINGS (se inserta entre último resumen y chat history)
   });
 
   console.log('[handleChatTrigger] DEBUG prompt:', resolvedPrompt.substring(0, 300) + '...');
@@ -446,40 +540,10 @@ export async function handleChatTrigger(payload: ChatTriggerPayload): Promise<{
     timestamp: new Date().toISOString()
   });
 
-  // Buscar contexto relevante de embeddings (síncrono, no bloquear)
-  let embeddingContext = '';
-  try {
-    // Usar configuración persistente para threshold y maxResults
-    const threshold = getSimilarityThreshold();
-    const maxResults = getMaxResults();
-    
-    embeddingContext = await EmbeddingTriggers.searchContext(message, {
-      namespace: undefined, // Buscar en todos los namespaces
-      limit: Math.min(maxResults, 5), // Máximo 5 contextos relevantes (limitar para chat)
-      threshold
-    });
-    console.log(`[handleChatTrigger] Búsqueda de embeddings: threshold=${threshold}, limit=${maxResults}`);
-  } catch (error) {
-    console.error('Error buscando embeddings:', error);
-    // Continuar sin contexto de embeddings
-  }
+  // Los mensajes finales son los mismos (el contexto de embeddings ya está integrado en el prompt)
+  const finalMessages = messages;
 
-  // Si hay contexto de embeddings, agregarlo al prompt
-  let finalMessages = messages;
-  if (embeddingContext) {
-    const systemMessage = messages.find(m => m.role === 'system');
-    if (systemMessage) {
-      finalMessages = [
-        {
-          ...systemMessage,
-          content: `${systemMessage.content}\n\n---\nContexto relevante de documentos:\n${embeddingContext}\n---`
-        },
-        ...messages.filter(m => m.role !== 'system')
-      ];
-    }
-  }
-
-  // Build complete prompt as text for storage (DESPUÉS de agregar embeddings)
+  // Build complete prompt as text for storage
   const completePrompt = finalMessages.map(m => `[${m.role}]\n${m.content}`).join('\n\n');
 
   // Save the complete prompt to session (ahora incluye embeddings si existían)
@@ -489,30 +553,153 @@ export async function handleChatTrigger(payload: ChatTriggerPayload): Promise<{
     jugador: session.jugador  // ← Guardar snapshot mergeado
   });
 
+  // ✅ CARGAR ACCIONES DEL NPC (para tool calling o prompt)
+  let npcActions: any[] = [];
+  let actionsAsTools: any[] = [];
+  try {
+    const { npcActionManager } = await import('./actionDbManager');
+    npcActions = await npcActionManager.getByNpcId(chatPayload.npcid);
+    if (npcActions.length > 0) {
+      actionsAsTools = await npcActionManager.getActionsAsTools(chatPayload.npcid);
+      console.log(`[handleChatTrigger] NPC tiene ${npcActions.length} acción(es) definida(s)`);
+    }
+  } catch (e) {
+    console.warn('[handleChatTrigger] No se pudieron cargar acciones:', e);
+  }
+
+  // ✅ CARGAR TOOL DE ATRIBUTOS DEL NPC (para que el LLM pueda modificarlos)
+  let attributeTool: any = null;
+  try {
+    const { attributeToolManager } = await import('./attributeToolManager');
+    attributeTool = await attributeToolManager.generateToolForNpc(chatPayload.npcid);
+    if (attributeTool) {
+      console.log(`[handleChatTrigger] Tool de atributos generada para NPC ${chatPayload.npcid}`);
+    }
+  } catch (e) {
+    console.warn('[handleChatTrigger] No se pudo generar tool de atributos:', e);
+  }
+
+  // ✅ SI HAY ACCIONES/ATRIBUTOS Y EL PROVEEDOR SOPORTA TOOL CALLING → ENVIAR COMO TOOLS
+  // Si no hay tool calling → añadir al system prompt (formato [ACCION:] / [ATRIBUTO:])
+  let llmOptions: any = {};
+  let toolCallingUsed = false;
+  const allTools: any[] = [...actionsAsTools];
+  if (attributeTool) allTools.push(attributeTool);
+
+  if (allTools.length > 0) {
+    try {
+      const { providerManager } = await import('./llm/providerManager');
+      const provider = await providerManager.getActive();
+      if (provider?.toolCalling) {
+        llmOptions.tools = allTools;
+        toolCallingUsed = true;
+        console.log(`[handleChatTrigger] Enviando ${allTools.length} tools al LLM (tool calling nativo): ${actionsAsTools.length} acción(es) + ${attributeTool ? 1 : 0} atributo(s)`);
+      } else {
+        // Tool calling no disponible → añadir acciones Y atributos al system prompt
+        const { formatActionsForPrompt } = await import('./types');
+        const systemMsg = finalMessages.find(m => m.role === 'system');
+        if (systemMsg) {
+          if (npcActions.length > 0) {
+            const actionsPrompt = formatActionsForPrompt(npcActions);
+            if (actionsPrompt) systemMsg.content += `\n\n${actionsPrompt}`;
+          }
+          if (attributeTool) {
+            const { attributeToolManager } = await import('./attributeToolManager');
+            const attrPrompt = await attributeToolManager.formatAttributeToolForPrompt(chatPayload.npcid);
+            if (attrPrompt) systemMsg.content += `\n\n${attrPrompt}`;
+          }
+        }
+        console.log(`[handleChatTrigger] Acciones + atributos añadidos al system prompt (sin tool calling nativo)`);
+      }
+    } catch (e) {
+      // Si no se puede verificar el provider, añadir al prompt
+      const { formatActionsForPrompt } = await import('./types');
+      const systemMsg = finalMessages.find(m => m.role === 'system');
+      if (systemMsg) {
+        if (npcActions.length > 0) {
+          const actionsPrompt = formatActionsForPrompt(npcActions);
+          if (actionsPrompt) systemMsg.content += `\n\n${actionsPrompt}`;
+        }
+        if (attributeTool) {
+          const { attributeToolManager } = await import('./attributeToolManager');
+          const attrPrompt = await attributeToolManager.formatAttributeToolForPrompt(chatPayload.npcid);
+          if (attrPrompt) systemMsg.content += `\n\n${attrPrompt}`;
+        }
+      }
+    }
+  }
+
   // Call LLM
-  const response = await callLLM(finalMessages);
+  const llmResult = await unifiedCallLLM(finalMessages, llmOptions.tools ? { tools: llmOptions.tools } : undefined);
 
-  // ✅ Procesar respuesta según modo JSON
-  let finalResponse: string | Record<string, any> = response;
-  let jsonMetadata: JsonProcessResult['metadata'] | undefined;
+  // ✅ PROCESAR RESPUESTA: la APP estructura todo
+  // El LLM responde con texto natural. La app extrae acciones y cambios de atributos.
+  let dialogText = llmResult.content;
+  let actions: Array<{ name: string; arguments: Record<string, any> }> = [];
+  let attributeChanges: Array<any> = [];
 
-  if (jsonConfig) {
-    console.log('[handleChatTrigger] Procesando respuesta en modo JSON...');
-    const processResult = await processJsonResponse(response, jsonConfig, finalMessages);
-    
-    if (processResult.success) {
-      finalResponse = processResult.data;
-      jsonMetadata = processResult.metadata;
-      console.log('[handleChatTrigger] JSON procesado exitosamente:', {
-        attempts: jsonMetadata.attempts,
-        corrected: jsonMetadata.corrected,
-        usedFallback: jsonMetadata.usedFallback
-      });
-    } else {
-      // Si falló completamente, usar la respuesta original como string
-      finalResponse = processResult.rawResponse;
-      jsonMetadata = processResult.metadata;
-      console.log('[handleChatTrigger] JSON falló, usando respuesta original');
+  if (toolCallingUsed && llmResult.toolCalls && llmResult.toolCalls.length > 0) {
+    // Tool calling nativo: separar tool_calls de acciones vs atributos
+    const { ATTRIBUTE_TOOL_NAME, attributeToolManager } = await import('./attributeToolManager');
+
+    for (const tc of llmResult.toolCalls) {
+      const toolName = tc.function.name;
+      const args = JSON.parse(tc.function.arguments || '{}');
+
+      if (toolName === ATTRIBUTE_TOOL_NAME) {
+        // ✅ Tool de atributos: validar + aplicar a DB
+        try {
+          const result = await attributeToolManager.applyAttributeChange(chatPayload.npcid, {
+            key: args.key,
+            value: String(args.value),
+            reason: args.reason || 'sin razón especificada',
+          });
+          if (result.change) {
+            attributeChanges.push(result.change);
+            console.log(`[handleChatTrigger] Atributo cambiado: ${result.message}`);
+          } else {
+            console.warn(`[handleChatTrigger] Cambio de atributo no aplicado: ${result.message}`);
+          }
+        } catch (e) {
+          console.error(`[handleChatTrigger] Error aplicando cambio de atributo:`, e);
+        }
+      } else {
+        // Tool de acción: agregar al array de acciones
+        actions.push({ name: toolName, arguments: args });
+      }
+    }
+    console.log(`[handleChatTrigger] ${actions.length} acción(es) + ${attributeChanges.length} cambio(s) de atributo(s) via tool calling`);
+  } else {
+    // Fallback: parsear [ACCION: ...] y [ATRIBUTO: ...] del texto
+    const { parseActionFromResponse } = await import('./types');
+    const parsed = parseActionFromResponse(dialogText);
+    dialogText = parsed.dialogText;
+    actions = parsed.actions;
+    if (actions.length > 0) {
+      console.log(`[handleChatTrigger] ${actions.length} acción(es) detectada(s) via [ACCION:]`);
+    }
+
+    // Parsear cambios de atributos del texto ([ATRIBUTO: key=valor | reason=motivo])
+    if (attributeTool) {
+      const { attributeToolManager } = await import('./attributeToolManager');
+      const parsedAttrChanges = attributeToolManager.parseAttributeChangesFromText(dialogText);
+      if (parsedAttrChanges.length > 0) {
+        // Limpiar las líneas [ATRIBUTO:] del texto del diálogo
+        dialogText = attributeToolManager.stripAttributeLinesFromText(dialogText);
+        // Aplicar cada cambio
+        for (const change of parsedAttrChanges) {
+          try {
+            const result = await attributeToolManager.applyAttributeChange(chatPayload.npcid, change);
+            if (result.change) {
+              attributeChanges.push(result.change);
+              console.log(`[handleChatTrigger] Atributo cambiado (fallback): ${result.message}`);
+            }
+          } catch (e) {
+            console.error(`[handleChatTrigger] Error aplicando cambio de atributo (fallback):`, e);
+          }
+        }
+        console.log(`[handleChatTrigger] ${attributeChanges.length} cambio(s) de atributo(s) detectado(s) via [ATRIBUTO:]`);
+      }
     }
   }
 
@@ -522,20 +709,28 @@ export async function handleChatTrigger(payload: ChatTriggerPayload): Promise<{
     content: message
   });
 
-  // Guardar la respuesta (si es JSON, guardar como string para el historial)
-  const responseForHistory = typeof finalResponse === 'string' 
-    ? finalResponse 
-    : JSON.stringify(finalResponse);
-  
   await sessionDbManager.addMessage(session.id, {
     role: 'assistant',
-    content: responseForHistory
+    content: dialogText
   });
 
+  // ✅ RETORNAR RESPUESTA ESTRUCTURADA POR LA APP
   return {
-    response: finalResponse,
+    response: dialogText,
     sessionId: session.id,
-    jsonMetadata
+    actions: actions.length > 0 ? actions : undefined,
+    attributeChanges: attributeChanges.length > 0 ? attributeChanges : undefined,
+    sessionRestored: sessionRestored || undefined,
+    metadata: {
+      model: llmResult.model,
+      latencyMs: llmResult.latencyMs,
+      tokensUsed: llmResult.usage.totalTokens > 0 ? {
+        prompt: llmResult.usage.promptTokens,
+        completion: llmResult.usage.completionTokens,
+        total: llmResult.usage.totalTokens,
+      } : undefined,
+      toolCallingUsed,
+    },
   };
 }
 
@@ -554,23 +749,15 @@ export async function handleResumenSesionTrigger(payload: ResumenSesionTriggerPa
     throw new Error(`Session ${playersessionid} not found`);
   }
 
-  // ✅ LEER CONFIGURACIÓN DE minMessages (MISMA QUE USA RESUMEN GENERAL)
-  let minMessages = 10; // Valor por defecto
-  try {
-    const fs = await import('fs/promises');
-    const path = await import('path');
-    const configPath = path.join(process.cwd(), 'db', 'resumen-general-config.json');
-    try {
-      const configContent = await fs.readFile(configPath, 'utf-8');
-      const config = JSON.parse(configContent);
-      minMessages = config.minMessages || 10;
-      console.log(`[handleResumenSesionTrigger] minMessages leído: ${minMessages}`);
-    } catch (error) {
-      console.log('[handleResumenSesionTrigger] No se pudo leer config de minMessages, usando valor por defecto: 10');
-    }
-  } catch (error) {
-    console.log('[handleResumenSesionTrigger] Error al leer config de minMessages, usando valor por defecto: 10');
-  }
+  // ✅ LEER CONFIGURACIÓN DE minMessages Y keepMessages DESDE sessionConfig
+  // (configuración unificada en Sesiones → Configuración)
+  const sessionCfg = getSessionConfig();
+  const minMessages = sessionCfg.minMessagesToSummarize;
+  const keepMessages = sessionCfg.keepMessagesAfterSummary;
+
+  console.log(
+    `[handleResumenSesionTrigger] Config: minMessages=${minMessages}, keepMessages=${keepMessages}`
+  );
 
   // ✅ VERIFICAR QUE LA SESIÓN TENGA SUFICIENTES MENSAJES
   if (session.messages.length < minMessages) {
@@ -649,11 +836,68 @@ export async function handleResumenSesionTrigger(payload: ResumenSesionTriggerPa
   // Call LLM
   const summary = await callLLM(messages);
 
-
   // ✅ OBTENER METADATA PARA EL RESUMEN
   const npcName = getCardField(npc?.card, 'name', '');
   const playerName = session.playerId || session.jugador?.nombre || 'Unknown';
   const nextVersion = await sessionDbManager.getNextSummaryVersion(session.id);
+
+  // ✅ GUARDAR RESUMEN ANTERIOR COMO EMBEDDING ANTES DE REEMPLAZARLO
+  // Si la sesión tenía un resumen anterior (en session.summary o en el historial),
+  // lo convertimos en embedding dentro del namespace sesion:{sessionId} para que
+  // quede persistido como memoria a largo plazo y se pueda recuperar vía búsqueda semántica.
+  try {
+    const previousSummaryEntry = await sessionDbManager.getLatestSummary(session.id);
+    const previousSummary = previousSummaryEntry?.summary || session.summary;
+
+    if (previousSummary && previousSummary.trim()) {
+      const sesionNamespace = buildNamespace('sesion', session.id);
+      // Asegurar que el namespace de la sesión exista
+      await namespaceManager.ensureSessionNamespace(session.id);
+
+      const embeddingClient = getEmbeddingClient();
+      // Eliminar embeddings previos del tipo 'resumen_sesion' de esta sesión
+      // (para no acumular versiones obsoletas del resumen en el namespace)
+      try {
+        await embeddingClient.deleteBySource('resumen_sesion_anterior', session.id);
+      } catch (delErr: any) {
+        console.warn(
+          `[handleResumenSesionTrigger] No se pudieron eliminar embeddings previos del resumen:`,
+          delErr?.message
+        );
+      }
+
+      // Guardar el resumen anterior como embedding
+      await embeddingClient.createEmbedding({
+        content: `Resumen anterior (v${previousSummaryEntry?.version ?? nextVersion - 1}) de sesión con ${npcName}:\n\n${previousSummary}`,
+        metadata: {
+          title: `Resumen anterior - Sesión ${session.id}`,
+          type: 'resumen_sesion_anterior',
+          sessionId: session.id,
+          npcId: npcid,
+          npcName,
+          playerName,
+          version: previousSummaryEntry?.version ?? nextVersion - 1,
+          timestamp: new Date().toISOString(),
+        },
+        namespace: sesionNamespace,
+        source_type: 'resumen_sesion_anterior',
+        source_id: session.id,
+      });
+      console.log(
+        `[handleResumenSesionTrigger] Resumen anterior guardado como embedding en namespace "${sesionNamespace}"`
+      );
+    } else {
+      console.log(
+        `[handleResumenSesionTrigger] No había resumen anterior para guardar como embedding`
+      );
+    }
+  } catch (embedErr: any) {
+    // No bloquear el flujo si falla el embedding del resumen anterior
+    console.error(
+      `[handleResumenSesionTrigger] Error guardando resumen anterior como embedding:`,
+      embedErr?.message
+    );
+  }
 
   // ✅ GUARDAR RESUMEN CON METADATA COMPLETA (Opción 3: Híbrida)
   summaryManager.saveSummary(
@@ -668,8 +912,31 @@ export async function handleResumenSesionTrigger(payload: ResumenSesionTriggerPa
   // ✅ AGREGAR RESUMEN AL HISTORIAL DE LA SESIÓN
   await sessionDbManager.addSummaryToHistory(session.id, summary, nextVersion);
 
-  // Clear messages from session after summary is generated
-  await sessionDbManager.clearMessages(session.id);
+  // ✅ CONSERVAR LOS ÚLTIMOS keepMessages Y ELIMINAR LOS VIEJOS
+  // Antes: clearMessages(session.id) → borraba TODOS los mensajes.
+  // Ahora: conservamos los últimos N mensajes (los más recientes) y eliminamos los viejos.
+  // Esto optimiza el contexto sin perder la continuidad inmediata de la conversación.
+  try {
+    const currentSession = await sessionDbManager.getById(session.id);
+    if (currentSession && currentSession.messages.length > keepMessages) {
+      const recentMessages = currentSession.messages.slice(-keepMessages);
+      await sessionDbManager.updateMessages(session.id, recentMessages);
+      console.log(
+        `[handleResumenSesionTrigger] Mensajes conservados: ${recentMessages.length} (de ${currentSession.messages.length}, keepMessages=${keepMessages})`
+      );
+    } else {
+      console.log(
+        `[handleResumenSesionTrigger] Sesión tiene ${currentSession?.messages.length ?? 0} mensajes, no se requiere recorte (keepMessages=${keepMessages})`
+      );
+    }
+  } catch (trimErr: any) {
+    console.error(
+      `[handleResumenSesionTrigger] Error conservando últimos ${keepMessages} mensajes:`,
+      trimErr?.message
+    );
+    // Fallback: limpiar todos los mensajes (comportamiento anterior)
+    await sessionDbManager.clearMessages(session.id);
+  }
 
   return {
     summary
@@ -742,12 +1009,33 @@ export async function handleResumenNPCTrigger(payload: ResumenNPCTriggerPayload)
 
   console.log(`[handleResumenNPCTrigger] NPC \${npcid} - HAY CAMBIOS, PROCEDIENDO CON RESUMEN`);
 
-  // ✅ FORMATEAR LA LISTA DE RESÚMENES CON EL NUEVO FORMATO
+  // ✅ FILTRAR SOLO RESÚMENES NUEVOS (creados después del último resumen del NPC)
+  // Esto evita re-procesar resúmenes que ya fueron incluidos en el resumen anterior del NPC.
+  // Si es la primera vez (no hay lastNPCSummary), se usan todos los resúmenes.
+  let summariesToProcess = npcSummaries;
+  if (lastNPCSummary?.createdAt) {
+    const sinceDate = lastNPCSummary.createdAt;
+    summariesToProcess = npcSummaries.filter(s => new Date(s.timestamp) > sinceDate);
+    console.log(`[handleResumenNPCTrigger] NPC \${npcid} - Filtrado: \${npcSummaries.length} total → \${summariesToProcess.length} nuevos (desde \${sinceDate.toISOString()})`);
+  } else {
+    console.log(`[handleResumenNPCTrigger] NPC \${npcid} - Primera ejecución, usando todos los \${npcSummaries.length} resúmenes`);
+  }
+
+  // Si después del filtrado no hay resúmenes nuevos, skip (no debería pasar si el hash cambió, pero safety net)
+  if (summariesToProcess.length === 0) {
+    console.log(`[handleResumenNPCTrigger] NPC \${npcid} - No hay resúmenes nuevos después del filtrado, SKIP`);
+    return {
+      success: false,
+      error: `No hay resúmenes nuevos para el NPC \${npcid}.`
+    };
+  }
+
+  // ✅ FORMATEAR LA LISTA DE RESÚMENES NUEVOS
   let allSummariesFormatted = payloadAllSummaries;
 
-  if (!allSummariesFormatted && npcSummaries.length > 0) {
+  if (!allSummariesFormatted && summariesToProcess.length > 0) {
     // Agrupar resúmenes por nombre de jugador
-    const summariesByPlayer = npcSummaries.reduce((acc, s) => {
+    const summariesByPlayer = summariesToProcess.reduce((acc, s) => {
       const playerName = s.playerName || 'Unknown';
       if (!acc[playerName]) {
         acc[playerName] = [];
@@ -769,7 +1057,7 @@ export async function handleResumenNPCTrigger(payload: ResumenNPCTriggerPayload)
 MEMORIAS DE LOS AVENTUREROS
 \${memoriesSections.join('\\n')}
 ***`;
-    console.log('[handleResumenNPCTrigger] Resúmenes formateados correctamente');
+    console.log(`[handleResumenNPCTrigger] \${summariesToProcess.length} resúmenes nuevos formateados correctamente`);
   }
 
   // Get existing memory from creator_notes (DB) instead of npcStateManager
@@ -818,6 +1106,41 @@ MEMORIAS DE LOS AVENTUREROS
 
   // Call LLM - SOLO SE EJECUTA SI HUBO CAMBIOS
   const response = await callLLM(messages);
+
+  // ✅ GUARDAR RESUMEN ANTERIOR COMO EMBEDDING ANTES DE REEMPLAZARLO
+  // El resumen anterior del NPC se guarda como embedding en el namespace npc:{npcid}
+  // para que quede persistido como memoria a largo plazo y se pueda recuperar vía búsqueda semántica.
+  try {
+    if (lastNPCSummary?.summary && lastNPCSummary.summary.trim()) {
+      const npcNamespace = buildNamespace('npc', npcid);
+      await namespaceManager.ensureNpcNamespace(npcid);
+      const embeddingClient = getEmbeddingClient();
+      // Eliminar embeddings previos del tipo 'resumen_npc_anterior' de este NPC
+      try {
+        await embeddingClient.deleteBySource('resumen_npc_anterior', npcid);
+      } catch (delErr: any) {
+        console.warn(`[handleResumenNPCTrigger] No se pudieron eliminar embeddings previos:`, delErr?.message);
+      }
+      await embeddingClient.createEmbedding({
+        content: `Resumen anterior (v${lastNPCSummary.version}) del NPC:\n\n${lastNPCSummary.summary}`,
+        metadata: {
+          title: `Resumen anterior - NPC ${npcid}`,
+          type: 'resumen_npc_anterior',
+          npcId: npcid,
+          version: lastNPCSummary.version,
+          timestamp: new Date().toISOString(),
+        },
+        namespace: npcNamespace,
+        source_type: 'resumen_npc_anterior',
+        source_id: npcid,
+      });
+      console.log(`[handleResumenNPCTrigger] Resumen anterior guardado como embedding en namespace "${npcNamespace}"`);
+    } else {
+      console.log(`[handleResumenNPCTrigger] No había resumen anterior para guardar como embedding`);
+    }
+  } catch (embedErr: any) {
+    console.error(`[handleResumenNPCTrigger] Error guardando resumen anterior como embedding:`, embedErr?.message);
+  }
 
   // ✅ GUARDAR EN TABLA NPCSummary PARA HISTÓRICO (CON VERSIÓN)
   const nextVersion = (lastNPCSummary?.version || 0) + 1;
@@ -901,34 +1224,16 @@ export async function handleResumenEdificioTrigger(payload: ResumenEdificioTrigg
   // Get all NPCs for this edificio
   const npcs = await npcDbManager.getByEdificioId(edificioid);
 
-  // ✅ OBTENER creator_notes DE LOS NPCs (no npcStateManager)
-  let npcSummaries = payloadAllSummaries;
-
-  if (!npcSummaries && npcs.length > 0) {
-    npcSummaries = npcs
-      .map(npc => {
-        const creatorNotes = npc?.card?.data?.creator_notes || '';
-        return {
-          npcId: npc.id,
-          npcName: npc.card?.data?.name || npc.card?.name || 'Unknown',
-          consolidatedSummary: creatorNotes
-        };
-      })
-      .filter(n => n.consolidatedSummary !== '')
-      .map(n => `NPC: ${n.npcName} (ID: ${n.npcId})\n${n.consolidatedSummary}`)
-      .join('\n\n');
-  }
-
-  console.log(`[handleResumenEdificioTrigger] Obtenidos resúmenes de ${npcs.length} NPCs para el edificio ${edificioid}`);
+  console.log(`[handleResumenEdificioTrigger] Obtenidos ${npcs.length} NPCs para el edificio ${edificioid}`);
 
   // ✅ CALCULAR HASH DE LOS RESÚMENES DE NPCs DEL EDIFICIO
   const npcSummaryMgr = new NPCSummaryManager();
   const allNPCSummaries = [];
 
   for (const npc of npcs) {
-    const npcSummaries = await npcSummaryMgr.getByNPCId(npc.id);
-    if (npcSummaries) {
-      allNPCSummaries.push(npcSummaries);
+    const npcSumms = await npcSummaryMgr.getByNPCId(npc.id);
+    if (npcSumms) {
+      allNPCSummaries.push(npcSumms);
     }
   }
 
@@ -950,6 +1255,48 @@ export async function handleResumenEdificioTrigger(payload: ResumenEdificioTrigg
   }
 
   console.log(`[handleResumenEdificioTrigger] Edificio ${edificioid} - HAY CAMBIOS, PROCEDIENDO CON RESUMEN`);
+
+  // ✅ FILTRAR SOLO NPCs CON RESÚMENES NUEVOS (creados después del último resumen del edificio)
+  // Esto evita re-procesar NPCs que ya fueron incluidos en el resumen anterior del edificio.
+  let npcsWithNewSummaries = npcs;
+  if (lastEdificioSummary?.createdAt) {
+    const sinceDate = lastEdificioSummary.createdAt;
+    const npcSummaryMgrForFilter = new NPCSummaryManager();
+    const newNpcIds: string[] = [];
+    for (const npc of npcs) {
+      const latestNpcSummary = await npcSummaryMgrForFilter.getLatest(npc.id);
+      if (latestNpcSummary && new Date(latestNpcSummary.createdAt) > sinceDate) {
+        newNpcIds.push(npc.id);
+      }
+    }
+    npcsWithNewSummaries = npcs.filter(n => newNpcIds.includes(n.id));
+    console.log(`[handleResumenEdificioTrigger] Filtrado: ${npcs.length} NPCs total → ${npcsWithNewSummaries.length} con resúmenes nuevos (desde ${sinceDate.toISOString()})`);
+  } else {
+    console.log(`[handleResumenEdificioTrigger] Primera ejecución, usando todos los ${npcs.length} NPCs`);
+  }
+
+  if (npcsWithNewSummaries.length === 0) {
+    console.log(`[handleResumenEdificioTrigger] No hay NPCs con resúmenes nuevos, SKIP`);
+    return { success: false, error: `No hay resúmenes nuevos de NPCs para el edificio ${edificioid}.` };
+  }
+
+  // ✅ OBTENER creator_notes SOLO DE LOS NPCs CON RESÚMENES NUEVOS
+  let npcSummaries = payloadAllSummaries;
+
+  if (!npcSummaries && npcsWithNewSummaries.length > 0) {
+    npcSummaries = npcsWithNewSummaries
+      .map(npc => {
+        const creatorNotes = npc?.card?.data?.creator_notes || '';
+        return {
+          npcId: npc.id,
+          npcName: npc.card?.data?.name || npc.card?.name || 'Unknown',
+          consolidatedSummary: creatorNotes
+        };
+      })
+      .filter(n => n.consolidatedSummary !== '')
+      .map(n => `NPC: ${n.npcName} (ID: ${n.npcId})\n${n.consolidatedSummary}`)
+      .join('\n\n');
+  }
 
   // ✅ CONSTRUIR EL SYSTEM PROMPT PARA RESUMEN EDIFICIO (SIN HEADERS)
   const edificioName = edificio.name;
@@ -997,6 +1344,38 @@ export async function handleResumenEdificioTrigger(payload: ResumenEdificioTrigg
   // Call LLM
   const response = await callLLM(messages);
 
+  // ✅ GUARDAR RESUMEN ANTERIOR COMO EMBEDDING ANTES DE REEMPLAZARLO
+  try {
+    if (lastEdificioSummary?.summary && lastEdificioSummary.summary.trim()) {
+      const edNamespace = buildNamespace('edificio', edificioid);
+      await namespaceManager.ensureEdificioNamespace(edificioid);
+      const embeddingClient = getEmbeddingClient();
+      try {
+        await embeddingClient.deleteBySource('resumen_edificio_anterior', edificioid);
+      } catch (delErr: any) {
+        console.warn(`[handleResumenEdificioTrigger] No se pudieron eliminar embeddings previos:`, delErr?.message);
+      }
+      await embeddingClient.createEmbedding({
+        content: `Resumen anterior (v${lastEdificioSummary.version}) del edificio ${edificio?.name || edificioid}:\n\n${lastEdificioSummary.summary}`,
+        metadata: {
+          title: `Resumen anterior - Edificio ${edificioid}`,
+          type: 'resumen_edificio_anterior',
+          edificioId: edificioid,
+          version: lastEdificioSummary.version,
+          timestamp: new Date().toISOString(),
+        },
+        namespace: edNamespace,
+        source_type: 'resumen_edificio_anterior',
+        source_id: edificioid,
+      });
+      console.log(`[handleResumenEdificioTrigger] Resumen anterior guardado como embedding en namespace "${edNamespace}"`);
+    } else {
+      console.log(`[handleResumenEdificioTrigger] No había resumen anterior para guardar como embedding`);
+    }
+  } catch (embedErr: any) {
+    console.error(`[handleResumenEdificioTrigger] Error guardando resumen anterior como embedding:`, embedErr?.message);
+  }
+
   // ✅ GUARDAR EN TABLA EdificioSummary PARA HISTÓRICO (CON VERSIÓN)
   const nextVersion = (lastEdificioSummary?.version || 0) + 1;
   await edificioSummaryMgr.create({
@@ -1007,15 +1386,15 @@ export async function handleResumenEdificioTrigger(payload: ResumenEdificioTrigg
   });
   console.log(`[handleResumenEdificioTrigger] Edificio ${edificioid} - Resumen guardado en DB con versión ${nextVersion}`);
 
-  // ✅ GUARDAR RESUMEN EN eventos_recientes DE LA CARD DEL EDIFICIO
-  // Reemplazar siempre el contenido de eventos_recientes con el resumen generado
+  // ✅ GUARDAR RESUMEN EN EL CAMPO lore (Estado del Edificio) DEL EDIFICIO
+  // Reemplazar siempre el contenido de lore con el resumen generado
   if (edificio) {
     const updatedEdificio: Partial<Edificio> = {
-      eventos_recientes: [response]
+      lore: response
     };
 
     await edificioDbManager.update(edificioid, updatedEdificio);
-    console.log('[handleResumenEdificioTrigger] Resumen guardado en eventos_recientes del edificio');
+    console.log('[handleResumenEdificioTrigger] Resumen guardado en lore (Estado del Edificio) del edificio');
   }
 
   return {
@@ -1066,29 +1445,7 @@ export async function handleResumenPuebloTrigger(payload: ResumenPuebloTriggerPa
   // Get all edificios for this pueblo
   const edificios = await edificioDbManager.getByPuebloId(pueblid);
 
-  // ✅ OBTENER eventos_recientes DE LOS EDIFICIOS
-  let edificioSummaries = payloadAllSummaries;
-
-  if (!edificioSummaries && edificios.length > 0) {
-    edificioSummaries = edificios
-      .map(edificio => {
-        const eventosRecientes = edificio.eventos_recientes || [];
-        const consolidatedSummary = eventosRecientes.length > 0
-          ? eventosRecientes.join('\n')
-          : '';
-
-        return {
-          edificioId: edificio.id,
-          edificioName: edificio.name,
-          consolidatedSummary: consolidatedSummary
-        };
-      })
-      .filter(e => e.consolidatedSummary !== '')
-      .map(e => `Edificio ${e.edificioName} (ID: ${e.edificioId})\n${e.consolidatedSummary}`)
-      .join('\n\n');
-  }
-
-  console.log(`[handleResumenPuebloTrigger] Obtenidos resúmenes de ${edificios.length} edificios para el pueblo ${pueblid}`);
+  console.log(`[handleResumenPuebloTrigger] Obtenidos ${edificios.length} edificios para el pueblo ${pueblid}`);
 
   // ✅ CALCULAR HASH DE LOS RESÚMENES DE EDIFICIOS DEL PUEBLO
   const edificioSummaryMgr = new EdificioSummaryManager();
@@ -1119,6 +1476,47 @@ export async function handleResumenPuebloTrigger(payload: ResumenPuebloTriggerPa
   }
 
   console.log(`[handleResumenPuebloTrigger] Pueblo ${pueblid} - HAY CAMBIOS, PROCEDIENDO CON RESUMEN`);
+
+  // ✅ FILTRAR SOLO EDIFICIOS CON RESÚMENES NUEVOS (creados después del último resumen del pueblo)
+  let edificiosWithNewSummaries = edificios;
+  if (lastPuebloSummary?.createdAt) {
+    const sinceDate = lastPuebloSummary.createdAt;
+    const edSummaryMgrForFilter = new EdificioSummaryManager();
+    const newEdificioIds: string[] = [];
+    for (const edificio of edificios) {
+      const latestEdSummary = await edSummaryMgrForFilter.getLatest(edificio.id);
+      if (latestEdSummary && new Date(latestEdSummary.createdAt) > sinceDate) {
+        newEdificioIds.push(edificio.id);
+      }
+    }
+    edificiosWithNewSummaries = edificios.filter(e => newEdificioIds.includes(e.id));
+    console.log(`[handleResumenPuebloTrigger] Filtrado: ${edificios.length} edificios total → ${edificiosWithNewSummaries.length} con resúmenes nuevos (desde ${sinceDate.toISOString()})`);
+  } else {
+    console.log(`[handleResumenPuebloTrigger] Primera ejecución, usando todos los ${edificios.length} edificios`);
+  }
+
+  if (edificiosWithNewSummaries.length === 0) {
+    console.log(`[handleResumenPuebloTrigger] No hay edificios con resúmenes nuevos, SKIP`);
+    return { success: false, error: `No hay resúmenes nuevos de edificios para el pueblo ${pueblid}.` };
+  }
+
+  // ✅ OBTENER lore (Estado del Edificio) SOLO DE LOS EDIFICIOS CON RESÚMENES NUEVOS
+  let edificioSummaries = payloadAllSummaries;
+
+  if (!edificioSummaries && edificiosWithNewSummaries.length > 0) {
+    edificioSummaries = edificiosWithNewSummaries
+      .map(edificio => {
+        const consolidatedSummary = edificio.lore || '';
+        return {
+          edificioId: edificio.id,
+          edificioName: edificio.name,
+          consolidatedSummary: consolidatedSummary
+        };
+      })
+      .filter(e => e.consolidatedSummary !== '')
+      .map(e => `Edificio ${e.edificioName} (ID: ${e.edificioId})\n${e.consolidatedSummary}`)
+      .join('\n\n');
+  }
 
   // ✅ CONSTRUIR EL SYSTEM PROMPT PARA RESUMEN PUEBLO (SIN HEADERS)
   const puebloName = pueblo.name;
@@ -1164,6 +1562,38 @@ export async function handleResumenPuebloTrigger(payload: ResumenPuebloTriggerPa
 
   // Call LLM
   const response = await callLLM(messages);
+
+  // ✅ GUARDAR RESUMEN ANTERIOR COMO EMBEDDING ANTES DE REEMPLAZARLO
+  try {
+    if (lastPuebloSummary?.summary && lastPuebloSummary.summary.trim()) {
+      const puebloNamespace = buildNamespace('pueblo', pueblid);
+      await namespaceManager.ensurePuebloNamespace(pueblid);
+      const embeddingClient = getEmbeddingClient();
+      try {
+        await embeddingClient.deleteBySource('resumen_pueblo_anterior', pueblid);
+      } catch (delErr: any) {
+        console.warn(`[handleResumenPuebloTrigger] No se pudieron eliminar embeddings previos:`, delErr?.message);
+      }
+      await embeddingClient.createEmbedding({
+        content: `Resumen anterior (v${lastPuebloSummary.version}) del pueblo ${pueblo?.name || pueblid}:\n\n${lastPuebloSummary.summary}`,
+        metadata: {
+          title: `Resumen anterior - Pueblo ${pueblid}`,
+          type: 'resumen_pueblo_anterior',
+          puebloId: pueblid,
+          version: lastPuebloSummary.version,
+          timestamp: new Date().toISOString(),
+        },
+        namespace: puebloNamespace,
+        source_type: 'resumen_pueblo_anterior',
+        source_id: pueblid,
+      });
+      console.log(`[handleResumenPuebloTrigger] Resumen anterior guardado como embedding en namespace "${puebloNamespace}"`);
+    } else {
+      console.log(`[handleResumenPuebloTrigger] No había resumen anterior para guardar como embedding`);
+    }
+  } catch (embedErr: any) {
+    console.error(`[handleResumenPuebloTrigger] Error guardando resumen anterior como embedding:`, embedErr?.message);
+  }
 
   // ✅ GUARDAR EN TABLA PuebloSummary PARA HISTÓRICO (CON VERSIÓN)
   const nextVersion = (lastPuebloSummary?.version || 0) + 1;
@@ -1235,30 +1665,6 @@ export async function handleResumenMundoTrigger(payload: ResumenMundoTriggerPayl
   // Get all pueblos for this world
   const pueblos = await puebloDbManager.getByWorldId(mundoid);
 
-  // ✅ OBTENER eventos DE LOS PUEBLOS
-  let puebloSummaries = payloadAllSummaries;
-
-  if (!puebloSummaries && pueblos.length > 0) {
-    puebloSummaries = pueblos
-      .map(pueblo => {
-        const lore = pueblo.lore || {};
-        const eventos = lore.eventos || [];
-        const consolidatedSummary = eventos.length > 0
-          ? eventos.join('\n')
-          : '';
-
-        return {
-          puebloId: pueblo.id,
-          puebloName: pueblo.name,
-          consolidatedSummary: consolidatedSummary
-        };
-      })
-      .filter(p => p.consolidatedSummary !== '')
-      .map(p => `Pueblo/Nación ${p.puebloName} (ID: ${p.puebloId})\n${p.consolidatedSummary}`)
-      .join('\n\n');
-  }
-
-
   // ✅ CALCULAR HASH DE LOS RESÚMENES DE PUEBLOS DEL MUNDO
   const puebloSummaryMgr = new PuebloSummaryManager();
   const allPuebloSummaries = [];
@@ -1288,6 +1694,42 @@ export async function handleResumenMundoTrigger(payload: ResumenMundoTriggerPayl
   }
 
   console.log(`[handleResumenMundoTrigger] Mundo ${mundoid} - HAY CAMBIOS, PROCEDIENDO CON RESUMEN`);
+
+  // ✅ FILTRAR SOLO PUEBLOS CON RESÚMENES NUEVOS (creados después del último resumen del mundo)
+  let pueblosWithNewSummaries = pueblos;
+  if (lastWorldSummary?.createdAt) {
+    const sinceDate = lastWorldSummary.createdAt;
+    const newPuebloIds: string[] = [];
+    for (const pueblo of pueblos) {
+      const latestPuebloSummary = await puebloSummaryMgr.getLatest(pueblo.id);
+      if (latestPuebloSummary && new Date(latestPuebloSummary.createdAt) > sinceDate) {
+        newPuebloIds.push(pueblo.id);
+      }
+    }
+    pueblosWithNewSummaries = pueblos.filter(p => newPuebloIds.includes(p.id));
+    console.log(`[handleResumenMundoTrigger] Filtrado: ${pueblos.length} pueblos total → ${pueblosWithNewSummaries.length} con resúmenes nuevos (desde ${sinceDate.toISOString()})`);
+  } else {
+    console.log(`[handleResumenMundoTrigger] Primera ejecución, usando todos los ${pueblos.length} pueblos`);
+  }
+
+  if (pueblosWithNewSummaries.length === 0) {
+    console.log(`[handleResumenMundoTrigger] No hay pueblos con resúmenes nuevos, SKIP`);
+    return { success: false, error: `No hay resúmenes nuevos de pueblos para el mundo ${mundoid}.` };
+  }
+
+  // ✅ OBTENER RESÚMENES SOLO DE LOS PUEBLOS CON CAMBIOS NUEVOS
+  let puebloSummaries = payloadAllSummaries;
+
+  if (!puebloSummaries && pueblosWithNewSummaries.length > 0) {
+    const puebloSummaryData: string[] = [];
+    for (const pueblo of pueblosWithNewSummaries) {
+      const latestSummary = await puebloSummaryMgr.getLatest(pueblo.id);
+      if (latestSummary?.summary && latestSummary.summary.trim()) {
+        puebloSummaryData.push(`Pueblo/Nación ${pueblo.name} (ID: ${pueblo.id})\n${latestSummary.summary}`);
+      }
+    }
+    puebloSummaries = puebloSummaryData.join('\n\n');
+  }
 
   console.log(`[handleResumenMundoTrigger] Obtenidos resúmenes de ${pueblos.length} pueblos para el mundo ${mundoid}`);
 
@@ -1334,6 +1776,38 @@ export async function handleResumenMundoTrigger(payload: ResumenMundoTriggerPayl
 
   // Call LLM
   const response = await callLLM(messages);
+
+  // ✅ GUARDAR RESUMEN ANTERIOR COMO EMBEDDING ANTES DE REEMPLAZARLO
+  try {
+    if (lastWorldSummary?.summary && lastWorldSummary.summary.trim()) {
+      const mundoNamespace = buildNamespace('mundo', mundoid);
+      await namespaceManager.ensureWorldNamespace(mundoid);
+      const embeddingClient = getEmbeddingClient();
+      try {
+        await embeddingClient.deleteBySource('resumen_mundo_anterior', mundoid);
+      } catch (delErr: any) {
+        console.warn(`[handleResumenMundoTrigger] No se pudieron eliminar embeddings previos:`, delErr?.message);
+      }
+      await embeddingClient.createEmbedding({
+        content: `Resumen anterior (v${lastWorldSummary.version}) del mundo ${world?.name || mundoid}:\n\n${lastWorldSummary.summary}`,
+        metadata: {
+          title: `Resumen anterior - Mundo ${mundoid}`,
+          type: 'resumen_mundo_anterior',
+          worldId: mundoid,
+          version: lastWorldSummary.version,
+          timestamp: new Date().toISOString(),
+        },
+        namespace: mundoNamespace,
+        source_type: 'resumen_mundo_anterior',
+        source_id: mundoid,
+      });
+      console.log(`[handleResumenMundoTrigger] Resumen anterior guardado como embedding en namespace "${mundoNamespace}"`);
+    } else {
+      console.log(`[handleResumenMundoTrigger] No había resumen anterior para guardar como embedding`);
+    }
+  } catch (embedErr: any) {
+    console.error(`[handleResumenMundoTrigger] Error guardando resumen anterior como embedding:`, embedErr?.message);
+  }
 
   // ✅ GUARDAR EN TABLA WorldSummary PARA HISTÓRICO (CON VERSIÓN)
   const nextVersion = (lastWorldSummary?.version || 0) + 1;
@@ -1442,6 +1916,122 @@ export async function handleNuevoLoreTrigger(payload: NuevoLoreTriggerPayload): 
   return { lore };
 }
 
+// ============================================
+// NUEVO CONTEXTO TRIGGER
+// ============================================
+// Da acceso temporal a los namespaces de otra entidad.
+// Ej: NPC A "visita" edificio X → NPC A tiene acceso al namespace de edificio X durante N días.
+
+export async function handleNuevoContextoTrigger(payload: NuevoContextoTriggerPayload): Promise<{
+  success: boolean;
+  entityType: string;
+  entityId: string;
+  targetType: string;
+  targetId: string;
+  durationDays: number;
+  expiresAt: string;
+  message: string;
+}> {
+  const { type, typeid, targetid, duration } = payload;
+
+  // Validar campos
+  if (!type || !typeid || !targetid || !duration) {
+    throw new Error('Faltan campos requeridos: type, typeid, targetid, duration');
+  }
+
+  const durationDays = parseInt(duration, 10);
+  if (isNaN(durationDays) || durationDays < 1) {
+    throw new Error(`Duration inválida: "${duration}". Debe ser un número entero positivo (días).`);
+  }
+
+  // Normalizar tipo (nacion → pueblo)
+  const entityType = normalizeEntityType(type);
+
+  // Validar que la entidad existe en la DB
+  await validateEntityExists(entityType, typeid);
+
+  // Detectar automáticamente el tipo del target buscando en todas las tablas
+  const targetType = await detectEntityType(targetid);
+
+  // Validar que el target existe en la DB
+  await validateEntityExists(targetType, targetid);
+
+  // Crear o actualizar el contexto adicional
+  const contexto = await contextoAdicionalManager.upsert({
+    entityType,
+    entityId: typeid,
+    targetType,
+    targetId: targetid,
+    durationDays,
+  });
+
+  console.log(`[handleNuevoContextoTrigger] Contexto ${entityType}:${typeid} → ${targetType}:${targetid} (${durationDays} días)`);
+
+  return {
+    success: true,
+    entityType,
+    entityId: typeid,
+    targetType,
+    targetId: targetid,
+    durationDays,
+    expiresAt: contexto.expiresAt,
+    message: `Contexto adicional creado: ${entityType}:${typeid} tiene acceso a ${targetType}:${targetid} durante ${durationDays} días (expira: ${contexto.expiresAt})`,
+  };
+}
+
+/**
+ * Detecta automáticamente el tipo de una entidad buscando en todas las tablas.
+ */
+async function detectEntityType(entityId: string): Promise<string> {
+  // Buscar en NPCs
+  const npc = await db.nPC.findUnique({ where: { id: entityId } }).catch(() => null);
+  if (npc) return 'npc';
+
+  // Buscar en Edificios
+  const edificio = await db.edificio.findUnique({ where: { id: entityId } }).catch(() => null);
+  if (edificio) return 'edificio';
+
+  // Buscar en Pueblos
+  const pueblo = await db.pueblo.findUnique({ where: { id: entityId } }).catch(() => null);
+  if (pueblo) return 'pueblo';
+
+  // Buscar en Mundos
+  const mundo = await db.world.findUnique({ where: { id: entityId } }).catch(() => null);
+  if (mundo) return 'mundo';
+
+  throw new Error(`No se pudo determinar el tipo de la entidad con ID: ${entityId}. No se encontró en ninguna tabla.`);
+}
+
+/**
+ * Valida que una entidad existe en la DB según su tipo.
+ */
+async function validateEntityExists(entityType: string, entityId: string): Promise<void> {
+  switch (entityType) {
+    case 'npc': {
+      const npc = await npcDbManager.getById(entityId);
+      if (!npc) throw new Error(`NPC no encontrado: ${entityId}`);
+      break;
+    }
+    case 'edificio': {
+      const edificio = await edificioDbManager.getById(entityId);
+      if (!edificio) throw new Error(`Edificio no encontrado: ${entityId}`);
+      break;
+    }
+    case 'pueblo': {
+      const pueblo = await puebloDbManager.getById(entityId);
+      if (!pueblo) throw new Error(`Pueblo/Nación no encontrado: ${entityId}`);
+      break;
+    }
+    case 'mundo': {
+      const mundo = await worldDbManager.getById(entityId);
+      if (!mundo) throw new Error(`Mundo no encontrado: ${entityId}`);
+      break;
+    }
+    default:
+      throw new Error(`Tipo de entidad inválido: ${entityType}`);
+  }
+}
+
 // Main handler function
 export async function handleTrigger(payload: AnyTriggerPayload): Promise<any> {
   const { mode } = payload;
@@ -1461,6 +2051,8 @@ export async function handleTrigger(payload: AnyTriggerPayload): Promise<any> {
       return handleResumenMundoTrigger(payload as ResumenMundoTriggerPayload);
     case 'nuevo_lore':
       return handleNuevoLoreTrigger(payload as NuevoLoreTriggerPayload);
+    case 'nuevo_contexto':
+      return handleNuevoContextoTrigger(payload as NuevoContextoTriggerPayload);
     default:
       throw new Error(`Unknown trigger mode: ${mode}`);
   }
@@ -1517,7 +2109,7 @@ export async function previewTriggerPrompt(payload: AnyTriggerPayload): Promise<
       };
 
       // ✅ CONSTRUIR EL PROMPT COMPLETO CON VARIABLES DE GRIMORIO
-      const basePrompt = buildCompleteChatPrompt(chatPayload.message, {
+      const basePrompt = await buildCompleteChatPrompt(chatPayload.message, {
         world,
         pueblo,
         edificio,

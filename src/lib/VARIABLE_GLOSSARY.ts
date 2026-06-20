@@ -305,17 +305,6 @@ export const VARIABLE_GLOSSARY: Record<string, VariableDefinition> = {
     nested: false
   },
 
-  'mundo.rumores': {
-    name: 'mundo.rumores',
-    aliases: ['rumores'],
-    description: 'Rumores del mundo (lista formateada)',
-    type: 'array',
-    example: '- Se escuchan susurros\n- Algo se mueve en las sombras',
-    category: 'world',
-    required: false,
-    nested: false
-  },
-
   // ============================================================================
   // VARIABLES DEL PUEBLO
   // ============================================================================
@@ -352,28 +341,6 @@ export const VARIABLE_GLOSSARY: Record<string, VariableDefinition> = {
     nested: false
   },
 
-  'pueblo.estado': {
-    name: 'pueblo.estado',
-    aliases: ['estado_pueblo'],
-    description: 'Estado actual del pueblo',
-    type: 'string',
-    example: 'El pueblo prospera...',
-    category: 'pueblo',
-    required: false,
-    nested: false
-  },
-
-  'pueblo.rumores': {
-    name: 'pueblo.rumores',
-    aliases: ['rumores'],
-    description: 'Rumores del pueblo (lista formateada)',
-    type: 'array',
-    example: '- Extraños en la posada\n- Caravanas desaparecidas',
-    category: 'pueblo',
-    required: false,
-    nested: false
-  },
-
   // ============================================================================
   // VARIABLES DEL EDIFICIO
   // ============================================================================
@@ -399,12 +366,12 @@ export const VARIABLE_GLOSSARY: Record<string, VariableDefinition> = {
     nested: false
   },
 
-  'edificio.eventos': {
-    name: 'edificio.eventos',
-    aliases: ['eventos', 'eventos_recientes'],
-    description: 'Eventos recientes del edificio (lista formateada)',
-    type: 'array',
-    example: '- Llegó un extranjero\n- Se reparó el horno',
+  'edificio.estado': {
+    name: 'edificio.estado',
+    aliases: ['estado', 'lore'],
+    description: 'Estado actual del edificio',
+    type: 'string',
+    example: 'La taberna está tranquila, con pocos clientes...',
     category: 'edificio',
     required: false,
     nested: false

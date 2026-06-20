@@ -1,17 +1,16 @@
 'use client';
 
 import { useState } from 'react';
-import { Settings, Server, RefreshCw, Palette, Monitor, Users, Bug, FolderOpen } from 'lucide-react';
+import { Settings, Server, RefreshCw, Palette, Users, Bug, FolderOpen } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 // Subcomponentes
-import LLMConfig from './settings/LLMConfig';
+import LLMProvidersConfig from './settings/LLMProvidersConfig';
 import ConnectionStatus from './settings/ConnectionStatus';
 import ServerConfig from './settings/ServerConfig';
 import InterfaceConfig from './settings/InterfaceConfig';
 import NPCConfig from './settings/NPCConfig';
 import DebugConfig from './settings/DebugConfig';
-import SessionConfig from './settings/SessionConfig';
 import FilesConfig from './settings/FilesConfig';
 
 export default function SettingsTab() {
@@ -40,7 +39,7 @@ export default function SettingsTab() {
 
       {/* Connection Status Overview */}
       <ConnectionStatus key={`status-${refreshKey}`} />
-      
+
       <Tabs defaultValue="llm" className="w-full">
         <TabsList className="grid w-full grid-cols-2">
           <TabsTrigger value="llm" className="flex items-center gap-2">
@@ -54,12 +53,12 @@ export default function SettingsTab() {
         </TabsList>
 
         <TabsContent value="llm" className="mt-6">
-          <LLMConfig key={`llm-${refreshKey}`} onConfigSaved={handleRefresh} />
+          <LLMProvidersConfig key={`llm-${refreshKey}`} onConfigSaved={handleRefresh} />
         </TabsContent>
 
         <TabsContent value="general" className="mt-6">
           <Tabs defaultValue="server" className="w-full">
-            <TabsList className="grid w-full grid-cols-2 md:grid-cols-6">
+            <TabsList className="grid w-full grid-cols-2 md:grid-cols-5">
               <TabsTrigger value="server" className="flex items-center gap-2">
                 <Server className="h-4 w-4" />
                 <span>Servidor</span>
@@ -67,10 +66,6 @@ export default function SettingsTab() {
               <TabsTrigger value="interface" className="flex items-center gap-2">
                 <Palette className="h-4 w-4" />
                 <span>Interfaz</span>
-              </TabsTrigger>
-              <TabsTrigger value="sessions" className="flex items-center gap-2">
-                <Monitor className="h-4 w-4" />
-                <span>Sesiones</span>
               </TabsTrigger>
               <TabsTrigger value="npcs" className="flex items-center gap-2">
                 <Users className="h-4 w-4" />
@@ -92,10 +87,6 @@ export default function SettingsTab() {
 
             <TabsContent value="interface" className="mt-6">
               <InterfaceConfig key={`interface-${refreshKey}`} onConfigSaved={handleRefresh} />
-            </TabsContent>
-
-            <TabsContent value="sessions" className="mt-6">
-              <SessionConfig key={`sessions-${refreshKey}`} onConfigSaved={handleRefresh} />
             </TabsContent>
 
             <TabsContent value="npcs" className="mt-6">

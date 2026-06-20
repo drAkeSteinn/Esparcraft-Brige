@@ -1,0 +1,1563 @@
+     1→'use client';
+     2→
+     3→import { useState, useEffect, useCallback } from 'react';
+     4→import { FileText, User, Bot, MapPin, Globe, Plus, Edit2, Trash2, Copy, Eye, Search, X, Book, Info, Database, GitBranch, ChevronDown, AlertTriangle, Wand2 } from 'lucide-react';
+     5→import { Button } from '@/components/ui/button';
+     6→import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+     7→import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+     8→import { Input } from '@/components/ui/input';
+     9→import { Label } from '@/components/ui/label';
+    10→import { Textarea } from '@/components/ui/textarea';
+    11→import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+    12→import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+    13→import { Badge } from '@/components/ui/badge';
+    14→import { Separator } from '@/components/ui/separator';
+    15→import { toast } from '@/hooks/use-toast';
+    16→import {
+    17→  GrimorioCard,
+    18→  GrimorioCardType,
+    19→  GrimorioCardCategory,
+    20→  GrimorioTemplateSubtype,
+    21→  ConditionalConfig,
+    22→  ConditionalBranch,
+    23→  Condition,
+    24→  ConditionOperator,
+    25→  ConditionCombinator,
+    26→  NPC,
+    27→  NPCAttribute
+    28→} from '@/lib/types';
+    29→import { isValidPrimaryVariableKey, isValidTemplateKey, extractTemplateVariables } from '@/lib/grimorioUtils';
+    30→import VariablesReference from './VariablesReference';
+    31→import VariableTag from './VariableTag';
+    32→
+    33→// Tipos de cards
+    34→const TIPOS_CARD = [
+    35→  { value: 'variable', label: 'Variable Primaria', icon: Database, color: 'bg-rose-100 text-rose-700', description: 'Solo informativa - documentación de variables del sistema' },
+    36→  { value: 'plantilla', label: 'Plantilla', icon: FileText, color: 'bg-fantasy-aged-gold text-fantasy-deep-black', description: 'Reutilizable - puede contener variables primarias y plantillas anidadas' }
+    37→];
+    38→
+    39→// Categorías disponibles (todas en la misma fila con estilo consistente)
+    40→const CATEGORIAS = [
+    41→  { value: 'general', label: 'General', icon: FileText, color: 'bg-fantasy-aged-gold text-fantasy-deep-black' },
+    42→  { value: 'jugador', label: 'Jugador', icon: User, color: 'bg-fantasy-aged-gold text-fantasy-deep-black' },
+    43→  { value: 'npc', label: 'NPC', icon: Bot, color: 'bg-fantasy-aged-gold text-fantasy-deep-black' },
+    44→  { value: 'ubicacion', label: 'Ubicación', icon: MapPin, color: 'bg-fantasy-aged-gold text-fantasy-deep-black' },
+    45→  { value: 'mundo', label: 'Mundo', icon: Globe, color: 'bg-fantasy-aged-gold text-fantasy-deep-black' },
+    46→  { value: 'variables', label: 'Variables', icon: Database, color: 'bg-rose-100 text-rose-700', description: 'Variables primarias del sistema' }
+    47→];
+    48→
+    49→// Operadores disponibles según el tipo de atributo
+    50→// Numéricos: etiquetas descriptivas + símbolo entre paréntesis para claridad
+    51→const OPERATORS_NUMERIC: { value: ConditionOperator; label: string }[] = [
+    52→  { value: 'gt', label: 'mayor que (>)' },
+    53→  { value: 'lt', label: 'menor que (<)' },
+    54→  { value: 'gte', label: 'mayor o igual que (≥)' },
+    55→  { value: 'lte', label: 'menor o igual que (≤)' },
+    56→  { value: 'eq', label: 'igual a (=)' },
+    57→  { value: 'neq', label: 'distinto de (≠)' }
+    58→];
+    59→
+    60→const OPERATORS_TEXT: { value: ConditionOperator; label: string }[] = [
+    61→  { value: 'eq', label: 'es igual a' },
+    62→  { value: 'neq', label: 'es distinto de' },
+    63→  { value: 'contains', label: 'contiene' },
+    64→  { value: 'not_contains', label: 'no contiene' },
+    65→  { value: 'starts_with', label: 'empieza con' },
+    66→  { value: 'ends_with', label: 'termina con' }
+    67→];
+    68→
+    69→// Operadores para atributos tipo 'list'
+    70→const OPERATORS_LIST: { value: ConditionOperator; label: string }[] = [
+    71→  { value: 'in_list', label: 'es uno de' },
+    72→  { value: 'not_in_list', label: 'no es uno de' },
+    73→  { value: 'contains', label: 'algún elemento contiene' },
+    74→  { value: 'not_contains', label: 'ningún elemento contiene' }
+    75→];
+    76→
+    77→// Genera un ID único con fallback
+    78→function makeId(): string {
+    79→  try {
+    80→    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    81→      return crypto.randomUUID();
+    82→    }
+    83→  } catch {
+    84→    /* ignore */
+    85→  }
+    86→  return `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+    87→}
+    88→
+    89→// Obtiene el nombre de un NPC de forma segura
+    90→function getNpcName(npc: NPC): string {
+    91→  return npc?.card?.data?.name || npc?.card?.name || npc.id || 'NPC sin nombre';
+    92→}
+    93→
+    94→interface GrimorioFormData {
+    95→  key: string;
+    96→  nombre: string;
+    97→  plantilla: string;
+    98→  categoria: GrimorioCardCategory;
+    99→  tipo: GrimorioCardType;
+   100→  descripcion: string;
+   101→  templateType: GrimorioTemplateSubtype;
+   102→  conditionalConfig: ConditionalConfig | null;
+   103→}
+   104→
+   105→export default function GrimorioTab() {
+   106→  const [cards, setCards] = useState<GrimorioCard[]>([]);
+   107→  const [filteredCards, setFilteredCards] = useState<GrimorioCard[]>([]);
+   108→  const [loading, setLoading] = useState(true);
+   109→  const [dialogOpen, setDialogOpen] = useState(false);
+   110→  const [editingCard, setEditingCard] = useState<GrimorioCard | null>(null);
+   111→  const [activeTab, setActiveTab] = useState('general');
+   112→  const [searchQuery, setSearchQuery] = useState('');
+   113→  const [previewCard, setPreviewCard] = useState<GrimorioCard | null>(null);
+   114→  const [previewOpen, setPreviewOpen] = useState(false);
+   115→  const [previewContent, setPreviewContent] = useState('');
+   116→  const [variablesRefOpen, setVariablesRefOpen] = useState(false);
+   117→  const [tipoFilter, setTipoFilter] = useState<GrimorioCardType | 'todos'>('todos');
+   118→
+   119→  // Estado para plantillas condicionales
+   120→  const [npcs, setNpcs] = useState<NPC[]>([]);
+   121→  const [npcsLoading, setNpcsLoading] = useState(false);
+   122→  const [attributes, setAttributes] = useState<NPCAttribute[]>([]);
+   123→  const [attributesLoading, setAttributesLoading] = useState(false);
+   124→
+   125→  // Form state
+   126→  const [formData, setFormData] = useState<GrimorioFormData>({
+   127→    key: '',
+   128→    nombre: '',
+   129→    plantilla: '',
+   130→    categoria: 'general' as GrimorioCardCategory,
+   131→    tipo: 'plantilla' as GrimorioCardType,
+   132→    descripcion: '',
+   133→    templateType: 'normal',
+   134→    conditionalConfig: null
+   135→  });
+   136→
+   137→  useEffect(() => {
+   138→    fetchCards();
+   139→  }, []);
+   140→
+   141→  useEffect(() => {
+   142→    filterCards();
+   143→  }, [searchQuery, activeTab, cards, tipoFilter]);
+   144→
+   145→  // Cargar NPCs bajo demanda (cuando se abre el modo condicional)
+   146→  const fetchNpcs = useCallback(async () => {
+   147→    if (npcs.length > 0 || npcsLoading) return;
+   148→    setNpcsLoading(true);
+   149→    try {
+   150→      const response = await fetch('/api/npcs');
+   151→      const result = await response.json();
+   152→      if (result.success && Array.isArray(result.data)) {
+   153→        setNpcs(result.data as NPC[]);
+   154→      }
+   155→    } catch (error) {
+   156→      console.error('Error fetching NPCs:', error);
+   157→      toast({
+   158→        title: 'Error',
+   159→        description: 'No se pudieron cargar los NPCs',
+   160→        variant: 'destructive'
+   161→      });
+   162→    } finally {
+   163→      setNpcsLoading(false);
+   164→    }
+   165→  }, [npcs.length, npcsLoading]);
+   166→
+   167→  // Cargar atributos del NPC seleccionado
+   168→  const fetchAttributes = useCallback(async (npcId: string) => {
+   169→    if (!npcId) {
+   170→      setAttributes([]);
+   171→      return;
+   172→    }
+   173→    setAttributesLoading(true);
+   174→    try {
+   175→      const response = await fetch(`/api/npcs/${npcId}/attributes`);
+   176→      const result = await response.json();
+   177→      if (result.success && Array.isArray(result.data)) {
+   178→        setAttributes(result.data as NPCAttribute[]);
+   179→      } else {
+   180→        setAttributes([]);
+   181→      }
+   182→    } catch (error) {
+   183→      console.error('Error fetching NPC attributes:', error);
+   184→      setAttributes([]);
+   185→    } finally {
+   186→      setAttributesLoading(false);
+   187→    }
+   188→  }, []);
+   189→
+   190→  // Cuando cambia el npcId de la config condicional, recargar atributos
+   191→  // eslint-disable-next-line react-hooks/set-state-in-effect
+   192→  useEffect(() => {
+   193→    const npcId = formData.conditionalConfig?.npcId;
+   194→    if (formData.templateType === 'condicional' && npcId) {
+   195→      // eslint-disable-next-line react-hooks/set-state-in-effect
+   196→      fetchAttributes(npcId);
+   197→    } else if (!npcId) {
+   198→      // eslint-disable-next-line react-hooks/set-state-in-effect
+   199→      setAttributes([]);
+   200→    }
+   201→  }, [formData.conditionalConfig?.npcId, formData.templateType]);
+   202→
+   203→  const fetchCards = async () => {
+   204→    try {
+   205→      setLoading(true);
+   206→      const response = await fetch('/api/grimorio');
+   207→      const result = await response.json();
+   208→
+   209→      if (result.success) {
+   210→        setCards(result.data.cards);
+   211→      } else {
+   212→        toast({
+   213→          title: 'Error',
+   214→          description: 'No se pudieron cargar las plantillas del grimorio',
+   215→          variant: 'destructive'
+   216→        });
+   217→      }
+   218→    } catch (error) {
+   219→      console.error('Error fetching cards:', error);
+   220→      toast({
+   221→        title: 'Error',
+   222→        description: 'No se pudieron cargar las plantillas del grimorio',
+   223→        variant: 'destructive'
+   224→      });
+   225→    } finally {
+   226→      setLoading(false);
+   227→    }
+   228→  };
+   229→
+   230→  const filterCards = () => {
+   231→    let filtered = cards.filter(card => card.categoria === activeTab);
+   232→
+   233→    // Filtro por tipo
+   234→    if (tipoFilter !== 'todos') {
+   235→      filtered = filtered.filter(card => card.tipo === tipoFilter);
+   236→    }
+   237→
+   238→    if (searchQuery.trim()) {
+   239→      const searchLower = searchQuery.toLowerCase();
+   240→      filtered = filtered.filter(card =>
+   241→        card.nombre.toLowerCase().includes(searchLower) ||
+   242→        card.key.toLowerCase().includes(searchLower) ||
+   243→        card.plantilla.toLowerCase().includes(searchLower) ||
+   244→        (card.descripcion && card.descripcion.toLowerCase().includes(searchLower))
+   245→      );
+   246→    }
+   247→
+   248→    setFilteredCards(filtered);
+   249→  };
+   250→
+   251→  const handleCreate = () => {
+   252→    setEditingCard(null);
+   253→    setFormData({
+   254→      key: '',
+   255→      nombre: '',
+   256→      plantilla: '',
+   257→      categoria: activeTab as GrimorioCardCategory,
+   258→      tipo: 'plantilla' as GrimorioCardType,
+   259→      descripcion: '',
+   260→      templateType: 'normal',
+   261→      conditionalConfig: null
+   262→    });
+   263→    setAttributes([]);
+   264→    setDialogOpen(true);
+   265→  };
+   266→
+   267→  const handleEdit = (card: GrimorioCard) => {
+   268→    setEditingCard(card);
+   269→    setFormData({
+   270→      key: card.key,
+   271→      nombre: card.nombre,
+   272→      plantilla: card.plantilla,
+   273→      categoria: card.categoria,
+   274→      tipo: card.tipo,
+   275→      descripcion: card.descripcion || '',
+   276→      templateType: card.templateType || 'normal',
+   277→      conditionalConfig: card.conditionalConfig ?? null
+   278→    });
+   279→    setDialogOpen(true);
+   280→    // Si ya tiene config condicional, pre-cargar NPCs
+   281→    if (card.templateType === 'condicional') {
+   282→      fetchNpcs();
+   283→    }
+   284→  };
+   285→
+   286→  const handleDelete = async (id: string) => {
+   287→    if (!confirm('¿Estás seguro de que deseas eliminar esta plantilla del grimorio?')) return;
+   288→
+   289→    try {
+   290→      const response = await fetch(`/api/grimorio/${id}`, {
+   291→        method: 'DELETE'
+   292→      });
+   293→      const result = await response.json();
+   294→
+   295→      if (result.success) {
+   296→        toast({
+   297→          title: 'Éxito',
+   298→          description: 'Plantilla eliminada correctamente'
+   299→        });
+   300→        fetchCards();
+   301→      } else {
+   302→        toast({
+   303→          title: 'Error',
+   304→          description: result.message || 'No se pudo eliminar la plantilla',
+   305→          variant: 'destructive'
+   306→        });
+   307→      }
+   308→    } catch (error) {
+   309→      console.error('Error deleting card:', error);
+   310→      toast({
+   311→        title: 'Error',
+   312→        description: 'No se pudo eliminar la plantilla',
+   313→        variant: 'destructive'
+   314→      });
+   315→    }
+   316→  };
+   317→
+   318→  // Helpers para validación
+   319→  const getRequiredFields = () => {
+   320→    if (formData.tipo === 'variable' && editingCard) {
+   321→      // Variables primarias en modo edición: solo nombre es obligatorio
+   322→      return ['nombre'];
+   323→    } else if (formData.tipo === 'variable' && !editingCard) {
+   324→      // Variables primarias en modo creación: bloqueado
+   325→      return [];
+   326→    } else if (formData.tipo === 'plantilla') {
+   327→      // Plantillas: key, nombre, plantilla (solo si es normal) y categoria son obligatorios
+   328→      const base = ['key', 'nombre', 'categoria', 'tipo'];
+   329→      // En modo condicional, la plantilla "normal" no se usa
+   330→      if (formData.templateType !== 'condicional') {
+   331→        base.push('plantilla');
+   332→      }
+   333→      return base;
+   334→    } else {
+   335→      return ['key', 'nombre', 'plantilla', 'categoria', 'tipo'];
+   336→    }
+   337→  };
+   338→
+   339→  const getMissingFields = () => {
+   340→    const requiredFields = getRequiredFields();
+   341→    return requiredFields.filter(field => {
+   342→      const value = formData[field as keyof GrimorioFormData];
+   343→      // Para conditionalConfig, no lo tratamos como string
+   344→      if (field === 'conditionalConfig' || field === 'templateType') return false;
+   345→      return !value?.toString().trim();
+   346→    });
+   347→  };
+   348→
+   349→  const handleSubmit = async () => {
+   350→    try {
+   351→      // Validaciones
+   352→      const missingFields = getMissingFields();
+   353→      if (missingFields.length > 0) {
+   354→        toast({
+   355→          title: 'Error',
+   356→          description: `Faltan campos requeridos: ${missingFields.join(', ')}`,
+   357→          variant: 'destructive'
+   358→        });
+   359→        return;
+   360→      }
+   361→
+   362→      // Validación de formato de key según tipo
+   363→      if (formData.tipo === 'variable') {
+   364→        if (!isValidPrimaryVariableKey(formData.key)) {
+   365→          toast({
+   366→            title: 'Formato de key inválido',
+   367→            description: 'Las variables primarias deben seguir el formato: jugador.*, npc.*, mundo.*, pueblo.*, edificio.*, o ser una variable simple (nombre, raza, nivel, etc.)',
+   368→            variant: 'destructive'
+   369→          });
+   370→          return;
+   371→        }
+   372→      } else if (formData.tipo === 'plantilla') {
+   373→        if (!isValidTemplateKey(formData.key)) {
+   374→          toast({
+   375→            title: 'Formato de key inválido',
+   376→            description: 'Las plantillas deben tener un nombre simple sin puntos (ej: user_data, quest_info, greeting_message)',
+   377→            variant: 'destructive'
+   378→          });
+   379→          return;
+   380→        }
+   381→      }
+   382→
+   383→      // Validación específica de plantillas condicionales
+   384→      const isCondicionalEnabled =
+   385→        formData.tipo === 'plantilla' &&
+   386→        formData.categoria === 'npc' &&
+   387→        formData.templateType === 'condicional';
+   388→
+   389→      let finalConditionalConfig: ConditionalConfig | null = null;
+   390→      let finalTemplateType: GrimorioTemplateSubtype = 'normal';
+   391→
+   392→      if (isCondicionalEnabled) {
+   393→        const cfg = formData.conditionalConfig;
+   394→        if (!cfg || !cfg.npcId) {
+   395→          toast({
+   396→            title: 'Configuración incompleta',
+   397→            description: 'Debes seleccionar un NPC de referencia para la plantilla condicional.',
+   398→            variant: 'destructive'
+   399→          });
+   400→          return;
+   401→        }
+   402→
+   403→        // Avisar (sin bloquear) si no hay branches
+   404→        if (!cfg.branches || cfg.branches.length === 0) {
+   405→          toast({
+   406→            title: 'Sin branches',
+   407→            description: 'No has añadido ningún branch. Solo se usará la plantilla por defecto.',
+   408→            variant: 'default'
+   409→          });
+   410→        }
+   411→
+   412→        finalConditionalConfig = cfg;
+   413→        finalTemplateType = 'condicional';
+   414→      } else {
+   415→        // ✅ Plantillas anidadas PERMITIDAS: solo informamos al usuario
+   416→        const nestedTemplates = extractTemplateVariables(formData.plantilla);
+   417→        if (nestedTemplates.length > 0) {
+   418→          toast({
+   419→            title: 'Plantillas anidadas detectadas',
+   420→            description: `Se resolverán en cascada (máx 10 niveles): ${nestedTemplates.map(t => `"${t}"`).join(', ')}`,
+   421→          });
+   422→        }
+   423→        finalConditionalConfig = null;
+   424→        finalTemplateType = 'normal';
+   425→      }
+   426→
+   427→      const url = editingCard ? `/api/grimorio/${editingCard.id}` : '/api/grimorio';
+   428→      const method = editingCard ? 'PUT' : 'POST';
+   429→
+   430→      // Construir body: el backend guarda plantilla='' para condicionales
+   431→      // (la configuración se persiste en conditionalConfig). Enviamos igualmente
+   432→      // el JSON en plantilla por compatibilidad hacia atrás / debugging.
+   433→      const body: Record<string, unknown> = {
+   434→        key: formData.key,
+   435→        nombre: formData.nombre,
+   436→        plantilla: isCondicionalEnabled
+   437→          ? (formData.conditionalConfig ? JSON.stringify(formData.conditionalConfig) : '')
+   438→          : formData.plantilla,
+   439→        categoria: formData.categoria,
+   440→        tipo: formData.tipo,
+   441→        templateType: finalTemplateType,
+   442→        conditionalConfig: finalConditionalConfig,
+   443→        descripcion: formData.descripcion
+   444→      };
+   445→
+   446→      const response = await fetch(url, {
+   447→        method,
+   448→        headers: { 'Content-Type': 'application/json' },
+   449→        body: JSON.stringify(body)
+   450→      });
+   451→
+   452→      const result = await response.json();
+   453→
+   454→      if (result.success) {
+   455→        toast({
+   456→          title: 'Éxito',
+   457→          description: editingCard ? 'Plantilla actualizada' : 'Plantilla creada'
+   458→        });
+   459→
+   460→        // Mostrar advertencias si las hay
+   461→        if (result.validations?.warnings && result.validations.warnings.length > 0) {
+   462→          result.validations.warnings.forEach((warning: string) => {
+   463→            toast({
+   464→              title: 'Advertencia',
+   465→              description: warning,
+   466→              variant: 'default'
+   467→            });
+   468→          });
+   469→        }
+   470→
+   471→        setDialogOpen(false);
+   472→        fetchCards();
+   473→      } else {
+   474→        toast({
+   475→          title: 'Error',
+   476→          description: result.error || result.message || 'No se pudo guardar la plantilla',
+   477→          variant: 'destructive'
+   478→        });
+   479→      }
+   480→    } catch (error) {
+   481→      console.error('Error saving card:', error);
+   482→      toast({
+   483→        title: 'Error',
+   484→        description: 'No se pudo guardar la plantilla',
+   485→        variant: 'destructive'
+   486→      });
+   487→    }
+   488→  };
+   489→
+   490→  const handlePreview = async (card: GrimorioCard) => {
+   491→    try {
+   492→      const context: Record<string, unknown> = {
+   493→        jugador: {
+   494→          nombre: 'drAke',
+   495→          raza: 'Humano',
+   496→          nivel: '10',
+   497→          salud_actual: '100%',
+   498→          reputacion: '6',
+   499→          almakos: '1000',
+   500→          deuda: '100',
+   501→          piedras_del_alma: '5',
+   502→          hora: '10:30pm',
+   503→          clima: 'soleado'
+   504→        },
+   505→        mensaje: 'Hola'
+   506→      };
+   507→
+   508→      // Si la card es condicional, pasar el npc.npcid para que se resuelva
+   509→      if (card.templateType === 'condicional' && card.conditionalConfig?.npcId) {
+   510→        context.npc = { npcid: card.conditionalConfig.npcId };
+   511→      }
+   512→
+   513→      const response = await fetch(`/api/grimorio/apply/${card.id}`, {
+   514→        method: 'POST',
+   515→        headers: { 'Content-Type': 'application/json' },
+   516→        body: JSON.stringify({ context })
+   517→      });
+   518→
+   519→      const result = await response.json();
+   520→
+   521→      if (result.success) {
+   522→        setPreviewContent(result.data.template);
+   523→        setPreviewCard(card);
+   524→        setPreviewOpen(true);
+   525→      } else {
+   526→        toast({
+   527→          title: 'Error',
+   528→          description: result.error || 'No se pudo generar el preview',
+   529→          variant: 'destructive'
+   530→        });
+   531→      }
+   532→    } catch (error) {
+   533→      console.error('Error generating preview:', error);
+   534→      toast({
+   535→        title: 'Error',
+   536→        description: 'No se pudo generar el preview',
+   537→        variant: 'destructive'
+   538→      });
+   539→    }
+   540→  };
+   541→
+   542→  const handleCopyTemplate = async (plantilla: string, nombre: string) => {
+   543→    try {
+   544→      await navigator.clipboard.writeText(plantilla);
+   545→      toast({
+   546→        title: 'Copiado',
+   547→        description: `Plantilla "${nombre}" copiada al portapapeles`
+   548→      });
+   549→    } catch (error) {
+   550→      console.error('Error copying template:', error);
+   551→    }
+   552→  };
+   553→
+   554→  const getCategoriaInfo = (categoria: GrimorioCardCategory) => {
+   555→    return CATEGORIAS.find(c => c.value === categoria) || CATEGORIAS[0];
+   556→  };
+   557→
+   558→  const getTipoInfo = (tipo: GrimorioCardType) => {
+   559→    return TIPOS_CARD.find(t => t.value === tipo) || TIPOS_CARD[0];
+   560→  };
+   561→
+   562→  // ============================================
+   563→  // HELPERS PARA PLANTILLAS CONDICIONALES
+   564→  // ============================================
+   565→
+   566→  const isCondicionalAvailable = () => {
+   567→    return formData.categoria === 'npc' && formData.tipo === 'plantilla';
+   568→  };
+   569→
+   570→  const switchTemplateType = (type: GrimorioTemplateSubtype) => {
+   571→    if (type === 'condicional') {
+   572→      // Inicializar config si es null
+   573→      fetchNpcs();
+   574→      const newConfig: ConditionalConfig = formData.conditionalConfig ?? {
+   575→        npcId: '',
+   576→        branches: [],
+   577→        defaultTemplate: ''
+   578→      };
+   579→      setFormData(prev => ({ ...prev, templateType: 'condicional', conditionalConfig: newConfig }));
+   580→    } else {
+   581→      setFormData(prev => ({ ...prev, templateType: 'normal' }));
+   582→    }
+   583→  };
+   584→
+   585→  const updateConditionalConfig = (patch: Partial<ConditionalConfig>) => {
+   586→    setFormData(prev => ({
+   587→      ...prev,
+   588→      conditionalConfig: prev.conditionalConfig
+   589→        ? { ...prev.conditionalConfig, ...patch }
+   590→        : { npcId: '', branches: [], defaultTemplate: '', ...patch }
+   591→    }));
+   592→  };
+   593→
+   594→  const addBranch = () => {
+   595→    const newBranch: ConditionalBranch = {
+   596→      id: makeId(),
+   597→      name: '',
+   598→      combinator: 'AND',
+   599→      conditions: [],
+   600→      template: ''
+   601→    };
+   602→    updateConditionalConfig({
+   603→      branches: [...(formData.conditionalConfig?.branches ?? []), newBranch]
+   604→    });
+   605→  };
+   606→
+   607→  const updateBranch = (branchId: string, patch: Partial<ConditionalBranch>) => {
+   608→    const branches = (formData.conditionalConfig?.branches ?? []).map(b =>
+   609→      b.id === branchId ? { ...b, ...patch } : b
+   610→    );
+   611→    updateConditionalConfig({ branches });
+   612→  };
+   613→
+   614→  const removeBranch = (branchId: string) => {
+   615→    const branches = (formData.conditionalConfig?.branches ?? []).filter(b => b.id !== branchId);
+   616→    updateConditionalConfig({ branches });
+   617→  };
+   618→
+   619→  const addCondition = (branchId: string) => {
+   620→    const branches = (formData.conditionalConfig?.branches ?? []).map(b => {
+   621→      if (b.id !== branchId) return b;
+   622→      const firstAttr = attributes[0];
+   623→      const newCond: Condition = {
+   624→        id: makeId(),
+   625→        attributeKey: firstAttr?.key ?? '',
+   626→        // Operador default según tipo: numeric→gt, list→in_list, text→eq
+   627→        operator: firstAttr?.type === 'numeric' ? 'gt' : firstAttr?.type === 'list' ? 'in_list' : 'eq',
+   628→        value: ''
+   629→      };
+   630→      return { ...b, conditions: [...b.conditions, newCond] };
+   631→    });
+   632→    updateConditionalConfig({ branches });
+   633→  };
+   634→
+   635→  const updateCondition = (branchId: string, condId: string, patch: Partial<Condition>) => {
+   636→    const branches = (formData.conditionalConfig?.branches ?? []).map(b => {
+   637→      if (b.id !== branchId) return b;
+   638→      return {
+   639→        ...b,
+   640→        conditions: b.conditions.map(c => (c.id === condId ? { ...c, ...patch } : c))
+   641→      };
+   642→    });
+   643→    updateConditionalConfig({ branches });
+   644→  };
+   645→
+   646→  const removeCondition = (branchId: string, condId: string) => {
+   647→    const branches = (formData.conditionalConfig?.branches ?? []).map(b => {
+   648→      if (b.id !== branchId) return b;
+   649→      return { ...b, conditions: b.conditions.filter(c => c.id !== condId) };
+   650→    });
+   651→    updateConditionalConfig({ branches });
+   652→  };
+   653→
+   654→  const getAttrByKey = (key: string): NPCAttribute | undefined => {
+   655→    return attributes.find(a => a.key === key);
+   656→  };
+   657→
+   658→  const getOperatorsForAttr = (attr: NPCAttribute | undefined) => {
+   659→    if (!attr) return OPERATORS_TEXT;
+   660→    if (attr.type === 'numeric') return OPERATORS_NUMERIC;
+   661→    if (attr.type === 'list') return OPERATORS_LIST;
+   662→    return OPERATORS_TEXT;
+   663→  };
+   664→
+   665→  if (loading) {
+   666→    return (
+   667→      <div className="flex items-center justify-center h-96">
+   668→        <p className="text-muted-foreground">Cargando plantillas del grimorio...</p>
+   669→      </div>
+   670→    );
+   671→  }
+   672→
+   673→  return (
+   674→    <div className="space-y-4">
+   675→      <div className="flex items-center justify-between">
+   676→        <div>
+   677→          <h2 className="text-2xl font-bold">Grimorio</h2>
+   678→          <p className="text-sm text-muted-foreground">
+   679→            Plantillas reutilizables con variables
+   680→          </p>
+   681→        </div>
+   682→        <div className="flex gap-2">
+   683→          <Button variant="outline" onClick={() => setVariablesRefOpen(true)}>
+   684→            <Info className="h-4 w-4 mr-2" />
+   685→            Referencia de Variables
+   686→          </Button>
+   687→          {activeTab !== 'variables' && (
+   688→            <Button onClick={handleCreate}>
+   689→              <Plus className="h-4 w-4 mr-2" />
+   690→              Nueva Plantilla
+   691→            </Button>
+   692→          )}
+   693→        </div>
+   694→      </div>
+   695→
+   696→      <div className="flex gap-2 flex-col sm:flex-row">
+   697→        <div className="relative flex-1">
+   698→          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+   699→          <Input
+   700→            type="text"
+   701→            placeholder="Buscar por nombre, key o texto de la plantilla..."
+   702→            value={searchQuery}
+   703→            onChange={(e) => setSearchQuery(e.target.value)}
+   704→            className="pl-10"
+   705→          />
+   706→        </div>
+   707→        <Select value={tipoFilter} onValueChange={(value: GrimorioCardType | 'todos') => setTipoFilter(value)}>
+   708→          <SelectTrigger className="w-full sm:w-[200px]">
+   709→            <SelectValue placeholder="Filtrar por tipo" />
+   710→          </SelectTrigger>
+   711→          <SelectContent>
+   712→            <SelectItem value="todos">
+   713→              <div className="flex items-center gap-2">
+   714→                <Database className="h-4 w-4 text-muted-foreground" />
+   715→                <span>Todos los tipos</span>
+   716→              </div>
+   717→            </SelectItem>
+   718→            {TIPOS_CARD.map((tipo) => (
+   719→              <SelectItem key={tipo.value} value={tipo.value}>
+   720→                <div className="flex items-center gap-2">
+   721→                  <tipo.icon className={`h-4 w-4 ${tipo.color.split(' ')[1]}`} />
+   722→                  <span>{tipo.label}</span>
+   723→                </div>
+   724→              </SelectItem>
+   725→            ))}
+   726→          </SelectContent>
+   727→        </Select>
+   728→      </div>
+   729→
+   730→      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+   731→        <TabsList className="grid w-full grid-cols-6 lg:w-auto lg:inline-grid">
+   732→          {CATEGORIAS.map((cat) => (
+   733→            <TabsTrigger key={cat.value} value={cat.value} className="flex items-center gap-2">
+   734→              <cat.icon className={`h-4 w-4 ${cat.color.split(' ')[1]}`} />
+   735→              <span>{cat.label}</span>
+   736→            </TabsTrigger>
+   737→          ))}
+   738→        </TabsList>
+   739→
+   740→        {CATEGORIAS.map((cat) => (
+   741→          <TabsContent key={cat.value} value={cat.value} className="mt-6">
+   742→            {filteredCards.length === 0 ? (
+   743→              <div className="text-center py-12">
+   744→                <p className="text-muted-foreground">No hay plantillas en esta categoría</p>
+   745→                <p className="text-sm text-muted-foreground mt-2">
+   746→                  Clic en "Nueva Plantilla" para crear una en "{cat.label}"
+   747→                </p>
+   748→              </div>
+   749→            ) : (
+   750→              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+   751→                {filteredCards.map((card) => {
+   752→                  const tipoInfo = getTipoInfo(card.tipo);
+   753→                  return (
+   754→                    <Card key={card.id} className={`flex flex-col border-2 ${tipoInfo.value === 'variable' ? 'border-fantasy-textured bg-fantasy-deep-black' : 'border-fantasy-aged-gold bg-fantasy-deep-black'}`}>
+   755→                      <CardHeader>
+   756→                        <div className="flex items-start justify-between">
+   757→                          <div className="flex-1">
+   758→                            <VariableTag variableKey={card.key} className="mb-2" />
+   759→                            <CardTitle className="text-lg">{card.nombre}</CardTitle>
+   760→                          </div>
+   761→                          <div className="flex gap-1 items-center">
+   762→                            {tipoInfo.value === 'variable' ? (
+   763→                              <tipoInfo.icon className="h-5 w-5 text-slate-500" />
+   764→                            ) : (
+   765→                              <FileText className="h-5 w-5 text-fantasy-aged-gold" />
+   766→                            )}
+   767→                            {tipoInfo.value === 'variable' && (
+   768→                              <Badge variant="outline" className={`ml-2 ${tipoInfo.color} text-xs`}>
+   769→                                {tipoInfo.label}
+   770→                              </Badge>
+   771→                            )}
+   772→                            {tipoInfo.value === 'plantilla' && card.templateType === 'condicional' && (
+   773→                              <Badge variant="outline" className="ml-2 bg-amber-100 text-amber-800 text-xs" title="Plantilla condicional">
+   774→                                <GitBranch className="h-3 w-3 mr-1" />
+   775→                                Condicional
+   776→                              </Badge>
+   777→                            )}
+   778→                            {tipoInfo.value === 'plantilla' && (
+   779→                              <Button
+   780→                                variant="ghost"
+   781→                                size="sm"
+   782→                                onClick={() => handlePreview(card)}
+   783→                                className="h-8 w-8 p-0"
+   784→                              >
+   785→                                <Eye className="h-4 w-4 text-fantasy-aged-gold" />
+   786→                              </Button>
+   787→                            )}
+   788→                            <Button
+   789→                              variant="ghost"
+   790→                              size="sm"
+   791→                              onClick={() => handleEdit(card)}
+   792→                            >
+   793→                              <Edit2 className="h-4 w-4" />
+   794→                            </Button>
+   795→                            <Button
+   796→                              variant="ghost"
+   797→                              size="sm"
+   798→                              onClick={() => handleDelete(card.id)}
+   799→                            >
+   800→                              <Trash2 className="h-4 w-4 text-destructive" />
+   801→                            </Button>
+   802→                          </div>
+   803→                        </div>
+   804→                      </CardHeader>
+   805→                      <CardContent className="flex-1 flex flex-col">
+   806→                        {tipoInfo.value === 'plantilla' ? (
+   807→                          <>
+   808→                            {card.templateType === 'condicional' ? (
+   809→                              <div className="bg-fantasy-deep-black rounded-lg p-4 mb-3 border-2 border-fantasy-textured">
+   810→                                <div className="flex items-center gap-2 mb-2">
+   811→                                  <GitBranch className="h-4 w-4 text-amber-400" />
+   812→                                  <span className="text-xs font-semibold text-amber-400">
+   813→                                    {card.conditionalConfig?.branches.length ?? 0} branch(es) · Default activo
+   814→                                  </span>
+   815→                                </div>
+   816→                                <pre className="text-xs whitespace-pre-wrap break-words max-h-32 overflow-y-auto text-foreground">
+   817→                                  {card.conditionalConfig?.defaultTemplate || '(vacío)'}
+   818→                                </pre>
+   819→                              </div>
+   820→                            ) : (
+   821→                              <div className="bg-fantasy-deep-black rounded-lg p-4 mb-3 border-2 border-fantasy-textured">
+   822→                                <pre className="text-xs whitespace-pre-wrap break-words max-h-32 overflow-y-auto text-foreground">
+   823→                                  {card.plantilla}
+   824→                                </pre>
+   825→                              </div>
+   826→                            )}
+   827→                            <div className="mt-auto">
+   828→                              <Button
+   829→                                variant="outline"
+   830→                                size="sm"
+   831→                                onClick={() =>
+   832→                                  handleCopyTemplate(
+   833→                                    card.templateType === 'condicional'
+   834→                                      ? (card.conditionalConfig?.defaultTemplate || '')
+   835→                                      : card.plantilla,
+   836→                                    card.nombre
+   837→                                  )
+   838→                                }
+   839→                                className="w-full"
+   840→                              >
+   841→                                <Copy className="h-3 w-3 mr-2" />
+   842→                                Copiar Plantilla
+   843→                              </Button>
+   844→                            </div>
+   845→                          </>
+   846→                        ) : (
+   847→                          <>
+   848→                            <div className="bg-fantasy-deep-black rounded-lg p-4 mb-3 border border-fantasy-textured">
+   849→                              <p className="text-sm text-foreground">
+   850→                                {card.descripcion || 'Sin descripción'}
+   851→                              </p>
+   852→                            </div>
+   853→                            <div className="mt-auto">
+   854→                              <Button
+   855→                                variant="outline"
+   856→                                size="sm"
+   857→                                onClick={() => handleCopyTemplate(`{{${card.key}}}`, card.nombre)}
+   858→                                className="w-full"
+   859→                              >
+   860→                                <Copy className="h-3 w-3 mr-2" />
+   861→                                Copiar Key
+   862→                              </Button>
+   863→                            </div>
+   864→                          </>
+   865→                        )}
+   866→                      </CardContent>
+   867→                    </Card>
+   868→                  );
+   869→                })}
+   870→              </div>
+   871→            )}
+   872→          </TabsContent>
+   873→        ))}
+   874→      </Tabs>
+   875→
+   876→      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+   877→        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+   878→          <DialogHeader>
+   879→            <DialogTitle>
+   880→              {editingCard
+   881→                ? (formData.tipo === 'variable' ? 'Editar Variable Primaria' : 'Editar Plantilla')
+   882→                : (formData.tipo === 'variable' ? 'Crear Nueva Variable Primaria' : 'Crear Nueva Plantilla')
+   883→              }
+   884→            </DialogTitle>
+   885→            <DialogDescription>
+   886→              {editingCard
+   887→                ? (formData.tipo === 'variable' ? 'Actualiza la información de la variable primaria' : 'Actualiza la información de la plantilla')
+   888→                : (formData.tipo === 'variable' ? 'Completa los campos para crear una variable primaria (documentación)' : 'Completa los campos para crear una plantilla reutilizable')
+   889→              }
+   890→            </DialogDescription>
+   891→          </DialogHeader>
+   892→
+   893→          <div className="space-y-6">
+   894→            {/* Campo de categoría */}
+   895→            <div>
+   896→              <Label htmlFor="categoria">Categoría *</Label>
+   897→              <Select
+   898→                value={formData.categoria}
+   899→                onValueChange={(value: GrimorioCardCategory) => {
+   900→                  // Si se sale de "npc" con una config condicional, revertir a normal
+   901→                  if (value !== 'npc' && formData.templateType === 'condicional') {
+   902→                    setFormData(prev => ({ ...prev, categoria: value, templateType: 'normal' }));
+   903→                  } else {
+   904→                    setFormData({ ...formData, categoria: value });
+   905→                  }
+   906→                }}
+   907→              >
+   908→                <SelectTrigger className="w-full">
+   909→                  <SelectValue placeholder="Seleccionar categoría" />
+   910→                </SelectTrigger>
+   911→                <SelectContent>
+   912→                  {CATEGORIAS.map((cat) => (
+   913→                    <SelectItem key={cat.value} value={cat.value}>
+   914→                      <div className="flex items-center gap-2">
+   915→                        <cat.icon className={`h-4 w-4 ${cat.color.split(' ')[1]}`} />
+   916→                        <span>{cat.label}</span>
+   917→                      </div>
+   918→                    </SelectItem>
+   919→                  ))}
+   920→                </SelectContent>
+   921→              </Select>
+   922→            </div>
+   923→
+   924→            <div className="h-px border-b border-fantasy-textured my-6"></div>
+   925→
+   926→            {/* Campos del formulario */}
+   927→            <div className="space-y-4">
+   928→              <div>
+   929→                <Label htmlFor="key">Key (identificador único) *</Label>
+   930→                <Input
+   931→                  id="key"
+   932→                  value={formData.key}
+   933→                  onChange={(e) => setFormData({ ...formData, key: e.target.value })}
+   934→                  placeholder="ej: user_data, quest_info"
+   935→                  disabled={formData.tipo === 'variable' && editingCard}
+   936→                />
+   937→                {formData.tipo === 'plantilla' && (
+   938→                  <p className="text-xs text-fantasy-aged-gold mt-1">
+   939→                    El nombre simple sin puntos para usar en plantillas
+   940→                  </p>
+   941→                )}
+   942→              </div>
+   943→
+   944→              <div>
+   945→                <Label htmlFor="nombre">Nombre *</Label>
+   946→                <Input
+   947→                  id="nombre"
+   948→                  value={formData.nombre}
+   949→                  onChange={(e) => setFormData({ ...formData, nombre: e.target.value })}
+   950→                  placeholder="ej: Datos del Usuario, Información de Quest"
+   951→                />
+   952→                <p className="text-xs text-fantasy-aged-gold mt-1">
+   953→                  El nombre descriptivo de la plantilla
+   954→                </p>
+   955→              </div>
+   956→
+   957→              {/* Toggle de tipo de plantilla (Normal vs Condicional) */}
+   958→              {isCondicionalAvailable() && (
+   959→                <div className="bg-fantasy-deep-black/40 rounded-lg p-4 border border-fantasy-textured space-y-3">
+   960→                  <div className="flex items-center gap-2">
+   961→                    <GitBranch className="h-4 w-4 text-amber-400" />
+   962→                    <Label className="text-sm font-semibold cursor-default">Tipo de Plantilla</Label>
+   963→                  </div>
+   964→                  <p className="text-xs text-muted-foreground">
+   965→                    Las plantillas <strong>condicionales</strong> resuelven distinto texto según los atributos
+   966→                    actuales del NPC (ej: vida baja, raza, alineamiento). El primer branch que coincida se inyecta;
+   967→                    si ninguno coincide, se usa la plantilla por defecto.
+   968→                  </p>
+   969→                  <div className="flex gap-2">
+   970→                    <Button
+   971→                      type="button"
+   972→                      size="sm"
+   973→                      variant={formData.templateType === 'normal' ? 'default' : 'outline'}
+   974→                      onClick={() => switchTemplateType('normal')}
+   975→                    >
+   976→                      <FileText className="h-4 w-4 mr-2" />
+   977→                      Normal
+   978→                    </Button>
+   979→                    <Button
+   980→                      type="button"
+   981→                      size="sm"
+   982→                      variant={formData.templateType === 'condicional' ? 'default' : 'outline'}
+   983→                      onClick={() => switchTemplateType('condicional')}
+   984→                    >
+   985→                      <GitBranch className="h-4 w-4 mr-2" />
+   986→                      Condicional
+   987→                    </Button>
+   988→                  </div>
+   989→                </div>
+   990→              )}
+   991→
+   992→              {/* Plantilla normal (textarea) — solo si NO es condicional */}
+   993→              {formData.tipo === 'plantilla' && formData.templateType !== 'condicional' && (
+   994→                <div>
+   995→                  <Label htmlFor="plantilla">Plantilla *</Label>
+   996→                  <Textarea
+   997→                    id="plantilla"
+   998→                    value={formData.plantilla}
+   999→                    onChange={(e) => setFormData({ ...formData, plantilla: e.target.value })}
+  1000→                    placeholder="DATOS DEL AVENTURERO&#10;Nombre: {{jugador.nombre}}..."
+  1001→                    className="min-h-32 font-mono"
+  1002→                  />
+  1003→                </div>
+  1004→              )}
+  1005→
+  1006→              {/* Builder de plantilla condicional */}
+  1007→              {formData.tipo === 'plantilla' && formData.templateType === 'condicional' && (
+  1008→                <ConditionalBuilder
+  1009→                  formData={formData}
+  1010→                  npcs={npcs}
+  1011→                  npcsLoading={npcsLoading}
+  1012→                  attributes={attributes}
+  1013→                  attributesLoading={attributesLoading}
+  1014→                  onUpdateConfig={updateConditionalConfig}
+  1015→                  onAddBranch={addBranch}
+  1016→                  onUpdateBranch={updateBranch}
+  1017→                  onRemoveBranch={removeBranch}
+  1018→                  onAddCondition={addCondition}
+  1019→                  onUpdateCondition={updateCondition}
+  1020→                  onRemoveCondition={removeCondition}
+  1021→                  getAttrByKey={getAttrByKey}
+  1022→                  getOperatorsForAttr={getOperatorsForAttr}
+  1023→                />
+  1024→              )}
+  1025→
+  1026→              <div>
+  1027→                <Label htmlFor="descripcion">Descripción</Label>
+  1028→                <Textarea
+  1029→                  id="descripcion"
+  1030→                  value={formData.descripcion}
+  1031→                  onChange={(e) => setFormData({ ...formData, descripcion: e.target.value })}
+  1032→                  placeholder={formData.tipo === 'variable' ? 'Describe para qué sirve esta variable del sistema...' : 'Describe para qué sirve esta plantilla...'}
+  1033→                  rows={3}
+  1034→                />
+  1035→              </div>
+  1036→            </div>
+  1037→
+  1038→            {/* Mensajes informativos */}
+  1039→            {formData.tipo === 'variable' && editingCard && (
+  1040→              <div className="bg-fantasy-deep-black rounded-lg p-4 border border-fantasy-textured">
+  1041→                <div className="flex items-start gap-2">
+  1042→                  <Info className="h-5 w-5 text-fantasy-aged-gold mt-0.5" />
+  1043→                  <div className="space-y-1">
+  1044→                    <h4 className="font-semibold text-fantasy-aged-gold">Modo Edición de Variable Primaria</h4>
+  1045→                    <p className="text-sm text-fantasy-aged-gold">
+  1046→                      Solo puedes editar el nombre y la descripción. La key, categoría y tipo son fijos porque las variables primarias son del sistema.
+  1047→                    </p>
+  1048→                  </div>
+  1049→                </div>
+  1050→              </div>
+  1051→            )}
+  1052→
+  1053→            {formData.tipo === 'plantilla' && formData.templateType !== 'condicional' && (
+  1054→              <div className="bg-fantasy-deep-black rounded-lg p-4 border border-fantasy-textured">
+  1055→                <div className="flex items-center gap-2 mb-2">
+  1056→                  <Book className="h-4 w-4 text-fantasy-aged-gold" />
+  1057→                  <h3 className="text-sm font-semibold text-fantasy-aged-gold">Variables Disponibles:</h3>
+  1058→                </div>
+  1059→                <div className="text-xs text-foreground space-y-2">
+  1060→                  <p>Variables primarias: jugador.*, npc.*, mundo.*, etc.</p>
+  1061→                  <p className="text-xs text-fantasy-aged-gold">
+  1062→                    Ejemplos: <span className="font-mono text-fantasy-aged-gold">user_data</span>, <span className="font-mono text-fantasy-aged-gold">quest_info</span>
+  1063→                  </p>
+  1064→                  <p className="text-xs text-fantasy-aged-gold">
+  1065→                    Las plantillas pueden incluir variables primarias del sistema.
+  1066→                  </p>
+  1067→                </div>
+  1068→              </div>
+  1069→            )}
+  1070→          </div>
+  1071→
+  1072→          <DialogFooter>
+  1073→            <Button onClick={handleSubmit}>
+  1074→              {editingCard ? 'Actualizar' : 'Crear'} {formData.tipo === 'variable' ? 'Variable' : 'Plantilla'}
+  1075→            </Button>
+  1076→          </DialogFooter>
+  1077→        </DialogContent>
+  1078→      </Dialog>
+  1079→
+  1080→      <Dialog open={previewOpen} onOpenChange={setPreviewOpen} showCloseButton={false}>
+  1081→        <DialogContent className="max-w-4xl">
+  1082→          <DialogHeader>
+  1083→            <DialogTitle>Previsualización</DialogTitle>
+  1084→            <DialogDescription>
+  1085→              {previewCard && `Plantilla: ${previewCard.nombre}`}
+  1086→            </DialogDescription>
+  1087→          </DialogHeader>
+  1088→          {previewCard && (
+  1089→            <div className="bg-fantasy-deep-black rounded-lg p-4 border border-fantasy-textured">
+  1090→              <pre className="text-xs whitespace-pre-wrap break-words max-h-96 overflow-y-auto text-foreground">
+  1091→                {previewContent}
+  1092→              </pre>
+  1093→            </div>
+  1094→          )}
+  1095→        </DialogContent>
+  1096→      </Dialog>
+  1097→
+  1098→      <VariablesReference open={variablesRefOpen} onClose={() => setVariablesRefOpen(false)} />
+  1099→    </div>
+  1100→  );
+  1101→}
+  1102→
+  1103→// ============================================
+  1104→// COMPONENTE: BUILDER DE PLANTILLA CONDICIONAL
+  1105→// ============================================
+  1106→
+  1107→interface ConditionalBuilderProps {
+  1108→  formData: GrimorioFormData;
+  1109→  npcs: NPC[];
+  1110→  npcsLoading: boolean;
+  1111→  attributes: NPCAttribute[];
+  1112→  attributesLoading: boolean;
+  1113→  onUpdateConfig: (patch: Partial<ConditionalConfig>) => void;
+  1114→  onAddBranch: () => void;
+  1115→  onUpdateBranch: (branchId: string, patch: Partial<ConditionalBranch>) => void;
+  1116→  onRemoveBranch: (branchId: string) => void;
+  1117→  onAddCondition: (branchId: string) => void;
+  1118→  onUpdateCondition: (branchId: string, condId: string, patch: Partial<Condition>) => void;
+  1119→  onRemoveCondition: (branchId: string, condId: string) => void;
+  1120→  getAttrByKey: (key: string) => NPCAttribute | undefined;
+  1121→  getOperatorsForAttr: (attr: NPCAttribute | undefined) => { value: ConditionOperator; label: string }[];
+  1122→}
+  1123→
+  1124→function ConditionalBuilder({
+  1125→  formData,
+  1126→  npcs,
+  1127→  npcsLoading,
+  1128→  attributes,
+  1129→  attributesLoading,
+  1130→  onUpdateConfig,
+  1131→  onAddBranch,
+  1132→  onUpdateBranch,
+  1133→  onRemoveBranch,
+  1134→  onAddCondition,
+  1135→  onUpdateCondition,
+  1136→  onRemoveCondition,
+  1137→  getAttrByKey,
+  1138→  getOperatorsForAttr
+  1139→}: ConditionalBuilderProps) {
+  1140→  const cfg = formData.conditionalConfig;
+  1141→
+  1142→  if (!cfg) {
+  1143→    return (
+  1144→      <div className="rounded-lg p-4 border border-amber-400 bg-amber-50 text-amber-900 text-sm">
+  1145→        Configuración condicional no inicializada.
+  1146→      </div>
+  1147→    );
+  1148→  }
+  1149→
+  1150→  const selectedNpc = npcs.find(n => n.id === cfg.npcId);
+  1151→
+  1152→  return (
+  1153→    <div className="space-y-4 rounded-lg border border-fantasy-textured bg-fantasy-deep-black/30 p-4">
+  1154→      <div className="flex items-center gap-2">
+  1155→        <Wand2 className="h-4 w-4 text-amber-400" />
+  1156→        <h3 className="text-sm font-semibold text-amber-400">Constructor de Plantilla Condicional</h3>
+  1157→      </div>
+  1158→
+  1159→      {/* Selector de NPC de referencia */}
+  1160→      <div className="space-y-2">
+  1161→        <Label htmlFor="npc-ref" className="text-xs">
+  1162→          NPC de referencia *
+  1163→        </Label>
+  1164→        <Select
+  1165→          value={cfg.npcId}
+  1166→          onValueChange={(value) => onUpdateConfig({ npcId: value })}
+  1167→        >
+  1168→          <SelectTrigger id="npc-ref" className="w-full">
+  1169→            <SelectValue placeholder={npcsLoading ? 'Cargando NPCs...' : 'Selecciona un NPC'} />
+  1170→          </SelectTrigger>
+  1171→          <SelectContent>
+  1172→            {npcs.length === 0 && !npcsLoading && (
+  1173→              <SelectItem value="_empty" disabled>
+  1174→                No hay NPCs disponibles
+  1175→              </SelectItem>
+  1176→            )}
+  1177→            {npcs.map((npc) => (
+  1178→              <SelectItem key={npc.id} value={npc.id}>
+  1179→                <div className="flex items-center gap-2">
+  1180→                  <Bot className="h-4 w-4 text-muted-foreground" />
+  1181→                  <span>{getNpcName(npc)}</span>
+  1182→                </div>
+  1183→              </SelectItem>
+  1184→            ))}
+  1185→          </SelectContent>
+  1186→        </Select>
+  1187→        <p className="text-xs text-muted-foreground">
+  1188→          Los atributos de este NPC estarán disponibles para las condiciones.
+  1189→        </p>
+  1190→      </div>
+  1191→
+  1192→      <Separator className="bg-fantasy-textured" />
+  1193→
+  1194→      {/* Lista de branches */}
+  1195→      <div className="space-y-3">
+  1196→        <div className="flex items-center justify-between">
+  1197→          <div className="flex items-center gap-2">
+  1198→            <GitBranch className="h-4 w-4 text-amber-400" />
+  1199→            <h4 className="text-sm font-semibold text-foreground">
+  1200→              Branches ({cfg.branches.length})
+  1201→            </h4>
+  1202→          </div>
+  1203→          <Button type="button" size="sm" variant="outline" onClick={onAddBranch} disabled={!cfg.npcId}>
+  1204→            <Plus className="h-3 w-3 mr-1" />
+  1205→            Añadir branch
+  1206→          </Button>
+  1207→        </div>
+  1208→
+  1209→        {!cfg.npcId && (
+  1210→          <p className="text-xs text-amber-500 italic">
+  1211→            Selecciona un NPC de referencia para empezar a añadir branches.
+  1212→          </p>
+  1213→        )}
+  1214→
+  1215→        {cfg.branches.length === 0 && cfg.npcId && (
+  1216→          <div className="text-center py-6 border border-dashed border-fantasy-textured rounded-lg">
+  1217→            <p className="text-sm text-muted-foreground">No hay branches configurados.</p>
+  1218→            <p className="text-xs text-muted-foreground mt-1">
+  1219→              Si no añades branches, solo se usará la plantilla por defecto.
+  1220→            </p>
+  1221→          </div>
+  1222→        )}
+  1223→
+  1224→        {cfg.branches.map((branch, idx) => (
+  1225→          <BranchEditor
+  1226→            key={branch.id}
+  1227→            branch={branch}
+  1228→            index={idx}
+  1229→            attributes={attributes}
+  1230→            attributesLoading={attributesLoading}
+  1231→            selectedNpcName={selectedNpc ? getNpcName(selectedNpc) : undefined}
+  1232→            onUpdate={(patch) => onUpdateBranch(branch.id, patch)}
+  1233→            onRemove={() => onRemoveBranch(branch.id)}
+  1234→            onAddCondition={() => onAddCondition(branch.id)}
+  1235→            onUpdateCondition={(condId, patch) => onUpdateCondition(branch.id, condId, patch)}
+  1236→            onRemoveCondition={(condId) => onRemoveCondition(branch.id, condId)}
+  1237→            getAttrByKey={getAttrByKey}
+  1238→            getOperatorsForAttr={getOperatorsForAttr}
+  1239→          />
+  1240→        ))}
+  1241→      </div>
+  1242→
+  1243→      <Separator className="bg-fantasy-textured" />
+  1244→
+  1245→      {/* Plantilla por defecto */}
+  1246→      <div className="space-y-2">
+  1247→        <Label htmlFor="default-template" className="text-sm font-semibold flex items-center gap-2">
+  1248→          <FileText className="h-4 w-4 text-amber-400" />
+  1249→          Plantilla por defecto (si ninguna condición aplica)
+  1250→        </Label>
+  1251→        <Textarea
+  1252→          id="default-template"
+  1253→          value={cfg.defaultTemplate}
+  1254→          onChange={(e) => onUpdateConfig({ defaultTemplate: e.target.value })}
+  1255→          placeholder="Texto que se inyectará si ningún branch coincide..."
+  1256→          className="min-h-24 font-mono"
+  1257→        />
+  1258→        <p className="text-xs text-muted-foreground">
+  1259→          Esta plantilla admite variables primarias (jugador.*, npc.*, etc.) y plantillas anidadas.
+  1260→        </p>
+  1261→      </div>
+  1262→    </div>
+  1263→  );
+  1264→}
+  1265→
+  1266→// ============================================
+  1267→// COMPONENTE: EDITOR DE UN BRANCH
+  1268→// ============================================
+  1269→
+  1270→interface BranchEditorProps {
+  1271→  branch: ConditionalBranch;
+  1272→  index: number;
+  1273→  attributes: NPCAttribute[];
+  1274→  attributesLoading: boolean;
+  1275→  selectedNpcName?: string;
+  1276→  onUpdate: (patch: Partial<ConditionalBranch>) => void;
+  1277→  onRemove: () => void;
+  1278→  onAddCondition: () => void;
+  1279→  onUpdateCondition: (condId: string, patch: Partial<Condition>) => void;
+  1280→  onRemoveCondition: (condId: string) => void;
+  1281→  getAttrByKey: (key: string) => NPCAttribute | undefined;
+  1282→  getOperatorsForAttr: (attr: NPCAttribute | undefined) => { value: ConditionOperator; label: string }[];
+  1283→}
+  1284→
+  1285→function BranchEditor({
+  1286→  branch,
+  1287→  index,
+  1288→  attributes,
+  1289→  attributesLoading,
+  1290→  selectedNpcName,
+  1291→  onUpdate,
+  1292→  onRemove,
+  1293→  onAddCondition,
+  1294→  onUpdateCondition,
+  1295→  onRemoveCondition,
+  1296→  getAttrByKey,
+  1297→  getOperatorsForAttr
+  1298→}: BranchEditorProps) {
+  1299→  return (
+  1300→    <Card className="border border-fantasy-textured bg-fantasy-deep-black/60">
+  1301→      <CardHeader className="pb-3">
+  1302→        <div className="flex items-start justify-between gap-2">
+  1303→          <div className="flex-1 space-y-1">
+  1304→            <div className="flex items-center gap-2">
+  1305→              <Badge variant="outline" className="bg-amber-100 text-amber-800 text-xs">
+  1306→                Branch {index + 1}
+  1307→              </Badge>
+  1308→              <span className="text-xs text-muted-foreground">
+  1309→                Orden de evaluación: {index + 1}
+  1310→              </span>
+  1311→            </div>
+  1312→            <Input
+  1313→              value={branch.name}
+  1314→              onChange={(e) => onUpdate({ name: e.target.value })}
+  1315→              placeholder="Nombre del branch (ej: Vida baja, Aliado herido)"
+  1316→              className="text-sm h-8"
+  1317→            />
+  1318→          </div>
+  1319→          <Button
+  1320→            type="button"
+  1321→            size="sm"
+  1322→            variant="ghost"
+  1323→            onClick={onRemove}
+  1324→            className="text-destructive hover:text-destructive h-8 w-8 p-0"
+  1325→            title="Eliminar branch"
+  1326→          >
+  1327→            <Trash2 className="h-4 w-4" />
+  1328→          </Button>
+  1329→        </div>
+  1330→      </CardHeader>
+  1331→
+  1332→      <CardContent className="space-y-3 pt-0">
+  1333→        {/* Combinador */}
+  1334→        <div className="flex items-center gap-2 flex-wrap">
+  1335→          <Label className="text-xs">Combinar condiciones con:</Label>
+  1336→          <div className="flex gap-1">
+  1337→            <Button
+  1338→              type="button"
+  1339→              size="sm"
+  1340→              variant={branch.combinator === 'AND' ? 'default' : 'outline'}
+  1341→              onClick={() => onUpdate({ combinator: 'AND' })}
+  1342→              className="h-7 px-3 text-xs"
+  1343→            >
+  1344→              AND (todas)
+  1345→            </Button>
+  1346→            <Button
+  1347→              type="button"
+  1348→              size="sm"
+  1349→              variant={branch.combinator === 'OR' ? 'default' : 'outline'}
+  1350→              onClick={() => onUpdate({ combinator: 'OR' })}
+  1351→              className="h-7 px-3 text-xs"
+  1352→            >
+  1353→              OR (alguna)
+  1354→            </Button>
+  1355→          </div>
+  1356→        </div>
+  1357→
+  1358→        {/* Lista de condiciones */}
+  1359→        <div className="space-y-2">
+  1360→          <div className="flex items-center justify-between">
+  1361→            <Label className="text-xs">Condiciones ({branch.conditions.length})</Label>
+  1362→            <Button
+  1363→              type="button"
+  1364→              size="sm"
+  1365→              variant="outline"
+  1366→              onClick={onAddCondition}
+  1367→              disabled={attributes.length === 0}
+  1368→              className="h-7 text-xs"
+  1369→            >
+  1370→              <Plus className="h-3 w-3 mr-1" />
+  1371→              Añadir condición
+  1372→            </Button>
+  1373→          </div>
+  1374→
+  1375→          {attributesLoading && (
+  1376→            <p className="text-xs text-muted-foreground italic">Cargando atributos del NPC...</p>
+  1377→          )}
+  1378→
+  1379→          {!attributesLoading && attributes.length === 0 && (
+  1380→            <p className="text-xs text-amber-500 italic">
+  1381→              {selectedNpcName
+  1382→                ? `"${selectedNpcName}" no tiene atributos configurados. Añade atributos al NPC antes.`
+  1383→                : 'Selecciona un NPC con atributos.'}
+  1384→            </p>
+  1385→          )}
+  1386→
+  1387→          {branch.conditions.map((cond) => {
+  1388→            const attr = getAttrByKey(cond.attributeKey);
+  1389→            const operators = getOperatorsForAttr(attr);
+  1390→            const attrMissing = !!cond.attributeKey && !attr;
+  1391→            // Para atributos tipo 'list', parsear las opciones del valueText
+  1392→            const listOptions: string[] = attr?.type === 'list'
+  1393→              ? (attr.valueText ?? '').split(',').map(s => s.trim()).filter(s => s.length > 0)
+  1394→              : [];
+  1395→            return (
+  1396→              <div
+  1397→                key={cond.id}
+  1398→                className="flex flex-wrap items-end gap-2 rounded-md border border-fantasy-textured bg-fantasy-deep-black/50 p-2"
+  1399→              >
+  1400→                {/* Attribute select */}
+  1401→                <div className="flex-1 min-w-[160px] space-y-1">
+  1402→                  <Label className="text-[10px] uppercase text-muted-foreground">Atributo</Label>
+  1403→                  <Select
+  1404→                    value={cond.attributeKey}
+  1405→                    onValueChange={(value) => {
+  1406→                      const newAttr = attributes.find(a => a.key === value);
+  1407→                      // Si cambia a un atributo de tipo distinto, resetear operador y value
+  1408→                      const currentAttr = getAttrByKey(cond.attributeKey);
+  1409→                      const needsReset =
+  1410→                        !currentAttr ||
+  1411→                        !newAttr ||
+  1412→                        currentAttr.type !== newAttr.type;
+  1413→                      onUpdateCondition(cond.id, {
+  1414→                        attributeKey: value,
+  1415→                        operator: needsReset
+  1416→                          ? (newAttr?.type === 'numeric' ? 'gt' : newAttr?.type === 'list' ? 'in_list' : 'eq')
+  1417→                          : cond.operator,
+  1418→                        // Reset value si cambia de tipo (el valor anterior puede no aplicar)
+  1419→                        value: needsReset ? '' : cond.value
+  1420→                      });
+  1421→                    }}
+  1422→                  >
+  1423→                    <SelectTrigger className="h-8 text-xs">
+  1424→                      <SelectValue placeholder="Atributo" />
+  1425→                    </SelectTrigger>
+  1426→                    <SelectContent>
+  1427→                      {attributes.map((a) => (
+  1428→                        <SelectItem key={a.id} value={a.key}>
+  1429→                          <div className="flex items-center gap-2 text-xs">
+  1430→                            <span>{a.name}</span>
+  1431→                            <Badge
+  1432→                              variant="outline"
+  1433→                              className={`text-[10px] ${
+  1434→                                a.type === 'numeric'
+  1435→                                  ? 'bg-emerald-100 text-emerald-700'
+  1436→                                  : a.type === 'list'
+  1437→                                  ? 'bg-amber-100 text-amber-700'
+  1438→                                  : 'bg-sky-100 text-sky-700'
+  1439→                              }`}
+  1440→                            >
+  1441→                              {a.key} · {a.type === 'numeric' ? 'numérico' : a.type === 'list' ? 'lista' : 'texto'}
+  1442→                            </Badge>
+  1443→                          </div>
+  1444→                        </SelectItem>
+  1445→                      ))}
+  1446→                    </SelectContent>
+  1447→                  </Select>
+  1448→                </div>
+  1449→
+  1450→                {/* Operator select */}
+  1451→                <div className="min-w-[140px] space-y-1">
+  1452→                  <Label className="text-[10px] uppercase text-muted-foreground">Operador</Label>
+  1453→                  <Select
+  1454→                    value={cond.operator}
+  1455→                    onValueChange={(value) => onUpdateCondition(cond.id, { operator: value as ConditionOperator })}
+  1456→                  >
+  1457→                    <SelectTrigger className="h-8 text-xs">
+  1458→                      <SelectValue placeholder="Op" />
+  1459→                    </SelectTrigger>
+  1460→                    <SelectContent>
+  1461→                      {operators.map((op) => (
+  1462→                        <SelectItem key={op.value} value={op.value}>
+  1463→                          <span className="text-xs">{op.label}</span>
+  1464→                        </SelectItem>
+  1465→                      ))}
+  1466→                    </SelectContent>
+  1467→                  </Select>
+  1468→                </div>
+  1469→
+  1470→                {/* Value input / select */}
+  1471→                <div className="flex-1 min-w-[120px] space-y-1">
+  1472→                  <Label className="text-[10px] uppercase text-muted-foreground">
+  1473→                    {attr?.type === 'numeric' ? 'Valor numérico' : attr?.type === 'list' ? 'Valor de la lista' : 'Valor de texto'}
+  1474→                  </Label>
+  1475→                  {attr?.type === 'list' ? (
+  1476→                    listOptions.length > 0 ? (
+  1477→                      <Select
+  1478→                        value={cond.value}
+  1479→                        onValueChange={(value) => onUpdateCondition(cond.id, { value })}
+  1480→                      >
+  1481→                        <SelectTrigger className="h-8 text-xs">
+  1482→                          <SelectValue placeholder="Selecciona..." />
+  1483→                        </SelectTrigger>
+  1484→                        <SelectContent>
+  1485→                          {listOptions.map((opt) => (
+  1486→                            <SelectItem key={opt} value={opt}>
+  1487→                              <span className="text-xs">{opt}</span>
+  1488→                            </SelectItem>
+  1489→                          ))}
+  1490→                        </SelectContent>
+  1491→                      </Select>
+  1492→                    ) : (
+  1493→                      <Input
+  1494→                        value={cond.value}
+  1495→                        disabled
+  1496→                        placeholder="La lista está vacía"
+  1497→                        className="h-8 text-xs"
+  1498→                      />
+  1499→                    )
+  1500→                  ) : (
+  1501→                    <Input
+  1502→                      value={cond.value}
+  1503→                      onChange={(e) => onUpdateCondition(cond.id, { value: e.target.value })}
+  1504→                      placeholder={attr?.type === 'numeric' ? 'ej: 50' : 'ej: Humano'}
+  1505→                      className="h-8 text-xs"
+  1506→                      type={attr?.type === 'numeric' ? 'number' : 'text'}
+  1507→                    />
+  1508→                  )}
+  1509→                </div>
+  1510→
+  1511→                {/* Delete condition */}
+  1512→                <Button
+  1513→                  type="button"
+  1514→                  size="sm"
+  1515→                  variant="ghost"
+  1516→                  onClick={() => onRemoveCondition(cond.id)}
+  1517→                  className="text-destructive hover:text-destructive h-8 w-8 p-0"
+  1518→                  title="Eliminar condición"
+  1519→                >
+  1520→                  <Trash2 className="h-3 w-3" />
+  1521→                </Button>
+  1522→
+  1523→                {/* Warning: attribute no longer exists */}
+  1524→                {attrMissing && (
+  1525→                  <div className="w-full flex items-center gap-2 text-xs text-amber-600 bg-amber-50 border border-amber-300 rounded px-2 py-1">
+  1526→                    <AlertTriangle className="h-3 w-3" />
+  1527→                    <span>
+  1528→                      El atributo <code className="font-mono">{cond.attributeKey}</code> ya no existe
+  1529→                      en el NPC. Esta condición será ignorada al resolver.
+  1530→                    </span>
+  1531→                  </div>
+  1532→                )}
+  1533→              </div>
+  1534→            );
+  1535→          })}
+  1536→
+  1537→          {branch.conditions.length === 0 && attributes.length > 0 && !attributesLoading && (
+  1538→            <p className="text-xs text-muted-foreground italic px-2">
+  1539→              Sin condiciones. Un branch sin condiciones NUNCA coincide (requiere al menos una condición verdadera).
+  1540→            </p>
+  1541→          )}
+  1542→        </div>
+  1543→
+  1544→        <Separator className="bg-fantasy-textured my-1" />
+  1545→
+  1546→        {/* Template del branch */}
+  1547→        <div className="space-y-1">
+  1548→          <Label htmlFor={`branch-template-${branch.id}`} className="text-xs font-semibold">
+  1549→            Plantilla (si este branch coincide)
+  1550→          </Label>
+  1551→          <Textarea
+  1552→            id={`branch-template-${branch.id}`}
+  1553→            value={branch.template}
+  1554→            onChange={(e) => onUpdate({ template: e.target.value })}
+  1555→            placeholder="Texto a inyectar cuando este branch coincida..."
+  1556→            className="min-h-20 text-xs font-mono"
+  1557→          />
+  1558→        </div>
+  1559→      </CardContent>
+  1560→    </Card>
+  1561→  );
+  1562→}
+  1563→

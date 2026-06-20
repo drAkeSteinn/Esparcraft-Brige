@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react';
 import { Plus, Edit2, Trash2, MapPin, ScrollText, Building, Users, ChevronDown, ChevronRight, Globe, Filter } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -14,15 +13,13 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { Pueblo, World, Edificio, NPC, getCardField } from '@/lib/types';
 import { toast } from '@/hooks/use-toast';
 import GenericBackupSection from '../GenericBackupSection';
+import ContextoAdicionalPanel from '../ContextoAdicionalPanel';
 
 interface FormData {
   worldId: string;
   name: string;
   type: 'pueblo' | 'nacion';
   description: string;
-  estado_pueblo: string;
-  rumores: string;
-  eventos: string;
 }
 
 export default function PueblosSection() {
@@ -32,7 +29,7 @@ export default function PueblosSection() {
   const [npcs, setNpcs] = useState<NPC[]>([]);
   const [puebloMemories, setPuebloMemories] = useState<Record<string, any>>({});
   const [loading, setLoading] = useState(true);
-  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingView, setEditingView] = useState(false);
   const [editingPueblo, setEditingPueblo] = useState<Pueblo | null>(null);
   const [expandedEdificios, setExpandedEdificios] = useState<Record<string, boolean>>({});
   const [filterWorldId, setFilterWorldId] = useState<string>('all');
@@ -41,9 +38,6 @@ export default function PueblosSection() {
     name: '',
     type: 'pueblo',
     description: '',
-    estado_pueblo: '',
-    rumores: '',
-    eventos: ''
   });
 
   useEffect(() => {
@@ -107,11 +101,8 @@ export default function PueblosSection() {
       name: '',
       type: 'pueblo' as 'pueblo',
       description: '',
-      estado_pueblo: '',
-      rumores: '',
-      eventos: ''
     });
-    setDialogOpen(true);
+    setEditingView(true);
   };
 
   const handleEdit = (pueblo: Pueblo) => {
@@ -121,11 +112,8 @@ export default function PueblosSection() {
       name: pueblo.name,
       type: pueblo.type,
       description: pueblo.description,
-      estado_pueblo: pueblo.lore.estado_pueblo,
-      rumores: pueblo.lore.rumores.join('\n'),
-      eventos: pueblo.lore.eventos?.join('\n') || ''
     });
-    setDialogOpen(true);
+    setEditingView(true);
   };
 
   const handleDelete = async (id: string) => {
@@ -161,11 +149,6 @@ export default function PueblosSection() {
         name: formData.name,
         type: formData.type,
         description: formData.description,
-        lore: {
-          estado_pueblo: formData.estado_pueblo,
-          rumores: formData.rumores.split('\n').filter(r => r.trim()),
-          eventos: formData.eventos.split('\n').filter(e => e.trim())
-        }
       };
 
       const url = editingPueblo ? `/api/pueblos/${editingPueblo.id}` : '/api/pueblos';
@@ -184,7 +167,7 @@ export default function PueblosSection() {
           title: 'Éxito',
           description: editingPueblo ? 'Región actualizada' : 'Región creada'
         });
-        setDialogOpen(false);
+        setEditingView(false);
         setEditingPueblo(null);
         fetchData();
       }
@@ -202,6 +185,113 @@ export default function PueblosSection() {
     return (
       <div className="flex items-center justify-center h-96">
         <p className="text-muted-foreground">Cargando regiones...</p>
+      </div>
+    );
+  }
+
+  // ====== Vista de edición full-screen ======
+  if (editingView) {
+    return (
+      <div className="flex flex-col h-[calc(100vh-200px)]">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-4 flex-shrink-0">
+          <div className="flex items-center gap-3">
+            <Button variant="ghost" size="sm" onClick={() => setEditingView(false)}>
+              ← Volver
+            </Button>
+            <div>
+              <h2 className="text-xl font-bold">
+                {editingPueblo
+                  ? `Editar ${formData.type === 'nacion' ? 'Nación' : 'Pueblo'}`
+                  : `Crear Nuevo ${formData.type === 'nacion' ? 'Nación' : 'Pueblo'}`
+                }
+              </h2>
+              <p className="text-sm text-muted-foreground">
+                {editingPueblo ? 'Edita la información de la región' : 'Completa la información de la nueva región'}
+              </p>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => setEditingView(false)}>Cancelar</Button>
+            <Button onClick={handleSubmit}>{editingPueblo ? 'Actualizar' : 'Crear'}</Button>
+          </div>
+        </div>
+
+        {/* Contenido del formulario con scroll */}
+        <div className="flex-1 min-h-0 overflow-y-auto p-6">
+          <div className="space-y-4 max-w-4xl">
+            {/* Sección: Ubicación y Tipo */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="worldId">Mundo *</Label>
+                <Select
+                  value={formData.worldId}
+                  onValueChange={(value) => setFormData({ ...formData, worldId: value, puebloId: '', type: 'pueblo' })}
+                  disabled={!!editingPueblo}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecciona un mundo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {worlds.map((world) => (
+                      <SelectItem key={world.id} value={world.id}>{world.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label htmlFor="type">Tipo *</Label>
+                <Select
+                  value={formData.type}
+                  onValueChange={(value) => setFormData({ ...formData, type: value })}
+                  disabled={!!editingPueblo}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecciona el tipo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="pueblo">Pueblo</SelectItem>
+                    <SelectItem value="nacion">Nación</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {/* Sección: Nombre y Descripción */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="name">Nombre *</Label>
+                <Input
+                  id="name"
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  placeholder="Nombre de la región"
+                />
+              </div>
+              <div>
+                <Label htmlFor="description">Descripción</Label>
+                <Textarea
+                  id="description"
+                  value={formData.description}
+                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                  placeholder="Descripción de la región"
+                  rows={3}
+                  className="w-full"
+                />
+              </div>
+
+              {/* === Sección: Contextos Adicionales === */}
+              <div>
+                <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-3 border-b pb-2">Contextos Adicionales</h3>
+                <ContextoAdicionalPanel
+                  entityType="pueblo"
+                  entityId={editingPueblo?.id ?? null}
+                  disabled={!editingPueblo}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     );
   }
@@ -342,64 +432,6 @@ export default function PueblosSection() {
                       {pueblo.description || 'Sin descripción'}
                     </div>
 
-                    {pueblo.lore.rumores.length > 0 && (
-                      <div>
-                        <div className="flex items-center justify-between mb-2">
-                          <p className="text-sm font-medium flex items-center gap-2">
-                            <ScrollText className="h-3.5 w-3.5 text-[#83673D]" />
-                            Rumores:
-                          </p>
-                          <span className="text-xs text-muted-foreground">
-                            {pueblo.lore.rumores.length} {pueblo.lore.rumores.length === 1 ? 'rumor' : 'rumores'}
-                          </span>
-                        </div>
-                        <div className="max-h-32 overflow-y-auto border-2 border-[#2C2923] bg-[#100F11] p-3 rounded">
-                          <ul className="space-y-1.5">
-                            {pueblo.lore.rumores.map((rumor, i) => (
-                              <li key={i} className="text-sm text-[#B8B8B8] flex items-start gap-2">
-                                <span className="flex-shrink-0 w-5 h-5 flex items-center justify-center bg-[#2C2923] text-[#83673D] text-xs font-mono rounded">
-                                  {i + 1}
-                                </span>
-                                <span className="break-words">{rumor}</span>
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      </div>
-                    )}
-                    {pueblo.lore.eventos && pueblo.lore.eventos.length > 0 && (
-                      <div>
-                        <div className="flex items-center justify-between mb-2">
-                          <p className="text-sm font-medium flex items-center gap-2">
-                            <ScrollText className="h-3.5 w-3.5 text-[#83673D]" />
-                            Eventos:
-                          </p>
-                          <span className="text-xs text-muted-foreground">
-                            {pueblo.lore.eventos.length} {pueblo.lore.eventos.length === 1 ? 'evento' : 'eventos'}
-                          </span>
-                        </div>
-                        <div className="max-h-32 overflow-y-auto border-2 border-[#2C2923] bg-[#100F11] p-3 rounded">
-                          <ul className="space-y-1.5">
-                            {pueblo.lore.eventos.map((evento, i) => (
-                              <li key={i} className="text-sm text-[#B8B8B8] flex items-start gap-2">
-                                <span className="flex-shrink-0 w-5 h-5 flex items-center justify-center bg-[#2C2923] text-[#83673D] text-xs font-mono rounded">
-                                  {i + 1}
-                                </span>
-                                <span className="break-words">{evento}</span>
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      </div>
-                    )}
-
-                    <div className="mt-3">
-                      <p className="text-sm font-medium">Estado:</p>
-                      <div className="text-sm text-muted-foreground">
-                        {pueblo.lore.estado_pueblo || 'Sin estado'}
-                      </div>
-                    </div>
-
                     {edificiosEnPueblo.length > 0 && (
                       <div className="border-t pt-3 mt-3">
                         <div className="flex items-center justify-between mb-3">
@@ -515,119 +547,6 @@ export default function PueblosSection() {
         </div>
       </div>
 
-    <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>
-            {editingPueblo
-              ? `Editar ${formData.type === 'nacion' ? 'Nación' : 'Pueblo'}`
-              : `Crear Nuevo ${formData.type === 'nacion' ? 'Nación' : 'Pueblo'}`
-            }
-          </DialogTitle>
-          <DialogDescription>
-            {editingPueblo ? 'Edita la información de la región' : 'Completa la información de la nueva región'}
-          </DialogDescription>
-        </DialogHeader>
-        <div className="space-y-4">
-            <div>
-              <Label htmlFor="worldId">Mundo *</Label>
-              <Select
-                value={formData.worldId}
-                onValueChange={(value) => setFormData({ ...formData, worldId: value, puebloId: '', type: 'pueblo' })}
-                disabled={!!editingPueblo}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecciona un mundo" />
-                </SelectTrigger>
-                <SelectContent>
-                  {worlds.map((world) => (
-                    <SelectItem key={world.id} value={world.id}>{world.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div>
-              <Label htmlFor="name">Nombre *</Label>
-              <Input
-                id="name"
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                placeholder="Nombre de la región"
-              />
-            </div>
-
-            <div>
-              <Label htmlFor="type">Tipo *</Label>
-              <Select
-                value={formData.type}
-                onValueChange={(value) => setFormData({ ...formData, type: value })}
-                disabled={!!editingPueblo}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecciona el tipo" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="pueblo">Pueblo</SelectItem>
-                  <SelectItem value="nacion">Nación</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div>
-              <Label htmlFor="description">Descripción</Label>
-              <Textarea
-                id="description"
-                value={formData.description}
-                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                placeholder="Descripción de la región"
-                rows={3}
-              />
-            </div>
-
-            <div>
-              <Label htmlFor="estado_pueblo">Estado</Label>
-              <Textarea
-                id="estado_pueblo"
-                value={formData.estado_pueblo}
-                onChange={(e) => setFormData({ ...formData, estado_pueblo: e.target.value })}
-                placeholder="Estado de la región (ej: Prospero, En guerra, en desarrollo...)"
-                rows={3}
-              />
-            </div>
-
-            <div>
-              <Label htmlFor="rumores">Rumores (uno por línea)</Label>
-              <Textarea
-                id="rumores"
-                value={formData.rumores}
-                onChange={(e) => setFormData({ ...formData, rumores: e.target.value })}
-                placeholder="Rumores de la región (uno por línea)"
-                rows={5}
-              />
-            </div>
-            <div>
-              <Label htmlFor="eventos">Eventos (uno por línea)</Label>
-              <Textarea
-                id="eventos"
-                value={formData.eventos}
-                onChange={(e) => setFormData({ ...formData, eventos: e.target.value })}
-                placeholder="Eventos de la región (uno por línea)"
-                rows={5}
-              />
-            </div>
-          </div>
-
-          <DialogFooter>
-              <Button variant="outline" onClick={() => setDialogOpen(false)}>
-                Cancelar
-              </Button>
-              <Button onClick={handleSubmit}>
-                {editingPueblo ? 'Actualizar' : 'Crear'}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
       <GenericBackupSection
         entityType="pueblos"
         entityName="Pueblo"

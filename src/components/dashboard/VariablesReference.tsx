@@ -77,7 +77,6 @@ const VARIABLE_CATEGORIES: VariableCategory[] = [
     color: 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300',
     variables: [
       { key: '{{mundo.estado}}', description: 'Estado actual del mundo', example: 'Paz y prosperidad' },
-      { key: '{{mundo.rumores}}', description: 'Rumores del mundo', example: 'Nuevas aventuras...' }
     ]
   },
   {
@@ -89,8 +88,6 @@ const VARIABLE_CATEGORIES: VariableCategory[] = [
       { key: '{{pueblo.name}}', description: 'Nombre del pueblo', example: 'Esparcraft Village' },
       { key: '{{pueblo.tipo}}', description: 'Tipo de pueblo', example: 'Village' },
       { key: '{{pueblo.descripcion}}', description: 'Descripción del pueblo', example: 'Un pueblo tranquilo' },
-      { key: '{{pueblo.estado}}', description: 'Estado del pueblo', example: 'Activo' },
-      { key: '{{pueblo.rumores}}', description: 'Rumores del pueblo', example: 'Eventos locales...' }
     ]
   },
   {
@@ -101,7 +98,6 @@ const VARIABLE_CATEGORIES: VariableCategory[] = [
     variables: [
       { key: '{{edificio.name}}', description: 'Nombre del edificio', example: 'Granja de la Comarca' },
       { key: '{{edificio.descripcion}}', description: 'Descripción del edificio', example: 'Tienda de comercio' },
-      { key: '{{edificio.eventos}}', description: 'Eventos del edificio', example: 'Venta especial' },
       { key: '{{edificio.poislist}}', description: 'Lista de POIs', example: 'Puntos de interés...' }
     ]
   },

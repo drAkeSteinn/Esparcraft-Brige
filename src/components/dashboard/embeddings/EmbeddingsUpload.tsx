@@ -91,19 +91,15 @@ export default function EmbeddingsUpload({ onUploadComplete }: EmbeddingsUploadP
     }
   };
 
-  // System namespaces
+  // Namespace por defecto (los namespaces por entidad se gestionan automáticamente
+  // vía namespaceManager con convención {tipo}:{id} — ver pestaña Namespaces).
   const systemNamespaces = [
-    { namespace: 'default', description: 'Namespace por defecto' },
-    { namespace: 'worlds', description: 'Información de mundos' },
-    { namespace: 'npcs', description: 'Información de NPCs' },
-    { namespace: 'pueblos', description: 'Información de pueblos' },
-    { namespace: 'edificios', description: 'Información de edificios' },
-    { namespace: 'sessions', description: 'Historial de sesiones' },
+    { namespace: 'default', description: 'Namespace por defecto (contenido suelto)' },
   ];
 
   const allNamespaces = [
     ...systemNamespaces,
-    ...namespaces.filter(ns => 
+    ...namespaces.filter(ns =>
       !systemNamespaces.some(sys => sys.namespace === ns.namespace)
     )
   ];

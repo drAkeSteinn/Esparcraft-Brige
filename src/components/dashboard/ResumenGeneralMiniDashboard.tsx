@@ -70,6 +70,16 @@ export default function ResumenGeneral() {
 
   useEffect(() => {
     fetchStatus();
+    // Cargar minMessages desde la config unificada (vía /api/resumen-general/config)
+    fetch('/api/resumen-general/config')
+      .then((r) => r.json())
+      .then((result) => {
+        if (result.success && result.data?.minMessages) {
+          setMinMessages(result.data.minMessages);
+        }
+      })
+      .catch((err) => console.error('Error cargando config de resumen:', err));
+
     const interval = setInterval(() => {
       if (status.status === 'running') {
         fetchStatus();
@@ -375,18 +385,18 @@ export default function ResumenGeneral() {
           <CardDescription>Define los parámetros para el resumen general</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-          <div className="space-y-2">
-            <Label htmlFor="minMessages">Mínimo de mensajes para resumir sesión</Label>
-            <Input
-              id="minMessages"
-              type="number"
-              min="1"
-              value={minMessages}
-              onChange={(e) => setMinMessages(parseInt(e.target.value) || 1)}
-              disabled={status.status === 'running'}
-            />
+          {/* Min Messages — LEÍDO DE LA CONFIG UNIFICADA (no editable aquí) */}
+          <div className="space-y-2 p-3 border rounded-md bg-muted/30">
+            <Label>Mínimo de mensajes para resumir sesión</Label>
+            <div className="flex items-center gap-2">
+              <Badge variant="secondary" className="text-sm">{minMessages}</Badge>
+              <span className="text-xs text-muted-foreground">
+                Configurado en <strong>Sesiones → Configuración → Resumen de sesión</strong>
+              </span>
+            </div>
             <p className="text-xs text-muted-foreground">
-              Solo se resumirán sesiones con al menos este número de mensajes
+              Solo se resumirán sesiones con al menos este número de mensajes.
+              Para cambiarlo, ve a la pestaña Sesiones → Configuración.
             </p>
           </div>
 

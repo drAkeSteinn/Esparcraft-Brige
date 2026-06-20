@@ -30,6 +30,18 @@ export class SessionSummaryManager {
     });
   }
 
+  /**
+   * Obtiene los resúmenes de sesiones de un NPC creados DESPUÉS de una fecha.
+   * Útil para identificar solo los resúmenes nuevos desde la última generación
+   * de resumen del NPC.
+   */
+  async getByNPCIdSince(npcId: string, since: Date) {
+    return await db.sessionSummary.findMany({
+      where: { npcId, timestamp: { gt: since } },
+      orderBy: { timestamp: 'desc' }
+    });
+  }
+
   async getBySessionId(sessionId: string) {
     return await db.sessionSummary.findMany({
       where: { sessionId },
@@ -92,6 +104,13 @@ export class EdificioSummaryManager {
     });
   }
 
+  async getByEdificioId(edificioId: string) {
+    return await db.edificioSummary.findMany({
+      where: { edificioId },
+      orderBy: { createdAt: 'desc' }
+    });
+  }
+
   async create(data: {
     edificioId: string;
     summary: string;
@@ -116,6 +135,13 @@ export class EdificioSummaryManager {
 export class PuebloSummaryManager {
   async getLatest(puebloId: string) {
     return await db.puebloSummary.findFirst({
+      where: { puebloId },
+      orderBy: { createdAt: 'desc' }
+    });
+  }
+
+  async getByPuebloId(puebloId: string) {
+    return await db.puebloSummary.findMany({
       where: { puebloId },
       orderBy: { createdAt: 'desc' }
     });
