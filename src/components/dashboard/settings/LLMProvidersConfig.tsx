@@ -25,6 +25,7 @@ import {
   LLMProviderConfig, LLMProviderInput, LLMProviderType, PROVIDERS, PROVIDER_TYPES,
 } from '@/lib/llm/types';
 import { toast } from '@/hooks/use-toast';
+import { safeFetch } from '@/lib/utils';
 
 interface LLMProvidersConfigProps {
   onConfigSaved?: () => void;
@@ -37,18 +38,30 @@ export default function LLMProvidersConfig({ onConfigSaved }: LLMProvidersConfig
   const [editingProvider, setEditingProvider] = useState<LLMProviderConfig | null>(null);
   const [deleteProvider, setDeleteProvider] = useState<LLMProviderConfig | null>(null);
 
+  const [fetchError, setFetchError] = useState<string | null>(null);
+
   const loadProviders = useCallback(async () => {
     try {
       setLoading(true);
-      const res = await fetch('/api/llm/providers');
-      const result = await res.json();
-      if (result.success) {
-        setProviders(result.data);
+      setFetchError(null);
+      const res = await safeFetch<{ success: boolean; data?: LLMProviderConfig[]; error?: string; details?: string; hint?: string }>(
+        '/api/llm/providers'
+      );
+      if (res.ok && res.data?.success) {
+        setProviders(res.data.data ?? []);
       } else {
-        console.error('Error loading providers:', result.error);
+        // Priorizar `details` y `hint` del backend si están disponibles
+        const d = res.data;
+        const msg = d?.details
+          ? `${d.error ?? 'Error'}: ${d.details}${d.hint ? ` — ${d.hint}` : ''}`
+          : res.error || d?.error || 'Error desconocido';
+        console.error('Error loading providers:', msg);
+        setFetchError(msg);
       }
     } catch (e) {
-      console.error('Error loading providers:', e);
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error('Error loading providers:', msg);
+      setFetchError(msg);
     } finally {
       setLoading(false);
     }
@@ -71,17 +84,19 @@ export default function LLMProvidersConfig({ onConfigSaved }: LLMProvidersConfig
 
   const handleSetDefault = async (id: string) => {
     try {
-      const res = await fetch(`/api/llm/providers/${id}/set-default`, { method: 'POST' });
-      const result = await res.json();
-      if (result.success) {
+      const res = await safeFetch<{ success: boolean; data?: LLMProviderConfig; error?: string }>(
+        `/api/llm/providers/${id}/set-default`,
+        { method: 'POST' }
+      );
+      if (res.ok && res.data?.success) {
         toast({
           title: 'Proveedor activo',
-          description: `"${result.data.name}" ahora se usa para los triggers`,
+          description: `"${res.data.data?.name ?? ''}" ahora se usa para los triggers`,
         });
         loadProviders();
         onConfigSaved?.();
       } else {
-        throw new Error(result.error);
+        throw new Error(res.error || res.data?.error || 'Error al cambiar proveedor activo');
       }
     } catch (e) {
       toast({
@@ -95,15 +110,17 @@ export default function LLMProvidersConfig({ onConfigSaved }: LLMProvidersConfig
   const handleDelete = async () => {
     if (!deleteProvider) return;
     try {
-      const res = await fetch(`/api/llm/providers/${deleteProvider.id}`, { method: 'DELETE' });
-      const result = await res.json();
-      if (result.success) {
+      const res = await safeFetch<{ success: boolean; error?: string }>(
+        `/api/llm/providers/${deleteProvider.id}`,
+        { method: 'DELETE' }
+      );
+      if (res.ok && res.data?.success) {
         toast({ title: 'Proveedor eliminado' });
         setDeleteProvider(null);
         loadProviders();
         onConfigSaved?.();
       } else {
-        throw new Error(result.error);
+        throw new Error(res.error || res.data?.error || 'Error al eliminar');
       }
     } catch (e) {
       toast({
@@ -129,6 +146,26 @@ export default function LLMProvidersConfig({ onConfigSaved }: LLMProvidersConfig
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
+        {/* Banner de error de carga */}
+        {fetchError && !loading && (
+          <div className="flex items-start gap-2 p-3 rounded-lg border border-destructive/30 bg-destructive/5 text-destructive">
+            <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+            <div className="text-xs space-y-1 min-w-0">
+              <p className="font-medium">No se pudieron cargar los proveedores</p>
+              <p className="break-words font-mono">{fetchError}</p>
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              className="ml-auto shrink-0 h-7 text-xs"
+              onClick={loadProviders}
+            >
+              <RefreshCw className="h-3 w-3 mr-1" />
+              Reintentar
+            </Button>
+          </div>
+        )}
+
         {/* Proveedor activo */}
         {activeProvider && (
           <div className="flex items-center justify-between p-3 rounded-lg border bg-muted/30">
@@ -267,20 +304,24 @@ function ProviderRow({
     setTesting(true);
     setTestResult(null);
     try {
-      const res = await fetch(`/api/llm/providers/${provider.id}/test`, { method: 'POST' });
-      const result = await res.json();
-      if (result.success) {
+      const res = await safeFetch<{
+        success: boolean;
+        data?: { connected: boolean; message: string };
+        error?: string;
+      }>(`/api/llm/providers/${provider.id}/test`, { method: 'POST' });
+      if (res.ok && res.data?.success) {
+        const data = res.data.data!;
         setTestResult({
-          connected: result.data.connected,
-          message: result.data.message,
+          connected: data.connected,
+          message: data.message,
         });
         toast({
-          title: result.data.connected ? 'Conexión exitosa' : 'Sin conexión',
-          description: result.data.message,
-          variant: result.data.connected ? 'default' : 'destructive',
+          title: data.connected ? 'Conexión exitosa' : 'Sin conexión',
+          description: data.message,
+          variant: data.connected ? 'default' : 'destructive',
         });
       } else {
-        throw new Error(result.error);
+        throw new Error(res.error || res.data?.error || 'Error al probar');
       }
     } catch (e) {
       setTestResult({
@@ -473,7 +514,11 @@ function ProviderDialog({
 
     setLoadingModels(true);
     try {
-      const res = await fetch('/api/llm/list-models', {
+      const res = await safeFetch<{
+        success: boolean;
+        data?: { models?: string[]; knownModels?: string[]; message?: string };
+        error?: string;
+      }>('/api/llm/list-models', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -482,10 +527,10 @@ function ProviderDialog({
           apiKey: form.apiKey,
         }),
       });
-      const result = await res.json();
-      if (result.success) {
-        const models = result.data.models || [];
-        const knownModels = result.data.knownModels || [];
+
+      if (res.ok && res.data?.success) {
+        const models = res.data.data?.models || [];
+        const knownModels = res.data.data?.knownModels || [];
         // Combinar modelos disponibles con conocidos (sin duplicados)
         const all = Array.from(new Set([...models, ...knownModels]));
         setAvailableModels(all);
@@ -499,7 +544,7 @@ function ProviderDialog({
           setForm((prev) => ({ ...prev, model: all[0] }));
         }
       } else {
-        throw new Error(result.error);
+        throw new Error(res.error || res.data?.error || 'Error desconocido');
       }
     } catch (e) {
       toast({
@@ -540,20 +585,22 @@ function ProviderDialog({
 
       const url = editing ? `/api/llm/providers/${editing.id}` : '/api/llm/providers';
       const method = editing ? 'PUT' : 'POST';
-      const res = await fetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      const result = await res.json();
-      if (result.success) {
+      const res = await safeFetch<{ success: boolean; data?: LLMProviderConfig; error?: string }>(
+        url,
+        {
+          method,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        }
+      );
+      if (res.ok && res.data?.success) {
         toast({
           title: editing ? 'Proveedor actualizado' : 'Proveedor creado',
-          description: result.data.isDefault ? 'Marcado como activo automáticamente' : undefined,
+          description: res.data.data?.isDefault ? 'Marcado como activo automáticamente' : undefined,
         });
         onSaved();
       } else {
-        throw new Error(result.error);
+        throw new Error(res.error || res.data?.error || 'Error al guardar');
       }
     } catch (e) {
       toast({

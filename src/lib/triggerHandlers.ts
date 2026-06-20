@@ -638,39 +638,72 @@ export async function handleChatTrigger(payload: ChatTriggerPayload): Promise<{
   let actions: Array<{ name: string; arguments: Record<string, any> }> = [];
   let attributeChanges: Array<any> = [];
 
-  if (toolCallingUsed && llmResult.toolCalls && llmResult.toolCalls.length > 0) {
-    // Tool calling nativo: separar tool_calls de acciones vs atributos
-    const { ATTRIBUTE_TOOL_NAME, attributeToolManager } = await import('./attributeToolManager');
+  if (toolCallingUsed) {
+    // ============================================================
+    // MODO TOOL CALLING NATIVO
+    // ============================================================
+    // El LLM decide si usar tools. Si no devolvió tool_calls, simplemente
+    // no quiso ejecutar ninguna acción ni cambiar atributos — eso es válido.
+    // NO caemos al fallback de texto porque en modo nativo el LLM no añade
+    // [ACCION:] ni [ATRIBUTO:] al texto (se le dijo que use tools).
+    if (llmResult.toolCalls && llmResult.toolCalls.length > 0) {
+      const { ATTRIBUTE_TOOL_NAME, attributeToolManager } = await import('./attributeToolManager');
 
-    for (const tc of llmResult.toolCalls) {
-      const toolName = tc.function.name;
-      const args = JSON.parse(tc.function.arguments || '{}');
-
-      if (toolName === ATTRIBUTE_TOOL_NAME) {
-        // ✅ Tool de atributos: validar + aplicar a DB
+      for (const tc of llmResult.toolCalls) {
+        const toolName = tc.function.name;
+        // Los argumentos vienen como JSON string. xAI siempre devuelve JSON
+        // válido (strict mode implícito), pero defendemos contra parse errors.
+        let args: Record<string, any> = {};
         try {
-          const result = await attributeToolManager.applyAttributeChange(chatPayload.npcid, {
-            key: args.key,
-            value: String(args.value),
-            reason: args.reason || 'sin razón especificada',
-          });
-          if (result.change) {
-            attributeChanges.push(result.change);
-            console.log(`[handleChatTrigger] Atributo cambiado: ${result.message}`);
-          } else {
-            console.warn(`[handleChatTrigger] Cambio de atributo no aplicado: ${result.message}`);
-          }
+          args = JSON.parse(tc.function.arguments || '{}');
         } catch (e) {
-          console.error(`[handleChatTrigger] Error aplicando cambio de atributo:`, e);
+          console.warn(
+            `[handleChatTrigger] Tool call "${toolName}" con arguments inválidos: "${tc.function.arguments}". Ignorando.`
+          );
+          continue;
         }
-      } else {
-        // Tool de acción: agregar al array de acciones
-        actions.push({ name: toolName, arguments: args });
+
+        if (toolName === ATTRIBUTE_TOOL_NAME) {
+          // ✅ Tool de atributos: validar + aplicar a DB
+          try {
+            const result = await attributeToolManager.applyAttributeChange(chatPayload.npcid, {
+              key: args.key,
+              value: String(args.value),
+              reason: args.reason || 'sin razón especificada',
+            });
+            if (result.change) {
+              attributeChanges.push(result.change);
+              console.log(`[handleChatTrigger] Atributo cambiado: ${result.message}`);
+            } else {
+              console.warn(`[handleChatTrigger] Cambio de atributo no aplicado: ${result.message}`);
+            }
+          } catch (e) {
+            console.error(`[handleChatTrigger] Error aplicando cambio de atributo:`, e);
+          }
+        } else {
+          // Tool de acción: agregar al array de acciones.
+          // NOTA: las acciones NO se ejecutan aquí — solo se reportan al cliente
+          // (tu integración con el juego) para que las ejecute.
+          actions.push({ name: toolName, arguments: args });
+        }
       }
+      console.log(
+        `[handleChatTrigger] ${actions.length} acción(es) + ${attributeChanges.length} cambio(s) de atributo(s) via tool calling`
+      );
+    } else {
+      // toolCallingUsed=true pero toolCalls vacío: el LLM decidió no usar tools.
+      // Eso es un comportamiento normal — no hay nada que procesar.
+      console.log(
+        `[handleChatTrigger] Tool calling habilitado pero el LLM no usó tools en esta respuesta.`
+      );
     }
-    console.log(`[handleChatTrigger] ${actions.length} acción(es) + ${attributeChanges.length} cambio(s) de atributo(s) via tool calling`);
   } else {
-    // Fallback: parsear [ACCION: ...] y [ATRIBUTO: ...] del texto
+    // ============================================================
+    // MODO FALLBACK (sin tool calling nativo)
+    // ============================================================
+    // El system_prompt contiene instrucciones para que el LLM añada
+    // [ACCION: nombre|param=valor] y [ATRIBUTO: key=valor | reason=motivo]
+    // al final de su respuesta. Parseamos esas líneas del texto.
     const { parseActionFromResponse } = await import('./types');
     const parsed = parseActionFromResponse(dialogText);
     dialogText = parsed.dialogText;

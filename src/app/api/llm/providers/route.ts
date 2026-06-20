@@ -8,9 +8,25 @@ export async function GET() {
     const providers = await providerManager.getAll();
     return NextResponse.json({ success: true, data: providers });
   } catch (error) {
-    console.error('Error fetching LLM providers:', error);
+    // Devolver el mensaje real para que el frontend lo pueda mostrar.
+    // Antes se ocultaba con un string genérico ("Failed to fetch LLM providers"),
+    // lo que hacía imposible diagnosticar el problema desde el navegador.
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    const code =
+      error && typeof error === 'object' && 'code' in error
+        ? (error as { code: string }).code
+        : undefined;
+    console.error('Error fetching LLM providers:', { message, code, error });
     return NextResponse.json(
-      { error: 'Failed to fetch LLM providers' },
+      {
+        error: 'Failed to fetch LLM providers',
+        details: message,
+        prismaCode: code,
+        hint:
+          code === 'P2021'
+            ? 'La tabla LLMProvider no existe en la BD. Ejecuta `bun run db:push` para crear el schema.'
+            : undefined,
+      },
       { status: 500 }
     );
   }

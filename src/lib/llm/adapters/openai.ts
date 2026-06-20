@@ -125,7 +125,47 @@ export class OpenAIAdapter extends BaseAdapter {
     );
 
     if (!response.ok) {
-      throw new Error(`Failed to list models: ${response.status}`);
+      // Extraer el mensaje de error del cuerpo para dar feedback útil.
+      // xAI y OpenAI devuelven { error: { message, code, type } } en JSON.
+      let errMessage = `HTTP ${response.status}`;
+      try {
+        const errText = await response.text();
+        if (errText) {
+          try {
+            const errJson = JSON.parse(errText);
+            if (errJson?.error?.message) {
+              errMessage = `${response.status}: ${errJson.error.message}`;
+            } else if (errJson?.message) {
+              errMessage = `${response.status}: ${errJson.message}`;
+            } else {
+              errMessage = `${response.status}: ${errText.substring(0, 200)}`;
+            }
+          } catch {
+            // No es JSON, usar el texto crudo si es corto
+            if (errText.length < 300) {
+              errMessage = `${response.status}: ${errText}`;
+            }
+          }
+        }
+      } catch {
+        // No se pudo leer el body, mantener el mensaje genérico
+      }
+
+      // Mensajes específicos por status code
+      const hint =
+        response.status === 401
+          ? 'API key inválida o no autorizada'
+          : response.status === 403
+            ? 'Acceso prohibido. Verifica que tu plan incluya este endpoint'
+            : response.status === 404
+              ? 'Endpoint no encontrado. Verifica la API URL'
+              : response.status === 429
+                ? 'Rate limit excedido. Espera unos segundos e inténtalo de nuevo'
+                : undefined;
+
+      throw new Error(
+        `Failed to list models: ${errMessage}${hint ? ` — ${hint}` : ''}`
+      );
     }
 
     const data = await response.json();

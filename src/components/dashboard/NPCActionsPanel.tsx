@@ -406,17 +406,18 @@ export default function NPCActionsPanel({ npcId, disabled }: NPCActionsPanelProp
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="action-params">Parámetros (JSON schema, opcional)</Label>
+              <Label htmlFor="action-params">Parámetros (JSON Schema, opcional)</Label>
               <Textarea
                 id="action-params"
                 value={form.parameters}
                 onChange={(e) => setForm({ ...form, parameters: e.target.value })}
-                placeholder='{"type":"object","properties":{"item":{"type":"string"},"precio":{"type":"number"}}}'
-                rows={4}
+                placeholder={'{\n  "type": "object",\n  "properties": {\n    "item": {\n      "type": "string",\n      "description": "Nombre del item a vender"\n    },\n    "precio": {\n      "type": "number",\n      "description": "Precio en almakos"\n    }\n  },\n  "required": ["item"]\n}'}
+                rows={6}
                 className="font-mono text-xs"
               />
               <p className="text-[10px] text-muted-foreground">
-                Esquema JSON de los parámetros que la acción necesita. Dejar vacío si no requiere parámetros.
+                JSON Schema completo de los parámetros. La raíz debe ser <code>{"{ \"type\": \"object\", ... }"}</code>.
+                xAI (Grok) y OpenAI exigen este formato para tool calling. Dejar vacío si la acción no requiere parámetros.
               </p>
             </div>
           </div>

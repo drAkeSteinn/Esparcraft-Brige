@@ -44,8 +44,17 @@ function validateInput(input: LLMProviderInput): void {
     throw new Error('El modelo es obligatorio');
   }
   const info = PROVIDERS[input.type];
-  if (info.requiresApiKey && !input.apiKey?.trim()) {
-    throw new Error(`El proveedor ${info.label} requiere API key`);
+  // Validación de API key:
+  // - Si input.apiKey es undefined: significa "mantener la existente" (caso de
+  //   edición donde el usuario dejó el campo vacío). NO validamos aquí; el
+  //   método update() decide si mantener o no la key existente.
+  // - Si input.apiKey es un string vacío: el usuario intentó borrar la key.
+  //   Para providers que requieren API key, esto debe rechazarse.
+  // - Si input.apiKey es un string no vacío: se valida normalmente.
+  if (info.requiresApiKey && input.apiKey !== undefined && !input.apiKey.trim()) {
+    throw new Error(
+      `El proveedor ${info.label} requiere API key. Deja el campo vacío para mantener la actual, o ingresa una nueva.`
+    );
   }
   if (input.temperature != null && (input.temperature < 0 || input.temperature > 2)) {
     throw new Error('La temperatura debe estar entre 0 y 2');

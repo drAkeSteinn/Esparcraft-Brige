@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import path from "node:path";
 
 const nextConfig: NextConfig = {
   output: "standalone",
@@ -7,6 +8,14 @@ const nextConfig: NextConfig = {
     ignoreBuildErrors: true,
   },
   reactStrictMode: false,
+  // Tell Turbopack/Next.js that THIS directory is the project root.
+  // Without this, Next.js detects /home/z/my-project/bun.lock (parent) as the
+  // workspace root and loads the parent .env, breaking DATABASE_URL resolution.
+  turbopack: {
+    root: path.join(__dirname),
+  },
+  // Allow the Z.ai preview domain to access dev resources (e.g. stack frames)
+  allowedDevOrigins: ["*.space-z.ai"],
   // Módulos nativos que deben ser excluidos del bundling de Next.js
   serverExternalPackages: [
     '@lancedb/lancedb',

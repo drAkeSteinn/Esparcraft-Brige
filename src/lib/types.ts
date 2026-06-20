@@ -581,12 +581,46 @@ export interface NPCActionInput {
 }
 
 /**
+ * Genera una descripción legible de los parámetros de una acción a partir
+ * de su JSON Schema. Muestra nombre, tipo, descripción y si es requerido.
+ *
+ * Ej: schema = {
+ *   type: "object",
+ *   properties: {
+ *     item:  { type: "string", description: "Nombre del item" },
+ *     precio: { type: "number", description: "Precio en almakos" }
+ *   },
+ *   required: ["item"]
+ * }
+ * → 'item (string, requerido): Nombre del item; precio (number): Precio en almakos'
+ */
+function describeActionParameters(
+  schema: Record<string, any> | null | undefined
+): string {
+  if (!schema || !schema.properties) return '';
+  const props = schema.properties as Record<string, any>;
+  const requiredList = Array.isArray(schema.required) ? schema.required as string[] : [];
+
+  const parts = Object.entries(props).map(([key, propSchema]) => {
+    const type = propSchema?.type ?? 'any';
+    const desc = propSchema?.description ? `: ${propSchema.description}` : '';
+    const required = requiredList.includes(key) ? ', requerido' : '';
+    const enumStr = Array.isArray(propSchema?.enum)
+      ? `, uno de: [${propSchema.enum.join(', ')}]`
+      : '';
+    return `${key} (${type}${required}${enumStr})${desc}`;
+  });
+
+  return parts.join('; ');
+}
+
+/**
  * Formatea las acciones de un NPC como una lista de texto para incluir
  * en el system_prompt (para modelos sin tool calling).
  *
  * Ejemplo:
  *   Acciones disponibles:
- *   - vender: Vender un item. Parámetros: item, precio
+ *   - vender: Vender un item al jugador. Parámetros: item (string, requerido): Nombre del item; precio (number): Precio en almakos
  *   - saludar: Saludar al jugador.
  *
  * Si ejecutas una acción, inclúyela al FINAL de tu respuesta:
@@ -596,10 +630,8 @@ export function formatActionsForPrompt(actions: NPCAction[]): string {
   if (!actions || actions.length === 0) return '';
 
   const lines = actions.map(a => {
-    const params = a.parameters
-      ? Object.entries(a.parameters).map(([k, v]) => k).join(', ')
-      : '';
-    return `- ${a.key}: ${a.description}${params ? `. Parámetros: ${params}` : ''}`;
+    const paramsDesc = describeActionParameters(a.parameters);
+    return `- ${a.key}: ${a.description}${paramsDesc ? `. Parámetros: ${paramsDesc}` : ''}`;
   });
 
   return `Acciones disponibles:\n${lines.join('\n')}\n\nSi ejecutas una acción, inclúyela al FINAL de tu respuesta en esta línea:\n[ACCION: nombre|parametro=valor, parametro=valor]`;

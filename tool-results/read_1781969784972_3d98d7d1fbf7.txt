@@ -1,0 +1,850 @@
+     1→'use client';
+     2→
+     3→import { useState, useEffect, useCallback } from 'react';
+     4→import {
+     5→  Server, Plus, Trash2, Edit2, Check, X, RefreshCw, TestTube,
+     6→  ChevronDown, AlertCircle, Brain, Wrench, Star, Cpu, Key, Eye, EyeOff,
+     7→} from 'lucide-react';
+     8→import { Button } from '@/components/ui/button';
+     9→import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+    10→import { Input } from '@/components/ui/input';
+    11→import { Label } from '@/components/ui/label';
+    12→import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+    13→import { Switch } from '@/components/ui/switch';
+    14→import { Slider } from '@/components/ui/slider';
+    15→import { Badge } from '@/components/ui/badge';
+    16→import { ScrollArea } from '@/components/ui/scroll-area';
+    17→import {
+    18→  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
+    19→} from '@/components/ui/dialog';
+    20→import {
+    21→  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
+    22→  AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+    23→} from '@/components/ui/alert-dialog';
+    24→import {
+    25→  LLMProviderConfig, LLMProviderInput, LLMProviderType, PROVIDERS, PROVIDER_TYPES,
+    26→} from '@/lib/llm/types';
+    27→import { toast } from '@/hooks/use-toast';
+    28→
+    29→interface LLMProvidersConfigProps {
+    30→  onConfigSaved?: () => void;
+    31→}
+    32→
+    33→export default function LLMProvidersConfig({ onConfigSaved }: LLMProvidersConfigProps) {
+    34→  const [providers, setProviders] = useState<LLMProviderConfig[]>([]);
+    35→  const [loading, setLoading] = useState(true);
+    36→  const [dialogOpen, setDialogOpen] = useState(false);
+    37→  const [editingProvider, setEditingProvider] = useState<LLMProviderConfig | null>(null);
+    38→  const [deleteProvider, setDeleteProvider] = useState<LLMProviderConfig | null>(null);
+    39→
+    40→  const loadProviders = useCallback(async () => {
+    41→    try {
+    42→      setLoading(true);
+    43→      const res = await fetch('/api/llm/providers');
+    44→      const result = await res.json();
+    45→      if (result.success) {
+    46→        setProviders(result.data);
+    47→      } else {
+    48→        console.error('Error loading providers:', result.error);
+    49→      }
+    50→    } catch (e) {
+    51→      console.error('Error loading providers:', e);
+    52→    } finally {
+    53→      setLoading(false);
+    54→    }
+    55→  }, []);
+    56→
+    57→  useEffect(() => {
+    58→    // eslint-disable-next-line react-hooks/set-state-in-effect
+    59→    loadProviders();
+    60→  }, [loadProviders]);
+    61→
+    62→  const handleCreate = () => {
+    63→    setEditingProvider(null);
+    64→    setDialogOpen(true);
+    65→  };
+    66→
+    67→  const handleEdit = (provider: LLMProviderConfig) => {
+    68→    setEditingProvider(provider);
+    69→    setDialogOpen(true);
+    70→  };
+    71→
+    72→  const handleSetDefault = async (id: string) => {
+    73→    try {
+    74→      const res = await fetch(`/api/llm/providers/${id}/set-default`, { method: 'POST' });
+    75→      const result = await res.json();
+    76→      if (result.success) {
+    77→        toast({
+    78→          title: 'Proveedor activo',
+    79→          description: `"${result.data.name}" ahora se usa para los triggers`,
+    80→        });
+    81→        loadProviders();
+    82→        onConfigSaved?.();
+    83→      } else {
+    84→        throw new Error(result.error);
+    85→      }
+    86→    } catch (e) {
+    87→      toast({
+    88→        title: 'Error',
+    89→        description: e instanceof Error ? e.message : 'Error al cambiar proveedor activo',
+    90→        variant: 'destructive',
+    91→      });
+    92→    }
+    93→  };
+    94→
+    95→  const handleDelete = async () => {
+    96→    if (!deleteProvider) return;
+    97→    try {
+    98→      const res = await fetch(`/api/llm/providers/${deleteProvider.id}`, { method: 'DELETE' });
+    99→      const result = await res.json();
+   100→      if (result.success) {
+   101→        toast({ title: 'Proveedor eliminado' });
+   102→        setDeleteProvider(null);
+   103→        loadProviders();
+   104→        onConfigSaved?.();
+   105→      } else {
+   106→        throw new Error(result.error);
+   107→      }
+   108→    } catch (e) {
+   109→      toast({
+   110→        title: 'Error',
+   111→        description: e instanceof Error ? e.message : 'Error al eliminar',
+   112→        variant: 'destructive',
+   113→      });
+   114→    }
+   115→  };
+   116→
+   117→  const activeProvider = providers.find((p) => p.isDefault) || providers[0];
+   118→
+   119→  return (
+   120→    <Card>
+   121→      <CardHeader>
+   122→        <CardTitle className="flex items-center gap-2">
+   123→          <Server className="h-5 w-5" />
+   124→          <span>Proveedores LLM</span>
+   125→        </CardTitle>
+   126→        <CardDescription>
+   127→          Configura múltiples proveedores (Ollama, OpenAI, Grok, Claude, Custom). El proveedor
+   128→          marcado como activo se usa en todos los triggers de chat.
+   129→        </CardDescription>
+   130→      </CardHeader>
+   131→      <CardContent className="space-y-4">
+   132→        {/* Proveedor activo */}
+   133→        {activeProvider && (
+   134→          <div className="flex items-center justify-between p-3 rounded-lg border bg-muted/30">
+   135→            <div className="flex items-center gap-3 min-w-0">
+   136→              <div className={`w-2 h-2 rounded-full ${PROVIDERS[activeProvider.type].color}`} />
+   137→              <div className="min-w-0">
+   138→                <div className="flex items-center gap-2 flex-wrap">
+   139→                  <span className="font-medium text-sm truncate">{activeProvider.name}</span>
+   140→                  <Badge variant="outline" className="text-[10px] h-4 px-1">
+   141→                    {PROVIDERS[activeProvider.type].label}
+   142→                  </Badge>
+   143→                  <Badge variant="default" className="text-[10px] h-4 px-1 gap-0.5">
+   144→                    <Star className="h-2.5 w-2.5" />
+   145→                    Activo
+   146→                  </Badge>
+   147→                  {activeProvider.reasoning && (
+   148→                    <Badge variant="secondary" className="text-[10px] h-4 px-1 gap-0.5">
+   149→                      <Brain className="h-2.5 w-2.5" />
+   150→                      Reasoning
+   151→                    </Badge>
+   152→                  )}
+   153→                  {activeProvider.toolCalling && (
+   154→                    <Badge variant="secondary" className="text-[10px] h-4 px-1 gap-0.5">
+   155→                      <Wrench className="h-2.5 w-2.5" />
+   156→                      Tools
+   157→                    </Badge>
+   158→                  )}
+   159→                </div>
+   160→                <p className="text-xs text-muted-foreground truncate font-mono">
+   161→                  {activeProvider.model} · {activeProvider.temperature.toFixed(1)}° · {activeProvider.maxTokens} tok
+   162→                </p>
+   163→              </div>
+   164→            </div>
+   165→          </div>
+   166→        )}
+   167→
+   168→        {/* Lista de proveedores */}
+   169→        {loading ? (
+   170→          <p className="text-sm text-muted-foreground py-4 text-center">Cargando proveedores...</p>
+   171→        ) : providers.length === 0 ? (
+   172→          <div className="text-center py-8 text-muted-foreground">
+   173→            <Server className="h-8 w-8 mx-auto mb-2 opacity-30" />
+   174→            <p className="text-sm">No hay proveedores configurados</p>
+   175→            <p className="text-xs mt-1">Crea tu primer proveedor LLM</p>
+   176→          </div>
+   177→        ) : (
+   178→          <div className="space-y-2">
+   179→            {providers.map((p) => (
+   180→              <ProviderRow
+   181→                key={p.id}
+   182→                provider={p}
+   183→                onEdit={() => handleEdit(p)}
+   184→                onSetDefault={() => handleSetDefault(p.id)}
+   185→                onDelete={() => setDeleteProvider(p)}
+   186→              />
+   187→            ))}
+   188→          </div>
+   189→        )}
+   190→
+   191→        {/* Botón crear */}
+   192→        <Button onClick={handleCreate} className="w-full">
+   193→          <Plus className="h-4 w-4 mr-2" />
+   194→          Nuevo proveedor
+   195→        </Button>
+   196→
+   197→        {/* Info */}
+   198→        <div className="bg-muted p-3 rounded-lg text-xs text-muted-foreground space-y-1">
+   199→          <p className="font-medium text-foreground">¿Cómo funciona?</p>
+   200→          <ul className="list-disc list-inside space-y-0.5">
+   201→            <li>Crea uno o varios proveedores (locales o en la nube)</li>
+   202→            <li>Marca uno como <strong>activo</strong> — ese se usará en todos los triggers de chat</li>
+   203→            <li><strong>Reasoning</strong>: activa modo razonamiento (modelos o1, deepseek-r1, grok-3-reasoning)</li>
+   204→            <li><strong>Tool calling</strong>: permite al LLM llamar funciones definidas en el sistema</li>
+   205→            <li>Puedes cambiar el proveedor activo en cualquier momento</li>
+   206→          </ul>
+   207→        </div>
+   208→      </CardContent>
+   209→
+   210→      {/* Dialog de crear/editar */}
+   211→      <ProviderDialog
+   212→        open={dialogOpen}
+   213→        onOpenChange={setDialogOpen}
+   214→        editing={editingProvider}
+   215→        onSaved={() => {
+   216→          setDialogOpen(false);
+   217→          loadProviders();
+   218→          onConfigSaved?.();
+   219→        }}
+   220→      />
+   221→
+   222→      {/* Confirm delete */}
+   223→      <AlertDialog open={!!deleteProvider} onOpenChange={(o) => !o && setDeleteProvider(null)}>
+   224→        <AlertDialogContent>
+   225→          <AlertDialogHeader>
+   226→            <AlertDialogTitle>¿Eliminar proveedor?</AlertDialogTitle>
+   227→            <AlertDialogDescription>
+   228→              Se eliminará <strong>{deleteProvider?.name}</strong> ({PROVIDERS[deleteProvider?.type ?? 'custom']?.label}).
+   229→              {deleteProvider?.isDefault && (
+   230→                <span className="block mt-2 text-amber-600">
+   231→                  ⚠️ Este es el proveedor activo. Al eliminarlo, se activará automáticamente el primer proveedor restante.
+   232→                </span>
+   233→              )}
+   234→            </AlertDialogDescription>
+   235→          </AlertDialogHeader>
+   236→          <AlertDialogFooter>
+   237→            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+   238→            <AlertDialogAction
+   239→              onClick={handleDelete}
+   240→              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+   241→            >
+   242→              Eliminar
+   243→            </AlertDialogAction>
+   244→          </AlertDialogFooter>
+   245→        </AlertDialogContent>
+   246→      </AlertDialog>
+   247→    </Card>
+   248→  );
+   249→}
+   250→
+   251→// ============================================================
+   252→// Fila de proveedor
+   253→// ============================================================
+   254→
+   255→function ProviderRow({
+   256→  provider, onEdit, onSetDefault, onDelete,
+   257→}: {
+   258→  provider: LLMProviderConfig;
+   259→  onEdit: () => void;
+   260→  onSetDefault: () => void;
+   261→  onDelete: () => void;
+   262→}) {
+   263→  const [testing, setTesting] = useState(false);
+   264→  const [testResult, setTestResult] = useState<{ connected: boolean; message: string } | null>(null);
+   265→
+   266→  const handleTest = async () => {
+   267→    setTesting(true);
+   268→    setTestResult(null);
+   269→    try {
+   270→      const res = await fetch(`/api/llm/providers/${provider.id}/test`, { method: 'POST' });
+   271→      const result = await res.json();
+   272→      if (result.success) {
+   273→        setTestResult({
+   274→          connected: result.data.connected,
+   275→          message: result.data.message,
+   276→        });
+   277→        toast({
+   278→          title: result.data.connected ? 'Conexión exitosa' : 'Sin conexión',
+   279→          description: result.data.message,
+   280→          variant: result.data.connected ? 'default' : 'destructive',
+   281→        });
+   282→      } else {
+   283→        throw new Error(result.error);
+   284→      }
+   285→    } catch (e) {
+   286→      setTestResult({
+   287→        connected: false,
+   288→        message: e instanceof Error ? e.message : 'Error al probar',
+   289→      });
+   290→      toast({
+   291→        title: 'Error',
+   292→        description: e instanceof Error ? e.message : 'Error al probar conexión',
+   293→        variant: 'destructive',
+   294→      });
+   295→    } finally {
+   296→      setTesting(false);
+   297→    }
+   298→  };
+   299→
+   300→  const info = PROVIDERS[provider.type];
+   301→
+   302→  return (
+   303→    <div className="border rounded-md p-3 space-y-2">
+   304→      <div className="flex items-center gap-3">
+   305→        <div className={`w-2 h-2 rounded-full flex-shrink-0 ${info.color}`} />
+   306→        <div className="flex-1 min-w-0">
+   307→          <div className="flex items-center gap-2 flex-wrap">
+   308→            <span className="font-medium text-sm truncate">{provider.name}</span>
+   309→            <Badge variant="outline" className="text-[10px] h-4 px-1">{info.label}</Badge>
+   310→            {provider.isDefault && (
+   311→              <Badge variant="default" className="text-[10px] h-4 px-1 gap-0.5">
+   312→                <Star className="h-2.5 w-2.5" />
+   313→                Activo
+   314→              </Badge>
+   315→            )}
+   316→            {provider.reasoning && (
+   317→              <Badge variant="secondary" className="text-[10px] h-4 px-1 gap-0.5">
+   318→                <Brain className="h-2.5 w-2.5" />
+   319→                Reasoning
+   320→              </Badge>
+   321→            )}
+   322→            {provider.toolCalling && (
+   323→              <Badge variant="secondary" className="text-[10px] h-4 px-1 gap-0.5">
+   324→                <Wrench className="h-2.5 w-2.5" />
+   325→                Tools
+   326→              </Badge>
+   327→            )}
+   328→          </div>
+   329→          <p className="text-xs text-muted-foreground truncate font-mono mt-0.5">
+   330→            {provider.model} · {provider.apiUrl}
+   331→          </p>
+   332→        </div>
+   333→        <div className="flex gap-1 flex-shrink-0">
+   334→          {!provider.isDefault && (
+   335→            <Button
+   336→              size="sm"
+   337→              variant="ghost"
+   338→              className="h-7 px-2"
+   339→              onClick={onSetDefault}
+   340→              title="Marcar como activo"
+   341→            >
+   342→              <Star className="h-3.5 w-3.5" />
+   343→            </Button>
+   344→          )}
+   345→          <Button
+   346→            size="sm"
+   347→            variant="ghost"
+   348→            className="h-7 px-2"
+   349→            onClick={handleTest}
+   350→            disabled={testing}
+   351→            title="Probar conexión"
+   352→          >
+   353→            {testing ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <TestTube className="h-3.5 w-3.5" />}
+   354→          </Button>
+   355→          <Button size="sm" variant="ghost" className="h-7 px-2" onClick={onEdit} title="Editar">
+   356→            <Edit2 className="h-3.5 w-3.5" />
+   357→          </Button>
+   358→          <Button
+   359→            size="sm"
+   360→            variant="ghost"
+   361→            className="h-7 px-2"
+   362→            onClick={onDelete}
+   363→            title="Eliminar"
+   364→          >
+   365→            <Trash2 className="h-3.5 w-3.5 text-destructive" />
+   366→          </Button>
+   367→        </div>
+   368→      </div>
+   369→      {testResult && (
+   370→        <div className={`text-xs p-2 rounded ${testResult.connected ? 'bg-green-500/10 text-green-700 dark:text-green-400' : 'bg-red-500/10 text-red-700 dark:text-red-400'}`}>
+   371→          {testResult.message}
+   372→        </div>
+   373→      )}
+   374→    </div>
+   375→  );
+   376→}
+   377→
+   378→// ============================================================
+   379→// Dialog de crear/editar proveedor
+   380→// ============================================================
+   381→
+   382→function ProviderDialog({
+   383→  open, onOpenChange, editing, onSaved,
+   384→}: {
+   385→  open: boolean;
+   386→  onOpenChange: (open: boolean) => void;
+   387→  editing: LLMProviderConfig | null;
+   388→  onSaved: () => void;
+   389→}) {
+   390→  // Form state
+   391→  const [form, setForm] = useState<LLMProviderInput>(() => ({
+   392→    name: '',
+   393→    type: 'ollama',
+   394→    apiUrl: PROVIDERS.ollama.defaultApiUrl,
+   395→    apiKey: '',
+   396→    model: '',
+   397→    temperature: 0.7,
+   398→    maxTokens: 2048,
+   399→    reasoning: false,
+   400→    toolCalling: false,
+   401→    isDefault: false,
+   402→  }));
+   403→
+   404→  const [saving, setSaving] = useState(false);
+   405→  const [showApiKey, setShowApiKey] = useState(false);
+   406→  const [availableModels, setAvailableModels] = useState<string[]>([]);
+   407→  const [loadingModels, setLoadingModels] = useState(false);
+   408→  const [modelsLoaded, setModelsLoaded] = useState(false);
+   409→
+   410→  // Cargar datos del provider al abrir el dialog (edición) o resetear (creación).
+   411→  // Los setState aquí son legítimos: sincronizan el formulario con la prop `editing`
+   412→  // cuando el dialog se abre, no derivan de otro estado.
+   413→  useEffect(() => {
+   414→    if (open) {
+   415→      if (editing) {
+   416→        // eslint-disable-next-line react-hooks/set-state-in-effect
+   417→        setForm({
+   418→          name: editing.name,
+   419→          type: editing.type,
+   420→          apiUrl: editing.apiUrl,
+   421→          apiKey: '', // no mostrar la key guardada por seguridad; el backend la mantiene si viene vacío
+   422→          model: editing.model,
+   423→          temperature: editing.temperature,
+   424→          maxTokens: editing.maxTokens,
+   425→          reasoning: editing.reasoning,
+   426→          toolCalling: editing.toolCalling,
+   427→          isDefault: editing.isDefault,
+   428→        });
+   429→      } else {
+   430→        setForm({
+   431→          name: '',
+   432→          type: 'ollama',
+   433→          apiUrl: PROVIDERS.ollama.defaultApiUrl,
+   434→          apiKey: '',
+   435→          model: '',
+   436→          temperature: 0.7,
+   437→          maxTokens: 2048,
+   438→          reasoning: false,
+   439→          toolCalling: false,
+   440→          isDefault: false,
+   441→        });
+   442→      }
+   443→      setAvailableModels([]);
+   444→      setModelsLoaded(false);
+   445→      setShowApiKey(false);
+   446→    }
+   447→  }, [open, editing]);
+   448→
+   449→  // Cuando cambia el tipo, actualizar URL y modelo por defecto
+   450→  const handleTypeChange = (type: LLMProviderType) => {
+   451→    const info = PROVIDERS[type];
+   452→    setForm((prev) => ({
+   453→      ...prev,
+   454→      type,
+   455→      apiUrl: info.defaultApiUrl,
+   456→      apiKey: info.requiresApiKey ? prev.apiKey : '',
+   457→      reasoning: info.supportsReasoning ? prev.reasoning : false,
+   458→      toolCalling: info.supportsToolCalling ? prev.toolCalling : false,
+   459→    }));
+   460→    setAvailableModels([]);
+   461→    setModelsLoaded(false);
+   462→  };
+   463→
+   464→  const handleLoadModels = async () => {
+   465→    if (!form.apiUrl.trim()) {
+   466→      toast({ title: 'Error', description: 'Primero ingresa la URL', variant: 'destructive' });
+   467→      return;
+   468→    }
+   469→    if (PROVIDERS[form.type].requiresApiKey && !form.apiKey?.trim()) {
+   470→      toast({ title: 'Error', description: 'Este proveedor requiere API key', variant: 'destructive' });
+   471→      return;
+   472→    }
+   473→
+   474→    setLoadingModels(true);
+   475→    try {
+   476→      const res = await fetch('/api/llm/list-models', {
+   477→        method: 'POST',
+   478→        headers: { 'Content-Type': 'application/json' },
+   479→        body: JSON.stringify({
+   480→          type: form.type,
+   481→          apiUrl: form.apiUrl,
+   482→          apiKey: form.apiKey,
+   483→        }),
+   484→      });
+   485→      const result = await res.json();
+   486→      if (result.success) {
+   487→        const models = result.data.models || [];
+   488→        const knownModels = result.data.knownModels || [];
+   489→        // Combinar modelos disponibles con conocidos (sin duplicados)
+   490→        const all = Array.from(new Set([...models, ...knownModels]));
+   491→        setAvailableModels(all);
+   492→        setModelsLoaded(true);
+   493→        toast({
+   494→          title: 'Modelos cargados',
+   495→          description: `${models.length} modelos disponibles${knownModels.length > 0 ? ` + ${knownModels.length} conocidos` : ''}`,
+   496→        });
+   497→        // Si no hay modelo seleccionado y hay disponibles, seleccionar el primero
+   498→        if (!form.model && all.length > 0) {
+   499→          setForm((prev) => ({ ...prev, model: all[0] }));
+   500→        }
+   501→      } else {
+   502→        throw new Error(result.error);
+   503→      }
+   504→    } catch (e) {
+   505→      toast({
+   506→        title: 'Error al cargar modelos',
+   507→        description: e instanceof Error ? e.message : 'No se pudieron cargar los modelos. Puedes escribir el nombre manualmente.',
+   508→        variant: 'destructive',
+   509→      });
+   510→    } finally {
+   511→      setLoadingModels(false);
+   512→    }
+   513→  };
+   514→
+   515→  const handleSave = async () => {
+   516→    if (!form.name.trim()) {
+   517→      toast({ title: 'Error', description: 'El nombre es obligatorio', variant: 'destructive' });
+   518→      return;
+   519→    }
+   520→    if (!form.apiUrl.trim()) {
+   521→      toast({ title: 'Error', description: 'La URL es obligatoria', variant: 'destructive' });
+   522→      return;
+   523→    }
+   524→    if (!form.model.trim()) {
+   525→      toast({ title: 'Error', description: 'El modelo es obligatorio', variant: 'destructive' });
+   526→      return;
+   527→    }
+   528→    if (PROVIDERS[form.type].requiresApiKey && !form.apiKey?.trim() && !editing) {
+   529→      toast({ title: 'Error', description: 'Este proveedor requiere API key', variant: 'destructive' });
+   530→      return;
+   531→    }
+   532→
+   533→    setSaving(true);
+   534→    try {
+   535→      const payload = { ...form };
+   536→      // Si estamos editando y no se ingresó API key, enviar undefined para que el backend la mantenga
+   537→      if (editing && !form.apiKey?.trim()) {
+   538→        payload.apiKey = undefined;
+   539→      }
+   540→
+   541→      const url = editing ? `/api/llm/providers/${editing.id}` : '/api/llm/providers';
+   542→      const method = editing ? 'PUT' : 'POST';
+   543→      const res = await fetch(url, {
+   544→        method,
+   545→        headers: { 'Content-Type': 'application/json' },
+   546→        body: JSON.stringify(payload),
+   547→      });
+   548→      const result = await res.json();
+   549→      if (result.success) {
+   550→        toast({
+   551→          title: editing ? 'Proveedor actualizado' : 'Proveedor creado',
+   552→          description: result.data.isDefault ? 'Marcado como activo automáticamente' : undefined,
+   553→        });
+   554→        onSaved();
+   555→      } else {
+   556→        throw new Error(result.error);
+   557→      }
+   558→    } catch (e) {
+   559→      toast({
+   560→        title: 'Error',
+   561→        description: e instanceof Error ? e.message : 'Error al guardar',
+   562→        variant: 'destructive',
+   563→      });
+   564→    } finally {
+   565→      setSaving(false);
+   566→    }
+   567→  };
+   568→
+   569→  const info = PROVIDERS[form.type];
+   570→
+   571→  return (
+   572→    <Dialog open={open} onOpenChange={onOpenChange}>
+   573→      <DialogContent className="max-w-2xl max-h-[95vh]">
+   574→        <DialogHeader>
+   575→          <DialogTitle>{editing ? 'Editar proveedor' : 'Nuevo proveedor LLM'}</DialogTitle>
+   576→          <DialogDescription>
+   577→            Configura un proveedor de LLM. Los campos cambian según el tipo seleccionado.
+   578→          </DialogDescription>
+   579→        </DialogHeader>
+   580→
+   581→        <ScrollArea className="max-h-[70vh] pr-4">
+   582→          <div className="space-y-4">
+   583→            {/* Tipo de proveedor (dropdown principal) */}
+   584→            <div className="space-y-2">
+   585→              <Label>Proveedor</Label>
+   586→              <Select value={form.type} onValueChange={(v) => handleTypeChange(v as LLMProviderType)}>
+   587→                <SelectTrigger>
+   588→                  <SelectValue />
+   589→                </SelectTrigger>
+   590→                <SelectContent>
+   591→                  {PROVIDER_TYPES.map((p) => (
+   592→                    <SelectItem key={p.type} value={p.type}>
+   593→                      <div className="flex items-center gap-2">
+   594→                        <div className={`w-2 h-2 rounded-full ${p.color}`} />
+   595→                        <span>{p.label}</span>
+   596→                      </div>
+   597→                    </SelectItem>
+   598→                  ))}
+   599→                </SelectContent>
+   600→              </Select>
+   601→              <p className="text-xs text-muted-foreground">{info.description}</p>
+   602→            </div>
+   603→
+   604→            {/* Nombre */}
+   605→            <div className="space-y-2">
+   606→              <Label htmlFor="provider-name">Nombre *</Label>
+   607→              <Input
+   608→                id="provider-name"
+   609→                value={form.name}
+   610→                onChange={(e) => setForm({ ...form, name: e.target.value })}
+   611→                placeholder={`Ej: Mi ${info.label} local`}
+   612→              />
+   613→            </div>
+   614→
+   615→            {/* URL */}
+   616→            <div className="space-y-2">
+   617→              <Label htmlFor="provider-url">URL de la API *</Label>
+   618→              <Input
+   619→                id="provider-url"
+   620→                value={form.apiUrl}
+   621→                onChange={(e) => setForm({ ...form, apiUrl: e.target.value })}
+   622→                placeholder={info.defaultApiUrl}
+   623→                className="font-mono text-sm"
+   624→              />
+   625→              <p className="text-xs text-muted-foreground">
+   626→                {form.type === 'ollama' && 'URL base de Ollama (sin /v1/...). El adapter añade los endpoints.'}
+   627→                {form.type === 'openai' && 'URL base de OpenAI. Default: https://api.openai.com/v1'}
+   628→                {form.type === 'grok' && 'URL base de xAI. Default: https://api.x.ai/v1'}
+   629→                {form.type === 'anthropic' && 'URL base de Anthropic. Default: https://api.anthropic.com/v1'}
+   630→                {form.type === 'custom' && 'URL del endpoint OpenAI-compatible (LM Studio, vLLM, etc.)'}
+   631→              </p>
+   632→            </div>
+   633→
+   634→            {/* API Key (solo si requiere) */}
+   635→            {info.requiresApiKey && (
+   636→              <div className="space-y-2">
+   637→                <Label htmlFor="provider-key" className="flex items-center gap-1.5">
+   638→                  <Key className="h-3.5 w-3.5" />
+   639→                  API Key *
+   640→                </Label>
+   641→                <div className="flex gap-2">
+   642→                  <div className="relative flex-1">
+   643→                    <Input
+   644→                      id="provider-key"
+   645→                      type={showApiKey ? 'text' : 'password'}
+   646→                      value={form.apiKey || ''}
+   647→                      onChange={(e) => setForm({ ...form, apiKey: e.target.value })}
+   648→                      placeholder={editing ? '•••••••• (dejar vacío para mantener la actual)' : 'sk-...'}
+   649→                      className="pr-10 font-mono text-sm"
+   650→                    />
+   651→                    <button
+   652→                      type="button"
+   653→                      onClick={() => setShowApiKey((v) => !v)}
+   654→                      className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+   655→                    >
+   656→                      {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+   657→                    </button>
+   658→                  </div>
+   659→                </div>
+   660→                <p className="text-xs text-muted-foreground">
+   661→                  La API key se guarda en la base de datos local del servidor.
+   662→                </p>
+   663→              </div>
+   664→            )}
+   665→
+   666→            {/* Modelo */}
+   667→            <div className="space-y-2">
+   668→              <Label className="flex items-center gap-1.5">
+   669→                <Cpu className="h-3.5 w-3.5" />
+   670→                Modelo *
+   671→              </Label>
+   672→              <div className="flex gap-2">
+   673→                {availableModels.length > 0 ? (
+   674→                  <Select
+   675→                    value={form.model}
+   676→                    onValueChange={(v) => setForm({ ...form, model: v })}
+   677→                  >
+   678→                    <SelectTrigger className="flex-1">
+   679→                      <SelectValue placeholder="Selecciona un modelo" />
+   680→                    </SelectTrigger>
+   681→                    <SelectContent>
+   682→                      {availableModels.map((m) => (
+   683→                        <SelectItem key={m} value={m}>
+   684→                          {m}
+   685→                        </SelectItem>
+   686→                      ))}
+   687→                    </SelectContent>
+   688→                  </Select>
+   689→                ) : (
+   690→                  <Input
+   691→                    value={form.model}
+   692→                    onChange={(e) => setForm({ ...form, model: e.target.value })}
+   693→                    placeholder={info.knownModels[0] || 'nombre-del-modelo'}
+   694→                    className="flex-1 font-mono text-sm"
+   695→                  />
+   696→                )}
+   697→                {info.supportsModelListing && (
+   698→                  <Button
+   699→                    type="button"
+   700→                    variant="outline"
+   701→                    size="sm"
+   702→                    onClick={handleLoadModels}
+   703→                    disabled={loadingModels}
+   704→                    className="flex-shrink-0"
+   705→                  >
+   706→                    {loadingModels ? (
+   707→                      <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+   708→                    ) : (
+   709→                      <>
+   710→                        <RefreshCw className="h-3.5 w-3.5 mr-1" />
+   711→                        Cargar
+   712→                      </>
+   713→                    )}
+   714→                  </Button>
+   715→                )}
+   716→              </div>
+   717→              {!modelsLoaded && info.knownModels.length > 0 && (
+   718→                <div className="flex flex-wrap gap-1">
+   719→                  <span className="text-[10px] text-muted-foreground">Sugeridos:</span>
+   720→                  {info.knownModels.slice(0, 5).map((m) => (
+   721→                    <button
+   722→                      key={m}
+   723→                      type="button"
+   724→                      onClick={() => setForm({ ...form, model: m })}
+   725→                      className="text-[10px] px-1.5 py-0.5 rounded bg-muted hover:bg-muted/70 font-mono"
+   726→                    >
+   727→                      {m}
+   728→                    </button>
+   729→                  ))}
+   730→                </div>
+   731→              )}
+   732→            </div>
+   733→
+   734→            {/* Temperatura y max tokens */}
+   735→            <div className="grid grid-cols-2 gap-4">
+   736→              <div className="space-y-2">
+   737→                <Label>Temperatura: {form.temperature.toFixed(2)}</Label>
+   738→                <Slider
+   739→                  min={0}
+   740→                  max={2}
+   741→                  step={0.1}
+   742→                  value={[form.temperature]}
+   743→                  onValueChange={([v]) => setForm({ ...form, temperature: v })}
+   744→                  disabled={form.reasoning}
+   745→                />
+   746→                <p className="text-[10px] text-muted-foreground">
+   747→                  {form.reasoning ? 'Deshabilitado en modo reasoning' : 'Menor = determinista, mayor = creativo'}
+   748→                </p>
+   749→              </div>
+   750→              <div className="space-y-2">
+   751→                <Label>Max tokens: {form.maxTokens}</Label>
+   752→                <Slider
+   753→                  min={256}
+   754→                  max={8192}
+   755→                  step={256}
+   756→                  value={[form.maxTokens]}
+   757→                  onValueChange={([v]) => setForm({ ...form, maxTokens: v })}
+   758→                />
+   759→                <p className="text-[10px] text-muted-foreground">Límite de tokens de la respuesta</p>
+   760→              </div>
+   761→            </div>
+   762→
+   763→            {/* Toggles: reasoning y tool calling */}
+   764→            <div className="grid grid-cols-2 gap-3">
+   765→              <div className={`flex items-start justify-between p-3 rounded-md border ${form.reasoning ? 'bg-muted/50 border-foreground/30' : 'bg-muted/20'}`}>
+   766→                <div className="space-y-0.5 pr-3">
+   767→                  <Label htmlFor="toggle-reasoning" className="flex items-center gap-1.5 cursor-pointer">
+   768→                    <Brain className="h-3.5 w-3.5" />
+   769→                    Reasoning
+   770→                  </Label>
+   771→                  <p className="text-[10px] text-muted-foreground">
+   772→                    Activa modo razonamiento (o1, deepseek-r1, grok-3-reasoning)
+   773→                  </p>
+   774→                  {!info.supportsReasoning && (
+   775→                    <p className="text-[10px] text-amber-600">No soportado por {info.label}</p>
+   776→                  )}
+   777→                </div>
+   778→                <Switch
+   779→                  id="toggle-reasoning"
+   780→                  checked={form.reasoning && info.supportsReasoning}
+   781→                  disabled={!info.supportsReasoning}
+   782→                  onCheckedChange={(v) => setForm({ ...form, reasoning: v })}
+   783→                />
+   784→              </div>
+   785→
+   786→              <div className={`flex items-start justify-between p-3 rounded-md border ${form.toolCalling ? 'bg-muted/50 border-foreground/30' : 'bg-muted/20'}`}>
+   787→                <div className="space-y-0.5 pr-3">
+   788→                  <Label htmlFor="toggle-tools" className="flex items-center gap-1.5 cursor-pointer">
+   789→                    <Wrench className="h-3.5 w-3.5" />
+   790→                    Tool calling
+   791→                  </Label>
+   792→                  <p className="text-[10px] text-muted-foreground">
+   793→                    Permite al LLM llamar funciones del sistema
+   794→                  </p>
+   795→                  {!info.supportsToolCalling && (
+   796→                    <p className="text-[10px] text-amber-600">No soportado por {info.label}</p>
+   797→                  )}
+   798→                </div>
+   799→                <Switch
+   800→                  id="toggle-tools"
+   801→                  checked={form.toolCalling && info.supportsToolCalling}
+   802→                  disabled={!info.supportsToolCalling}
+   803→                  onCheckedChange={(v) => setForm({ ...form, toolCalling: v })}
+   804→                />
+   805→              </div>
+   806→            </div>
+   807→
+   808→            {/* Marcar como activo */}
+   809→            <div className="flex items-center justify-between p-3 rounded-md border">
+   810→              <div className="space-y-0.5">
+   811→                <Label htmlFor="toggle-default" className="flex items-center gap-1.5 cursor-pointer">
+   812→                  <Star className="h-3.5 w-3.5" />
+   813→                  Usar como proveedor activo
+   814→                </Label>
+   815→                <p className="text-[10px] text-muted-foreground">
+   816→                  Si se activa, este proveedor se usará en todos los triggers de chat
+   817→                </p>
+   818→              </div>
+   819→              <Switch
+   820→                id="toggle-default"
+   821→                checked={form.isDefault}
+   822→                onCheckedChange={(v) => setForm({ ...form, isDefault: v })}
+   823→              />
+   824→            </div>
+   825→          </div>
+   826→        </ScrollArea>
+   827→
+   828→        <DialogFooter>
+   829→          <Button variant="outline" onClick={() => onOpenChange(false)}>
+   830→            Cancelar
+   831→          </Button>
+   832→          <Button onClick={handleSave} disabled={saving}>
+   833→            {saving ? (
+   834→              <>
+   835→                <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
+   836→                Guardando...
+   837→              </>
+   838→            ) : (
+   839→              <>
+   840→                <Check className="h-4 w-4 mr-1" />
+   841→                {editing ? 'Guardar cambios' : 'Crear proveedor'}
+   842→              </>
+   843→            )}
+   844→          </Button>
+   845→        </DialogFooter>
+   846→      </DialogContent>
+   847→    </Dialog>
+   848→  );
+   849→}
+   850→

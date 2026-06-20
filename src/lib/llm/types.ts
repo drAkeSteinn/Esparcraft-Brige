@@ -175,21 +175,47 @@ export const PROVIDERS: Record<LLMProviderType, ProviderInfo> = {
   grok: {
     type: 'grok',
     label: 'Grok (xAI)',
-    description: 'Grok 4.3 (frontier) y Grok Build 0.1 (coding). Requiere API key.',
+    description: 'Grok 4.3 (frontier), Grok Build 0.1 (coding) y Grok 4.20 (multi-agente). Requiere API key.',
     defaultApiUrl: 'https://api.x.ai/v1',
     requiresApiKey: true,
     supportsReasoning: true,
     supportsToolCalling: true,
-    // Modelos actuales al 19/06/2026
-    // grok-4.3: frontier, 1M context, 4 reasoning levels (none/low/medium/high)
-    // grok-build-0.1: coding model, 256k context
-    // Modelos retirados el 15/05/2026 (grok-3, grok-4, grok-4-1-fast-*) redirigen a grok-4.3
+    // Modelos actuales al 21/06/2026 (fuente: docs.x.ai + console.x.ai)
+    //
+    // Modelos de chat (OpenAI-compatible /v1/chat/completions):
+    //   - grok-4.3: frontier, 1M context, $1.25/$2.50 per M tokens.
+    //     Soporta reasoning_effort: none | low (default) | medium | high.
+    //   - grok-build-0.1: modelo de coding rápido, 256K context, $1.00/$2.00.
+    //     Pensado para agentes que escriben código.
+    //   - grok-4.20-multi-agent-0309: multi-agente, 1M context, $1.25/$2.50.
+    //   - grok-4.20-0309-reasoning: variante con reasoning, 1M context.
+    //   - grok-4.20-0309-non-reasoning: variante sin reasoning, 1M context.
+    //
+    // Modelos retirados el 15/05/2026 (redirigen automáticamente a grok-4.3):
+    //   grok-3, grok-3-reasoning, grok-4, grok-4-1-fast-*
+    //
+    // Otros modelos (no de chat, no usar como LLM principal):
+    //   grok-imagine-image, grok-imagine-video, Realtime API, TTS, STT.
     knownModels: [
+      // Frontier (recomendado para la mayoría de casos)
       'grok-4.3', 'grok-4.3-latest',
+      // Multi-agente (marzo 2026)
+      'grok-4.20-multi-agent-0309',
+      'grok-4.20-0309-reasoning',
+      'grok-4.20-0309-non-reasoning',
+      // Coding
       'grok-build-0.1',
     ],
-    // grok-4.3 soporta reasoning effort configurable (none/low/medium/high)
-    reasoningModels: ['grok-4.3', 'grok-4.3-latest'],
+    // Modelos que soportan el parámetro reasoning_effort de xAI.
+    // grok-4.3 lo soporta con niveles none/low/medium/high.
+    // grok-4.20-0309-reasoning también lo soporta.
+    // grok-4.20-0309-non-reasoning y grok-4.20-multi-agent-0309 NO lo soportan
+    // (ignoran el parámetro o fallan si se envía).
+    // grok-build-0.1 no usa reasoning (es de coding rápido).
+    reasoningModels: [
+      'grok-4.3', 'grok-4.3-latest',
+      'grok-4.20-0309-reasoning',
+    ],
     color: 'bg-slate-700',
     supportsModelListing: true,
   },

@@ -372,3 +372,117 @@ export function replaceVariablesWithCache(
 
   return result;
 }
+
+// ============================================
+// UTILIDADES PARA FETCH SEGURO
+// ============================================
+
+/**
+ * Resultado de un fetch seguro. Si todo fue bien, `ok=true` y `data` contiene
+ * el JSON parseado. Si falló, `ok=false` y `error` contiene un mensaje
+ * interpretable por el usuario.
+ */
+export interface SafeFetchResult<T = unknown> {
+  ok: boolean;
+  status: number;
+  data?: T;
+  error?: string;
+  /** Cuerpo de la respuesta como texto (para debugging) */
+  rawBody?: string;
+}
+
+/**
+ * Hace un fetch y parsea el JSON de forma segura.
+ *
+ * Problema que resuelve: cuando un endpoint de Next.js falla durante la
+ * compilación o no existe, el servidor devuelve una página HTML (404/500)
+ * en lugar de JSON. Hacer `res.json()` directamente explota con
+ * "Unexpected token '<', '<!DOCTYPE...' is not valid JSON", que es un error
+ * incomprensible para el usuario.
+ *
+ * Esta función:
+ * 1. Hace el fetch.
+ * 2. Si el status no es OK, intenta extraer un mensaje de error del cuerpo.
+ * 3. Si el Content-Type no es JSON, devuelve un error claro.
+ * 4. Solo entonces hace `.json()`.
+ *
+ * @example
+ * const res = await safeFetch<MyData>('/api/foo', { method: 'POST', body: ... });
+ * if (res.ok) {
+ *   console.log(res.data);
+ * } else {
+ *   toast({ title: 'Error', description: res.error });
+ * }
+ */
+export async function safeFetch<T = unknown>(
+  url: string,
+  init?: RequestInit
+): Promise<SafeFetchResult<T>> {
+  let res: Response;
+  try {
+    res = await fetch(url, init);
+  } catch (e) {
+    return {
+      ok: false,
+      status: 0,
+      error:
+        e instanceof Error
+          ? `No se pudo conectar con el servidor: ${e.message}`
+          : 'No se pudo conectar con el servidor',
+    };
+  }
+
+  // Leer el cuerpo como texto una sola vez
+  const rawBody = await res.text().catch(() => '');
+
+  // Si el status no es OK, intentar extraer un mensaje útil
+  if (!res.ok) {
+    let errorMessage: string;
+    // ¿Es JSON? Intentar extraer { error: "..." } o { message: "..." }
+    const contentType = res.headers.get('content-type') || '';
+    if (contentType.includes('application/json') && rawBody) {
+      try {
+        const parsed = JSON.parse(rawBody);
+        errorMessage =
+          parsed.error ||
+          parsed.message ||
+          parsed.details ||
+          `Error ${res.status} ${res.statusText}`;
+      } catch {
+        errorMessage = `Error ${res.status} ${res.statusText}`;
+      }
+    } else if (rawBody && rawBody.length < 500) {
+      // Texto corto, probablemente un mensaje de error
+      errorMessage = `Error ${res.status}: ${rawBody.trim()}`;
+    } else {
+      errorMessage = `Error ${res.status} ${res.statusText}`;
+    }
+    return { ok: false, status: res.status, error: errorMessage, rawBody };
+  }
+
+  // El status es OK, pero ¿es JSON?
+  const contentType = res.headers.get('content-type') || '';
+  if (!contentType.includes('application/json')) {
+    // El servidor devolvió HTML (ej: página de error de Next.js dev server)
+    return {
+      ok: false,
+      status: res.status,
+      error:
+        'El servidor devolvió una respuesta no JSON. Esto suele indicar que el endpoint no existe o que el servidor de desarrollo está caído. Recarga la página e inténtalo de nuevo.',
+      rawBody: rawBody.substring(0, 200),
+    };
+  }
+
+  // Parsear JSON
+  try {
+    const data = JSON.parse(rawBody) as T;
+    return { ok: true, status: res.status, data, rawBody };
+  } catch (e) {
+    return {
+      ok: false,
+      status: res.status,
+      error: `La respuesta del servidor no es JSON válido: ${e instanceof Error ? e.message : 'parse error'}`,
+      rawBody: rawBody.substring(0, 200),
+    };
+  }
+}
